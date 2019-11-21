@@ -122,7 +122,7 @@ sexprConvertFunction (FunctionFormula { ffName = name
                                       }) =
   SE.L [ SE.L [ SE.A (AIdent "function"), SE.A (AIdent name)]
        , SE.L [ SE.A (AIdent "arguments"), convertArgumentVars argTypes argVars ]
-       , SE.L [ SE.A (AIdent "ret"), convertBaseType retType ]
+       , SE.L [ SE.A (AIdent "return"), convertBaseType retType ]
        , SE.L [ SE.A (AIdent "body"), convertFnBody def ]
        ]
 
@@ -457,7 +457,7 @@ convertAppExpr' paramLookup = go . S.appExprApp
         -- (S.IntDivisible _ _)
         -- (S.RealDiv _ _)
         -- (S.RealSqrt _)
-        --go app = error $ "unhandled App: " ++ show app
+        go app = error $ "unhandled App: " ++ show app
 
 
         -- -- -- -- Helper functions! -- -- -- --
@@ -551,7 +551,7 @@ convertBaseType tp = case tp of
   S.BaseComplexRepr -> SE.A (AQuoted "complex")
   S.BaseBVRepr wRepr -> SE.L [SE.A (AQuoted "bv"), SE.A (AInt (NR.intValue wRepr)) ]
   S.BaseStructRepr tps -> SE.L [SE.A (AQuoted "struct"), convertBaseTypes tps]
-  S.BaseArrayRepr ixs repr -> SE.L [SE.A (AQuoted "array"), SE.L [convertBaseTypes ixs, convertBaseType repr]]
+  S.BaseArrayRepr ixs repr -> SE.L [SE.A (AQuoted "array"), convertBaseTypes ixs , convertBaseType repr]
   _ -> error "can't print base type"
 
 convertBaseTypes :: Ctx.Assignment BaseTypeRepr tps

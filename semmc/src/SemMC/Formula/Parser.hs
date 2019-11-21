@@ -568,7 +568,7 @@ readApp ::
   => SC.SExpr FAtom
   -> SC.SExpr FAtom
   -> m (Some (S.SymExpr sym))
-readApp (SC.SAtom (AIdent operator)) operands = do
+readApp opRaw@(SC.SAtom (AIdent operator)) operands = do
   sym <- MR.reader getSym
   prefixError ("in reading "++operator++" expression: ") $
   -- Parse an expression of the form @(fnname operands ...)@
@@ -719,7 +719,7 @@ readApp (SC.SAtom (AIdent operator)) operands = do
                     liftIO (Some <$> S.integerToBV sym x w)
                   srepr -> E.throwError $ unwords ["expected a non-zero natural and an integer, got", show srepr]
               _ -> E.throwError $ unwords ["integerToBV expects two operands, the first of which is a nat, got", show operands]
-          _ -> E.throwError $ printf "couldn't parse application of %s" operator
+          _ -> E.throwError $ printf "couldn't parse application of %s" (printTokens mempty opRaw)
 -- Parse an expression of the form @((_ extract i j) x)@.
 readApp (SC.SCons (SC.SAtom (AIdent "_"))
              (SC.SCons (SC.SAtom (AIdent "extract"))
@@ -826,7 +826,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
     args <- readExprs operands
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Some <$> S.applySymFn sym fn assn)
-readApp opRaw _ = E.throwError $ printf "couldn't parse application of %s" (show opRaw)
+readApp opRaw _ = E.throwError $ printf "couldn't parse application of %s" (printTokens mempty opRaw)
 
 
 
