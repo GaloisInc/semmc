@@ -143,7 +143,7 @@ printAtom a =
     AQuoted s -> T.pack ('\'' : s)
     AString s -> T.pack (show s)
     AInt i -> T.pack (show i)
-    ANat n -> T.pack (show n)
+    ANat n -> T.pack (show n++"u")
     ABV w val -> formatBV w val
     ANamed _ _ e -> printAtom e
 
@@ -163,8 +163,8 @@ formatBV w val = T.pack (prefix ++ printf fmt val)
 
 parseIdent :: Parser String
 parseIdent = (:) <$> first <*> P.many rest
-  where first = P.letter P.<|> P.oneOf "+-=<>_"
-        rest = P.letter P.<|> P.digit P.<|> P.oneOf "+-=<>_"
+  where first = P.letter P.<|> P.oneOf "+-=<>_."
+        rest = P.letter P.<|> P.digit P.<|> P.oneOf "+-=<>_."
 
 parseString :: Parser String
 parseString = do
@@ -172,6 +172,14 @@ parseString = do
   s <- P.many (P.noneOf ['"'])
   _ <- P.char '"'
   return s
+
+
+parseNat :: Parser String
+parseNat = do
+  ds <- P.many1 P.digit
+  _ <- P.char 'u'
+  return ds
+
 
 parseBV :: Parser (Int, Integer)
 parseBV = P.char '#' >> ((P.char 'b' >> parseBin) P.<|> (P.char 'x' >> parseHex))
@@ -187,10 +195,11 @@ parseBV = P.char '#' >> ((P.char 'b' >> parseBin) P.<|> (P.char 'x' >> parseHex)
 
 parseAtom :: Parser FAtom
 parseAtom
-  =   AIdent      <$> parseIdent
+  =     AInt . read <$> P.many1 P.digit
+  P.<|> ANat . read <$> parseNat
+  P.<|> AIdent      <$> parseIdent
   P.<|> AQuoted     <$> (P.char '\'' >> parseIdent)
   P.<|> AString     <$> parseString
-  P.<|> AInt . read <$> P.many1 P.digit
   P.<|> uncurry ABV <$> parseBV
    -- n.b. an ANamed is an internal marker and not expressed or
    -- recoverable in the streamed text version

@@ -8,6 +8,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -27,6 +28,7 @@ import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
 import           Data.Set ( Set )
 import qualified Data.Set as Set
+import           Data.Proxy ( Proxy(..) )
 import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe, mapMaybe )
 import           Text.Read (readMaybe)
 import           Data.Parameterized.Classes
@@ -46,6 +48,9 @@ import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
+import qualified SemMC.Util as U
+import           SemMC.Toy ( Toy )
+
 import System.Exit (exitFailure)
 
 import qualified System.Exit as IO
@@ -64,6 +69,8 @@ import qualified SemMC.Formula as SF
 import qualified What4.Expr.Builder as B
 
 import SemMC.Formula.Printer as FP
+import SemMC.Formula.Parser as FP
+import qualified SemMC.Formula.Load as SFL
 import SemMC.ASL
 import SemMC.ASL.Crucible
 import SemMC.ASL.Translation
@@ -98,6 +105,7 @@ data TranslatorOptions = TranslatorOptions
   , optASLSpecFilePath :: FilePath
   , optTranslationTask :: TranslationTask
   , optTranslationDepth :: TranslationDepth
+  , optCheckSerialization :: Bool
   }
 
 
@@ -140,6 +148,7 @@ defaultOptions = TranslatorOptions
   , optASLSpecFilePath = "./test/"
   , optTranslationDepth = TranslateRecursive
   , optTranslationTask = TranslateArch32
+  , optCheckSerialization = False
   }
 
 data StatOptions = StatOptions
@@ -223,6 +232,9 @@ arguments =
 
   , Option [] ["no-dependencies"] (NoArg (Left (\opts -> Just $ opts { optTranslationDepth = TranslateShallow } )))
     "Don't recursively translate function dependencies."
+
+  , Option [] ["check-serialization"] (NoArg (Left (\opts -> Just $ opts { optCheckSerialization = True } )))
+    "Check that serialization/deserialization for any processed formulas is correct."
   ]
 
 usage :: IO ()
@@ -415,6 +427,7 @@ processFunction fromInstr key sig stmts defs' = do
       else do
         logMsg 1 $ T.pack $ "Simulating: " ++ prettyKey key
         logMsg 1 $ T.pack $ "Rough function body size:" ++ show (measureStmts stmts)
+        checkSerialization <- MSS.gets (optCheckSerialization . sOptions)
         mdep <- catchIO key $
           withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
             let cfg = SimulatorConfig { simOutputHandle = IO.stdout
@@ -426,8 +439,22 @@ processFunction fromInstr key sig stmts defs' = do
                 symInstr <- simulateInstruction cfg p
                 return (funcDepends p, Nothing)
               KeyFun _ -> do
+                when checkSerialization $ B.startCaching backend
                 symFn <- simulateFunction cfg p
-                return (funcDepends p, Just (FP.printFunctionFormula symFn))
+                let serializedSymFn = FP.printFunctionFormula symFn
+                when checkSerialization $ do
+                  lcfg <- U.mkLogCfg "check serialization"
+                  fenv <- SFL.formulaEnv (Proxy @Toy) backend
+                  res <- U.withLogCfg lcfg $
+                    readDefinedFunction backend fenv serializedSymFn
+                  case res of
+                    Left err -> do
+                      hPutStrLn stderr $ ("Failed to parse serialized function formula " ++ (prettyKey key) ++ "!"
+                                          ++ "\n    " ++ err)
+                    Right (Some symFn') -> do return ()
+--                  unless (symFn == symFn') $ do -- Ugh, TODO type mismatch... wrap both in Some?
+--                    hPutStrLn stderr $ "parsed function formula for " ++ (prettyKey key) ++ " was not equal to original!"
+                return (funcDepends p, Just serializedSymFn)
         case mdep of
           Just (dep, mformula) -> do
             logMsg 1 "Simulation succeeded!"

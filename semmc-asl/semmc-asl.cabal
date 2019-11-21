@@ -66,6 +66,7 @@ executable semmc-asl-genarm
                        parameterized-utils,
                        semmc,
                        semmc-asl,
+                       semmc-toy,
                        text >= 1 && < 2,
                        panic >= 0.3,
                        split

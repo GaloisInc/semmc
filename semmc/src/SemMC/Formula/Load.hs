@@ -11,7 +11,8 @@ module SemMC.Formula.Load (
   loadLibrary,
   loadLibraryFromFiles,
   listFunctionFiles,
-  FormulaParseError(..)
+  FormulaParseError(..),
+  formulaEnv
   ) where
 
 import qualified Control.Exception as E
