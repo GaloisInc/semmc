@@ -42,6 +42,7 @@ module SemMC.ASL.Crucible (
   , aslExtImpl
   -- * Exceptions
   , TranslationException(..)
+
   ) where
 
 import           Control.Monad ( when )
@@ -85,7 +86,7 @@ import System.IO.Unsafe -- FIXME: For debugging
 
 data Function arch globalReads globalWrites init tps =
    Function { funcSig :: FunctionSignature globalReads globalWrites init tps
-            , funcCFG :: CCC.SomeCFG (ASLExt arch) init (FuncReturn globalWrites tps)
+            , funcCFG :: CCC.SomeCFG (ASLExt arch) (ToCrucTypes init) (FuncReturn globalWrites tps)
             , funcGlobalReads :: Ctx.Assignment BaseGlobalVar globalReads
             , funcDepends :: Map.Map T.Text StaticValues
             }
@@ -122,7 +123,7 @@ functionToCrucible :: forall arch globalReads globalWrites init tps ret
                     -> Integer -- ^ Logging level
                     -> IO (Function arch globalReads globalWrites init tps)
 functionToCrucible defs sig hdlAlloc stmts logLvl = do
-  let argReprs = FC.fmapFC projectValue (funcArgReprs sig)
+  let argReprs = toCrucTypes $ FC.fmapFC (projectValue) (funcArgReprs sig)
   let retRepr = funcSigRepr sig
   hdl <- CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr
   globalReads <- FC.traverseFC allocateGlobal (funcGlobalReadReprs sig)
@@ -170,7 +171,7 @@ funcDef :: (ReturnsGlobals ret globalWrites tps)
         -> Ctx.Assignment BaseGlobalVar globalReads
         -> [AS.Stmt]
         -> Integer -- ^ Logging level
-        -> Ctx.Assignment (CCG.Atom s) init
+        -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
         -> (TranslationState h ret s, InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret))
 funcDef defs sig hdls globalReads stmts logLvl args =
   (funcInitialState defs sig hdls logLvl globalReads args, defineFunction overrides sig globalReads stmts args)
@@ -182,7 +183,7 @@ funcInitialState :: forall init globalReads globalWrites tps h s arch ret
                  -> (STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text])
                  -> Integer -- ^ Logging level
                  -> Ctx.Assignment BaseGlobalVar globalReads
-                 -> Ctx.Assignment (CCG.Atom s) init
+                 -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
                  -> TranslationState h ret s
 funcInitialState defs sig (funDepRef, logRef) logLvl globalReads args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
@@ -201,22 +202,30 @@ funcInitialState defs sig (funDepRef, logRef) logLvl globalReads args =
   where
     addArgument :: forall tp
                  . Map.Map T.Text (Some (CCG.Atom s))
-                -> Ctx.Index init tp
+                -> Ctx.Index (ToCrucTypes init) tp
                 -> Map.Map T.Text (Some (CCG.Atom s))
     addArgument m idx =
-      Map.insert (projectLabel (funcArgReprs sig Ctx.! idx)) (Some (args Ctx.! idx)) m
+      let
+        argReprs = FC.fmapFC projectValue (funcArgReprs sig)
+        inArgReprs = FC.fmapFC (CCG.typeOfAtom) args
+        bidx = toBaseIndex argReprs inArgReprs idx
+      in
+        Map.insert (projectFunctionName (funcArgReprs sig Ctx.! bidx)) (Some (args Ctx.! idx)) m
     addGlobal (BaseGlobalVar gv) m =
       Map.insert (CCG.globalName gv) (Some gv) m
+
+projectFunctionName :: LabeledValue FunctionArg a tp -> T.Text
+projectFunctionName (LabeledValue (FunctionArg nm _ _) _) = nm
 
 defineFunction :: (ReturnsGlobals ret globalWrites tps)
                => Overrides arch
                -> FunctionSignature globalReads globalWrites init tps
                -> Ctx.Assignment BaseGlobalVar globalReads
                -> [AS.Stmt]
-               -> Ctx.Assignment (CCG.Atom s) init
+               -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
                -> InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig baseGlobals stmts _args = do
-  unliftGenerator $ mapM_ (\(FunctionArg nm t _) -> addExtendedTypeData nm t) (funcArgs sig)
+  unliftGenerator $ FC.forFC_ (funcArgReprs sig) (\(LabeledValue (FunctionArg nm t _) _) -> addExtendedTypeData nm t)
   unliftGenerator $ mapM_ (translateStatement ov) stmts
   case funcRetRepr sig of
     Ctx.Empty -> unliftGenerator $ translateStatement ov (AS.StmtReturn Nothing)

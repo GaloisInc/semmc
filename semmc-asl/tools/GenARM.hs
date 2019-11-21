@@ -9,6 +9,8 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main ( main ) where
 
@@ -27,6 +29,7 @@ import           Data.Set ( Set )
 import qualified Data.Set as Set
 import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe, mapMaybe )
 import           Text.Read (readMaybe)
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Bits( (.|.) )
@@ -80,6 +83,10 @@ import           What4.ProblemFeatures
 
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
 
+import qualified SemMC.Architecture.Location as L
+import           SemMC.Architecture.ARM.Location ( A32, T32 )
+import qualified SemMC.Architecture.ARM.Location as AL
+
 data TranslatorOptions = TranslatorOptions
   { optVerbosity :: Integer
   , optStartIndex :: Int
@@ -100,6 +107,7 @@ data TranslationDepth = TranslateRecursive
 data TranslationTask = TranslateAll
                      | TranslateTargets
                      | TranslateNoArch64
+                     | TranslateArch32
                      | TranslateInstruction String String
 
 instsFilePath :: FilePath
@@ -128,10 +136,10 @@ defaultOptions = TranslatorOptions
   , optFilters = noFilter
   , optSkipTranslation = False
   , optCollectAllExceptions = False
-  , optCollectExpectedExceptions = False
+  , optCollectExpectedExceptions = True
   , optASLSpecFilePath = "./test/"
   , optTranslationDepth = TranslateRecursive
-  , optTranslationTask = TranslateTargets
+  , optTranslationTask = TranslateArch32
   }
 
 data StatOptions = StatOptions
@@ -201,6 +209,7 @@ arguments =
         "all" -> return $ TranslateAll
         "targets" -> return $ TranslateTargets
         "noArch64" -> return $ TranslateNoArch64
+        "Arch32" -> return $ TranslateArch32
         _ -> case List.splitOn "/" mode of
           [instr, enc] -> return $ TranslateInstruction instr enc
           _ -> fail ""
@@ -209,6 +218,7 @@ arguments =
      "all - translate all instructions from " ++ instsFilePath ++ ".\n" ++
      "targets - translate instructions filtered by " ++ targetInstsFilePath ++ ".\n" ++
      "noArch64 - translate T16, T32 and A32 instructions.\n" ++
+     "Arch32 - translate T32 and A32 instructions.\n" ++
      "<INSTRUCTION>/<ENCODING> - translate a single instruction/encoding pair.")
 
   , Option [] ["no-dependencies"] (NoArg (Left (\opts -> Just $ opts { optTranslationDepth = TranslateShallow } )))
@@ -242,6 +252,7 @@ main = do
         TranslateAll -> runWithFilters opts
         TranslateInstruction inst enc -> testInstruction opts inst enc
         TranslateNoArch64 -> runWithFilters (opts { optFilters = translateNoArch64 } )
+        TranslateArch32 -> runWithFilters (opts { optFilters = translateArch32 } )
       reportStats statOpts sm
 
   where
@@ -318,12 +329,18 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
               MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
             TranslateShallow -> return ()
 
-translationLoop :: InstructionIdent
+-- FIXME: hack to inject concrete type parameter
+toDefinitions32 :: Definitions arch -> Definitions A32
+toDefinitions32 (Definitions a b c d e) = Definitions a b c d e
+
+translationLoop :: IsARMArch arch
+                => InstructionIdent
                 -> [T.Text]
                 -> Definitions arch
                 -> (T.Text, StaticValues)
                 -> SigMapM (Set.Set T.Text)
-translationLoop fromInstr callStack defs (fnname, env) = do
+translationLoop fromInstr callStack defs' (fnname, env) = do
+  let defs = toDefinitions32 defs'
   let finalName = (mkFinalFunctionName env fnname)
   fdeps <- MSS.gets funDeps
   case Map.lookup finalName fdeps of
@@ -374,13 +391,17 @@ measureStmts stmts = getSum $ runIdentity $ mconcat <$> traverse (TR.collectSynt
     doCollect :: TR.KnownSyntaxRepr t => t -> Identity (Sum Int)
     doCollect _ = return 1
 
-processFunction :: InstructionIdent
+type IsARMArch arch = (OrdF (L.Location arch))
+
+processFunction :: IsARMArch arch
+                => InstructionIdent
                 -> ElemKey
                 -> FunctionSignature globalReads globalWrites init tps
                 -> [AS.Stmt]
                 -> Definitions arch
                 -> SigMapM (Map.Map T.Text StaticValues)
-processFunction fromInstr key sig stmts defs = do
+processFunction fromInstr key sig stmts defs' = do
+  let defs = toDefinitions32 defs'
   handleAllocator <- liftIO $ CFH.newHandleAllocator
   logLvl <- MSS.gets (optVerbosity . sOptions)
   mp <- catchIO key $ functionToCrucible defs sig handleAllocator stmts logLvl
@@ -400,12 +421,20 @@ processFunction fromInstr key sig stmts defs = do
                                       , simHandleAllocator = handleAllocator
                                       , simSym = backend
                                       }
-            symFn <- simulateFunction cfg p
-            return (funcDepends p, FP.printFunctionFormula symFn)
+            case key of
+              KeyInstr _ -> do
+                symInstr <- simulateInstruction cfg p
+                return (funcDepends p, Nothing)
+              KeyFun _ -> do
+                symFn <- simulateFunction cfg p
+                return (funcDepends p, Just (FP.printFunctionFormula symFn))
         case mdep of
-          Just (dep, formula) -> do
+          Just (dep, mformula) -> do
             logMsg 1 "Simulation succeeded!"
-            MSS.modify $ \s -> s { sFormulas = Map.insert key formula (sFormulas s) }
+            case mformula of
+              Just formula ->
+                MSS.modify $ \s -> s { sFormulas = Map.insert key formula (sFormulas s) }
+              _ -> return ()
             return dep
           _ -> do
             logMsg 1 "Simulation failed."
@@ -783,3 +812,11 @@ translateNoArch64 = Filters
   (\(InstructionIdent _ _ iset) -> iset /= AS.A64)
   (\(InstructionIdent _ _ iset) -> \_ -> iset /= AS.A64)
   (\(InstructionIdent _ _ iset) -> iset /= AS.A64)
+
+
+translateArch32 :: Filters
+translateArch32 = Filters
+  (\(InstructionIdent _ _ iset) -> \_ -> iset `elem` [AS.A32, AS.T32] )
+  (\(InstructionIdent _ _ iset) -> iset `elem` [AS.A32, AS.T32])
+  (\(InstructionIdent _ _ iset) -> \_ -> iset `elem` [AS.A32, AS.T32])
+  (\(InstructionIdent _ _ iset) -> iset `elem` [AS.A32, AS.T32])

@@ -7,12 +7,15 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- | Functions for converting between What4 and Crucible types.
 module SemMC.ASL.Types
   ( ToBaseType
   , ToBaseTypes
   , ToBaseTypesList
+  , ToBaseTypesListBase
   , ToCrucTypes
   , ConstVal(..)
   , UserType(..)
@@ -24,6 +27,7 @@ module SemMC.ASL.Types
   , TypeConstraint(..)
   , ConstraintHint(..)
   , RegisterKind(..)
+  , AccessMode(..)
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -34,6 +38,7 @@ module SemMC.ASL.Types
   , toBaseIndex
   , projectLabel
   , projectValue
+  , addLabels
   , letInStmt
   , unletInStmt
   , blockStmt
@@ -41,6 +46,7 @@ module SemMC.ASL.Types
   , falseExpr
   , trueExpr
   ) where
+
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
@@ -55,6 +61,9 @@ import qualified Language.ASL.Syntax as AS
 import qualified Data.Map as Map
 import qualified Data.List as List
 import qualified Data.Set as Set
+
+-- StateF stuff
+import           Control.Monad.IO.Class
 
 type family ToBaseType (ctp :: CT.CrucibleType) :: WT.BaseType where
   ToBaseType (CT.BaseToType bt) = bt
@@ -79,6 +88,10 @@ toBaseTypes (reprs Ctx.:> repr) = toBaseTypes reprs Ctx.:> toBaseType repr
 type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WT.BaseType] where
   ToBaseTypesList CT.EmptyCtx = '[]
   ToBaseTypesList (tps CT.::> tp) = ToBaseType tp ': ToBaseTypesList tps
+
+type family ToBaseTypesListBase (ctps :: CT.Ctx CT.BaseType) :: [WT.BaseType] where
+  ToBaseTypesListBase CT.EmptyCtx = '[]
+  ToBaseTypesListBase (tps CT.::> tp) = tp ': ToBaseTypesListBase tps
 
 type family ToCrucTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType where
   ToCrucTypes CT.EmptyCtx = CT.EmptyCtx
@@ -120,6 +133,8 @@ toBaseIndex breprs creprs ix = do
 
 data LabeledValue a b tp = LabeledValue a (b tp)
 
+
+
 instance (Eq a, TestEquality b) => TestEquality (LabeledValue a b) where
   LabeledValue a b `testEquality` LabeledValue a' b' =
     case b `testEquality` b' of
@@ -127,6 +142,13 @@ instance (Eq a, TestEquality b) => TestEquality (LabeledValue a b) where
         True -> Just Refl
         False -> Nothing
       Nothing -> Nothing
+
+addLabels :: Ctx.Assignment (LabeledValue l a) ctx
+          -> Ctx.Assignment f ctx
+          -> Ctx.Assignment (LabeledValue l f) ctx
+addLabels labels asns = case (labels, asns) of
+  (lbls' Ctx.:> LabeledValue lbl _, asns' Ctx.:> asn) -> addLabels lbls' asns' Ctx.:> (LabeledValue lbl asn)
+  (Ctx.Empty, Ctx.Empty) -> Ctx.Empty
 
 projectValue :: LabeledValue a b tp -> b tp
 projectValue (LabeledValue _ v) = v
@@ -259,5 +281,8 @@ data TypeConstraint where
 deriving instance Show TypeConstraint
 
 data RegisterKind =
-  RegisterR | RegisterV | RegisterInconsistent
+  RegisterR
+  deriving (Show, Eq, Ord)
+
+data AccessMode = AccessRead | AccessWrite
   deriving (Show, Eq, Ord)

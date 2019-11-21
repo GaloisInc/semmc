@@ -5,6 +5,91 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
+array bits(32) _R[0..15];
+bits(32) _PC;
+
+PC[] = bits(32) value
+    R[15] = value;
+    return;
+
+bits(32) PC[]
+    return R[15];
+
+bits(32) Rmode[integer n, bits(5) mode]
+    // Check for attempted use of Monitor mode in Non-secure state.
+    if !IsSecure() then assert mode != M32_Monitor;
+    assert !BadMode(mode);
+
+    if mode == M32_Monitor then
+        if n == 13 then
+            return SP_mon;
+        elsif n == 14 then
+            return LR_mon;
+        elsif n == 15 then
+            return _PC;
+        else
+            return _R[n];
+    else
+        idx = LookUpRIndex(n, mode);
+        if idx == 15 then
+            return _PC;
+        else
+            return _R[n];
+
+Rmode[integer n, bits(5) mode] = bits(32) value
+    assert n >= 0 && n <= 14;
+
+    // Check for attempted use of Monitor mode in Non-secure state.
+    if !IsSecure() then assert mode != M32_Monitor;
+    assert !BadMode(mode);
+
+    if mode == M32_Monitor then
+        if n == 13 then
+            SP_mon = value;
+        elsif n == 14 then
+            LR_mon = value;
+        elsif n == 15 then
+            _PC = value;
+        else
+            _R[n] = value;
+    else
+        idx = LookUpRIndex(n, mode);
+        if idx == 15 then
+            _PC = value;
+        else
+            _R[n] = value;
+    return;
+
+// Allow us to model the internal PC as a 32 bit value
+bits(N) ThisInstrAddr()
+    if N == 32 then
+        return PC[];
+    else
+        assert FALSE;
+        return bits(N) UNKNOWN;
+
+bits(N) NextInstrAddr()
+    if N == 32 then
+        return (_PC + (ThisInstrLength() DIV 8))<N-1:0>;
+    else
+        assert FALSE;
+        return bits(N) UNKNOWN;
+
+// Allow us to model the internal PC as a 32 bit value
+BranchToAddr(bits(N) target, BranchType branch_type)
+    __BranchTaken = TRUE;
+    Hint_Branch(branch_type);
+    assert UsingAArch32();
+
+    if N == 32 then
+        PC[] = target;
+        return;
+    else
+        assert FALSE;
+        return;
+    return;
+
+
 // This flag is checked every time a function call
 // might have written to it to see if we should stop
 // processing the instruction early.
@@ -153,6 +238,12 @@ bits(N) ASR(bits(N) x, integer shift)
     else
         result = primitive_ASR(x, shift);
     return result;
+
+// FIXME: This can't reasonably be simulated
+
+integer RecipSqrtEstimate(integer a)
+  assert FALSE;
+  return integer UNKNOWN;
 
 // Stubbed floating point operations to allow proper signature calculations
 

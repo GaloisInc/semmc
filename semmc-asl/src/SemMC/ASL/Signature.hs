@@ -50,14 +50,13 @@ data FunctionSignature globalReads globalWrites init tps =
                     -- ^ The name of the function
                     , funcRetRepr :: Ctx.Assignment WT.BaseTypeRepr tps
                     -- ^ The return type of the function
-                    , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                    , funcArgReprs :: Ctx.Assignment (LabeledValue FunctionArg WT.BaseTypeRepr) init
                     -- ^ The types of the natural arguments of the function
                     , funcGlobalReadReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globalReads
                     -- ^ The globals (transitively) referenced by the function
                     , funcGlobalWriteReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globalWrites
                     -- ^ The globals (transitively) affected by the function
                     , funcStaticVals :: StaticValues
-                    , funcArgs :: [FunctionArg]
                     }
   deriving (Show)
 

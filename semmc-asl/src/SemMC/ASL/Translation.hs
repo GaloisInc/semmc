@@ -455,6 +455,7 @@ translateStatement' ov stmt
         let retT = CT.SymbolicStructRepr (funcRetRepr sig)
         let expr = case mexpr of
               Nothing -> AS.ExprTuple []
+              Just (AS.ExprTuple es) -> AS.ExprTuple es
               Just e | Ctx.sizeInt (Ctx.size (funcRetRepr sig)) == 1 ->
                 AS.ExprTuple [e]
               Just e -> e
@@ -2540,6 +2541,10 @@ overrides = Overrides {..}
 
           -- The Elem setter is inlined by the desugaring pass, so an explicit call should be a no-op
           AS.StmtCall (AS.VarName "SETTER_Elem") _ -> Just $ return ()
+
+          -- Check for stubbed functions that should have been inlined elsewhere
+          AS.StmtCall (AS.VarName "BadASLFunction") _ -> Just $ do
+            throwTrace $ BadASLFunctionCall
 
           AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUndefined") [] -> Just $ do
             result <- mkAtom $ CCG.App $ CCE.BoolLit True

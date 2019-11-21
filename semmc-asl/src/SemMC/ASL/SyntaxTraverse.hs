@@ -72,7 +72,8 @@ import           SemMC.ASL.Types
 import           Data.Parameterized.Classes
 
 pattern VarName :: T.Text -> AS.QualifiedIdentifier
-pattern VarName nm <- AS.QualifiedIdentifier _ nm
+pattern VarName nm <- AS.QualifiedIdentifier _ nm where
+  VarName nm = AS.QualifiedIdentifier AS.ArchQualAny nm
 
 varsOfExpr :: AS.Expr -> [T.Text]
 varsOfExpr e = runIdentity $ collectSyntax getVar e
@@ -373,6 +374,10 @@ instance MonadLog Identity where
   logIndent _ = return 0
 
 instance (Monoid w, MonadLog m) => MonadLog (W.WriterT w m) where
+  logMsg logLvl msg = MT.lift $ logMsg logLvl msg
+  logIndent f = MT.lift $ logIndent f
+
+instance (MonadLog m) => MonadLog (MSS.StateT s m) where
   logMsg logLvl msg = MT.lift $ logMsg logLvl msg
   logIndent f = MT.lift $ logIndent f
 

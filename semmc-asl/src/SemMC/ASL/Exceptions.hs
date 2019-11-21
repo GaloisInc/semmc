@@ -85,6 +85,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | UnexpectedReturnInStmtCall
                           | UnexpectedReturnInExprCall
                           | BindingFailure String
+                          | BadASLFunctionCall
                           | TExceptions [TranslationException]
 
 

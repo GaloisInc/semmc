@@ -26,6 +26,7 @@ library
                        SemMC.ASL.SyntaxTraverse
                        SemMC.ASL.Types
                        SemMC.ASL.StaticExpr
+                       SemMC.Architecture.ARM.Location
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        bv-sized >= 0.7.0,
@@ -43,6 +44,7 @@ library
                        what4,
                        asl-parser,
                        semmc,
+                       dismantle-tablegen,
                        dismantle-arm-xml,
                        time
   hs-source-dirs:      src

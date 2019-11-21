@@ -63,6 +63,7 @@ import qualified Control.Monad.State.Class as MS
 import qualified Control.Monad.State as MSS
 import           Control.Monad.Trans.Maybe as MaybeT
 import qualified Data.BitVector.Sized as BVS
+import           Data.Functor.Reverse
 import           Data.Foldable (find, traverse_)
 import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, isJust)
@@ -94,8 +95,10 @@ import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
 
-import System.IO.Unsafe -- FIXME: debugging
+import           SemMC.Architecture.ARM.Location ( A32, T32 )
 
+import System.IO.Unsafe -- FIXME: debugging
+import Debug.Trace
 
 -- | Compute the signature of a single callable, given its name and arity.
 computeSignature :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
@@ -122,7 +125,7 @@ data Definitions arch =
               }
 
 -- | Collect the definitions representing the current state
-getDefinitions :: SigM ext f (Definitions arch)
+getDefinitions :: SigM ext f (Definitions A32)
 getDefinitions = do
   st <- RWS.get
   env <- RWS.ask
@@ -342,6 +345,8 @@ mkExtendedTypeData' getUT getET ty = do
           case lookup tident registerTypeSynonyms of
             Just nm -> getET nm
             Nothing -> return TypeBasic
+    AS.TypeTuple tys -> do
+      TypeTuple <$> traverse (mkExtendedTypeData' getUT getET) tys
     _ -> return TypeBasic
   where
     fromUT :: Some UserType -> m ExtendedTypeData
@@ -368,9 +373,6 @@ mkExtendedTypeData = mkExtendedTypeData' getUT getET
     getET tpName = do
       etd <- RWS.gets extendedTypeData
       return $ fromMaybe TypeBasic (Map.lookup tpName etd)
-
-allDefs :: ASLSpec -> [AS.Definition]
-allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
@@ -438,37 +440,52 @@ insertUnique k v =
       Just _ -> error $ "Unexpected existing member in map:" ++ show k
       Nothing -> Just v
 
+insertNoReplace :: Ord k => Show k => k -> a -> Map.Map k a -> Map.Map k a
+insertNoReplace k v =
+  Map.alter f k
+  where
+    f x = case x of
+      Just ex -> Just ex
+      Nothing -> Just v
+
 globalStructNames :: [T.Text]
 globalStructNames = ["PSTATE"]
 
+allDefs :: ASLSpec -> [AS.Definition]
+allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
+
 initializeSigM :: ASLSpec -> SigM ext f ()
-initializeSigM spec = do
-  mapM_ initDefGlobal (allDefs spec)
-  return ()
+initializeSigM ASLSpec{..} = do
+  mapM_ (initDefGlobal insertUnique) aslExtraDefinitions
+  mapM_ (initDefGlobal insertNoReplace) aslSupportDefinitions
+  mapM_ (initDefGlobal insertNoReplace) aslDefinitions
   where
-    initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) (AS.TypeRef (AS.VarName typnm)))
+    initDefGlobal :: (forall k a. Ord k => Show k => k -> a -> Map.Map k a -> Map.Map k a)
+                  -> AS.Definition
+                  -> SigM ext f ()
+    initDefGlobal f (AS.DefVariable (AS.QualifiedIdentifier _ nm) (AS.TypeRef (AS.VarName typnm)))
       | nm `elem` globalStructNames = do
       Some (UserStruct ut) <- computeUserType typnm
       fieldMap <- Ctx.traverseAndCollect (collectGlobalFields nm) ut
       let ext = TypeGlobalStruct fieldMap
-      RWS.modify' $ \st -> st { globalVars = insertUnique nm (Some WT.BaseStringRepr) (globalVars st),
-                     extendedTypeData = insertUnique nm ext (extendedTypeData st) }
+      RWS.modify' $ \st -> st { globalVars = f nm (Some WT.BaseStringRepr) (globalVars st),
+                     extendedTypeData = f nm ext (extendedTypeData st) }
 
-    initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
+    initDefGlobal f (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
       tp <- computeType ty
       ext <- mkExtendedTypeData ty
       st <- RWS.get
-      RWS.put $ st { globalVars = insertUnique nm tp (globalVars st),
-                     extendedTypeData = insertUnique nm ext (extendedTypeData st) }
-    initDefGlobal (AS.DefArray nm ty idxty) = do
+      RWS.put $ st { globalVars = f nm tp (globalVars st),
+                     extendedTypeData = f nm ext (extendedTypeData st) }
+    initDefGlobal f (AS.DefArray nm ty idxty) = do
       Some tp <- computeType ty
       ext <- mkExtendedTypeData ty
       st <- RWS.get
       let atp = Some $ WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) tp
       let aext = TypeArray ext
-      RWS.put $ st { globalVars = insertUnique nm atp (globalVars st),
-                     extendedTypeData = insertUnique nm aext (extendedTypeData st) }
-    initDefGlobal _ = return ()
+      RWS.put $ st { globalVars = f nm atp (globalVars st),
+                     extendedTypeData = f nm aext (extendedTypeData st) }
+    initDefGlobal _ _ = return ()
 
     collectGlobalFields :: T.Text
                         -> Ctx.Index tps tp
@@ -554,6 +571,7 @@ data SigException = TypeNotFound T.Text
                   | SigBindingFailure String
                   | FailedToDetermineStaticEnvironment [T.Text]
                   | FailedToMonomorphizeSignature AS.Type StaticValues
+                  | UnexpectedRegisterFieldLength T.Text Integer
   deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ext f ()
@@ -701,7 +719,10 @@ computeType' tp = case applyTypeSynonyms tp of
     | Just (Some nRepr) <- NR.someNat n
     , Just NR.LeqProof <- NR.isPosNat nRepr ->
       Left $ Some (WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr))
-
+  AS.TypeTuple tps -> let
+    ctps = map (\t -> case computeType' t of {Left bt -> bt; _ -> error "Bad type tuple"}) tps
+    in case Ctx.fromList ctps of
+         Some ctx -> Left $ Some (WT.BaseStructRepr ctx)
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
   AS.TypeArray _ _ -> error "computeType, TypeArray"
@@ -826,43 +847,69 @@ globalsOfStmts stmts = let
       AS.CasePatternTuple pats -> mconcat <$> traverse casePatternGlobalVars pats
       _ -> return mempty
 
+data RegIdxMap = RegIdxMap
+  { idxR :: Map.Map T.Text RegisterKind -- from register index variable to register name
+  , opMap :: Map.Map T.Text T.Text -- from operand to register index variable
+  }
+  deriving Show
 
-registerKindMap :: T.Text -> Maybe RegisterKind
-registerKindMap nm = case nm of
-  "_R" -> Just $ RegisterR
-  "_V" -> Just $ RegisterV
-  "_Dclone" -> Just $ RegisterV
-  _ -> Nothing
+-- | Unpack register/index operand and setup global state to match
+-- (__R_temp, d_bits) = Rd
+-- d = UInt(d_bits)
+-- R[d] = __R_temp
+registerPreamble :: T.Text -> T.Text -> AS.Stmt
+registerPreamble opvar idx  =
+  let rtemp = "__R_temp"
+  in
+    letInStmt [rtemp] $
+      [ AS.StmtAssign (AS.LValTuple
+         [ AS.LValVarRef (AS.VarName rtemp)
+         , AS.LValVarRef (AS.VarName opvar)
+         ])
+           (AS.ExprVarRef (AS.VarName (opvar <> "_struct")))
+       , AS.StmtAssign (AS.LValVarRef (AS.VarName idx))
+          (AS.ExprCall (AS.VarName "UInt")
+           [AS.ExprVarRef (AS.VarName opvar)])
+       , AS.StmtCall (AS.VarName "SETTER_R") [AS.ExprVarRef (AS.VarName rtemp), AS.ExprVarRef (AS.VarName idx)]
+       ]
 
-regIdxsOfStmts :: forall ext f. [AS.Stmt] -> SigM ext f RegIdxVars
-regIdxsOfStmts stmts = let
-  collectors :: forall t. TR.KnownSyntaxRepr t => t -> SigM ext f RegIdxVars
-  collectors = TR.useKnownSyntaxRepr $ \syn -> \case
-    TR.SyntaxExprRepr
-      | AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e] <- syn
-      , Just rkind <- registerKindMap idxnm ->
-        return $ regIdxsOfExpr rkind e
-    TR.SyntaxLValRepr
-      | AS.LValArrayIndex (AS.LValVarRef (AS.VarName idxnm)) [AS.SliceSingle e] <- syn
-      , Just rkind <- registerKindMap idxnm ->
-        return $ regIdxsOfExpr rkind e
-    TR.SyntaxCallRepr -> collectCallables callableRegIdxs syn
+-- | Pack up resulting register values
+-- return (.. (R[d], d_bits) ..)
+registerPostamble :: T.Text -> T.Text -> AS.Expr
+registerPostamble idx opvar =
+  AS.ExprTuple
+    [ AS.ExprCall (AS.VarName "GETTER_R") [AS.ExprVarRef (AS.VarName idx)]
+    , AS.ExprVarRef (AS.VarName opvar)
+    ]
+
+swapROperands :: Set.Set T.Text -> [AS.Stmt] -> ([AS.Stmt], RegIdxMap)
+swapROperands opvars stmts = let
+  collectRkind :: forall t. TR.KnownSyntaxRepr t => t -> Identity (Map.Map T.Text RegisterKind)
+  collectRkind = TR.useKnownSyntaxRepr $ \syn -> \case
+    TR.SyntaxCallRepr
+      | (AS.VarName nm, [AS.ExprVarRef (AS.VarName idx)]) <- syn
+      , nm `elem` ["GETTER_R", "SETTER_R"] -> do
+        return $ Map.singleton idx RegisterR
     _ -> return mempty
-  in collectStmts "regIdxsOfStmts" collectors stmts
-  where
-    callableRegIdxs c argEs = case c of
-      Callable (AS.VarName "LookUpRIndex") _ _ _
-        | [AS.ExprVarRef (AS.VarName varnm), _] <- argEs ->
-          return $ varRegIdx RegisterR varnm
-      _ -> do
-        (SomeSimpleFunctionSignature sig, _) <- computeCallableSignature c
-        let args = sfuncArgs sig
-        mconcat <$> traverse addFunArg (zip args argEs)
-      where
-        addFunArg (FunctionArg _ _ mrkind, e) = case mrkind of
-          Just rkind -> return $ regIdxsOfExpr rkind e
-          _ -> return mempty
-    regIdxsOfExpr rkind e = mconcat $ map (varRegIdx rkind) $ directVarsOfExpr e
+
+  rkindMap = runIdentity $ mconcat <$> traverse (TR.collectSyntax collectRkind) stmts
+
+  collectOpMap :: forall t. TR.KnownSyntaxRepr t => t -> W.Writer (Map.Map T.Text T.Text) t
+  collectOpMap = TR.useKnownSyntaxRepr $ \syn -> \case
+   TR.SyntaxStmtRepr
+      | AS.StmtAssign (AS.LValVarRef (AS.VarName idx)) (AS.ExprCall (AS.VarName "UInt")
+          [AS.ExprVarRef (AS.VarName opvar)]) <- syn
+      , Set.member opvar opvars
+      , Just _ <- Map.lookup idx rkindMap -> do
+        W.tell $ Map.singleton opvar idx
+        return $ blockStmt [] -- erase this line, since it is subsumed by the preamble
+   _ -> return syn
+
+  (stmts', opmap) = W.runWriter (traverse (TR.traverseStmt collectOpMap) stmts)
+
+  header = map (uncurry registerPreamble) (Map.assocs opmap)
+
+  in (header ++ stmts', RegIdxMap rkindMap opmap)
 
 directVarsOfExpr :: AS.Expr -> [T.Text]
 directVarsOfExpr = \case
@@ -900,7 +947,6 @@ varDepsOfStmts forward stmts = let
     varDependsExpr lval e =
       if forward then mconcat $ map (\var -> varDependsOn var lval) $ directVarsOfExpr e
       else mconcat $ map (varDependsOn lval) $ directVarsOfExpr e
-
 
 
 computeSignatures :: forall ext f. [AS.Stmt] -> SigM ext f ()
@@ -968,30 +1014,15 @@ computeCallableSignature c@Callable{..} = do
       Some globalReadReprs <- return $ Ctx.fromList labeledReads
       Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
 
-      regIdxs <- regIdxsOfStmts callableStmts
-      let varDeps = varDepsOfStmts False callableStmts
       let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
             { sfuncName = name
             , sfuncRet = callableRets
-            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (getRegisterKind regIdxs varDeps nm)) callableArgs
+            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t Nothing) callableArgs
             , sfuncGlobalReadReprs = globalReadReprs
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
       return (sig, globalVars)
 
-mergeRegisterKinds :: RegisterKind -> RegisterKind -> RegisterKind
-mergeRegisterKinds r1 r2 = if r1 == r2 then r1 else RegisterInconsistent
-
--- Variable environment for tracking usage as a register index
-data RegIdxVars = RegIdxVars
-  { unRegIdxVars :: Map.Map T.Text RegisterKind }
-
-instance Semigroup RegIdxVars where
- (<>) (RegIdxVars vars) (RegIdxVars vars') =
-   RegIdxVars (Map.unionWith mergeRegisterKinds vars vars')
-
-instance Monoid RegIdxVars where
-  mempty = RegIdxVars Map.empty
 
 -- Variable dependency tracking
 data VarDeps = VarDeps
@@ -1008,9 +1039,6 @@ instance Monoid VarDeps where
 varDependsOn :: T.Text -> T.Text -> VarDeps
 varDependsOn dep var = VarDeps (Map.singleton var (Set.singleton dep))
 
-varRegIdx :: RegisterKind -> T.Text -> RegIdxVars
-varRegIdx rkind var  = RegIdxVars (Map.singleton var rkind)
-
 
 reachableVarDeps :: VarDeps -> T.Text -> Set.Set T.Text
 reachableVarDeps deps var = reachableVarDeps' deps Set.empty (Set.singleton var)
@@ -1024,15 +1052,6 @@ reachableVarDeps deps var = reachableVarDeps' deps Set.empty (Set.singleton var)
         addVar nm set = case Map.lookup nm (unVarDeps deps) of
           Just set' -> Set.union set set'
           _ -> set
-
-getRegisterKind :: RegIdxVars -> VarDeps -> T.Text -> Maybe RegisterKind
-getRegisterKind ridx deps var = let
-  reachable = reachableVarDeps deps var
-  foundKinds = catMaybes $ Set.toList $ Set.map (\nm -> Map.lookup nm (unRegIdxVars ridx)) $ reachable
-  in case foundKinds of
-    [rkind] -> Just $ rkind
-    (_ : _) -> Just $ RegisterInconsistent
-    _ -> Nothing
 
 -- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
 
@@ -1054,15 +1073,14 @@ mkSignature env sig =
         , funcGlobalReadReprs = sfuncGlobalReadReprs fsig
         , funcGlobalWriteReprs = sfuncGlobalReadReprs fsig
         , funcStaticVals = env
-        , funcArgs = sfuncArgs fsig
         }
   where
     mkType t = case applyStaticEnv (simpleStaticEnvMap env) t of
       Just t -> computeType t
       _ -> E.throwError $ FailedToMonomorphizeSignature t env
-    mkLabel (FunctionArg nm t _) = do
+    mkLabel fa@(FunctionArg _ t _) = do
       Some tp <- mkType t
-      return $ Some (LabeledValue nm (CT.baseToType tp))
+      return $ Some (LabeledValue fa tp)
         
 
 mkInstructionName :: T.Text -- ^ name of instruction
@@ -1096,33 +1114,71 @@ computeInstructionSignature AS.Instruction{..} encName iset = do
       liftedStmts <- liftOverEnvs instName enc instExecute
       let instStmts = pruneInfeasableInstrSets (AS.encInstrSet enc) $ initStmts ++ instPostDecode ++ liftedStmts
       let staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
-      computeSignatures instStmts
-      globalVars <- globalsOfStmts instStmts
+      (finalInstStmts, labeledArgs, args, Some retT) <- extractRegisterArgs enc instStmts
+
+      computeSignatures finalInstStmts
+      globalVars <- globalsOfStmts finalInstStmts
       (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
       labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
       labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
-
-      regIdxs <- regIdxsOfStmts instStmts
-      let varDeps = varDepsOfStmts False instStmts
-      (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
-        (Some tp, ty) <- computeFieldType field
-        let ctp = CT.baseToType tp
-        let nm = AS.instFieldName field
-        return (Some (LabeledValue nm ctp), FunctionArg nm ty (getRegisterKind regIdxs varDeps nm)))
       Some globalReadReprs <- return $ Ctx.fromList labeledReads
       Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
       Some argReprs <- return $ Ctx.fromList labeledArgs
       let pSig = FunctionSignature { funcName = name
                                    , funcArgReprs = argReprs
-                                   , funcRetRepr = Ctx.empty
+                                   , funcRetRepr = retT
                                    , funcGlobalReadReprs = globalReadReprs
                                    , funcGlobalWriteReprs = globalReadReprs
                                    , funcStaticVals = staticEnvMapVals staticEnv
-                                   , funcArgs = args
                                    }
-      return (Some (SomeFunctionSignature pSig), instStmts)
+      return (Some (SomeFunctionSignature pSig), finalInstStmts)
+
+
+-- | Swap instruction field Rd for Rd_struct where Rd_struct = (R[d], Rd) and d = UInt(Rd)
+extractRegisterArgs :: AS.InstructionEncoding
+                    -> [AS.Stmt]
+                    -> SigM ext f  ([AS.Stmt]
+                                  , [Some (LabeledValue FunctionArg CT.BaseTypeRepr)]
+                                  , [FunctionArg]
+                                  , Some (Ctx.Assignment WT.BaseTypeRepr))
+extractRegisterArgs enc stmts = do
+  let opvars = Set.fromList $ map (\(AS.InstructionField fieldName _ _) -> fieldName) (AS.encFields enc)
+  let (stmts', ridxMap) = swapROperands opvars stmts
+  (mpostambles, labeledArgs, args) <- unzip3 <$>
+    (forM (AS.encFields enc) $ \field@(AS.InstructionField fieldName _ fieldOffset) -> do
+    case Map.lookup fieldName (opMap ridxMap) of
+      Just idx -> case fieldOffset of
+        4 -> do
+          let
+            name = fieldName <> "_struct"
+            idxtp = AS.TypeFun "bits" (AS.ExprLitInt 4)
+            valtp = AS.TypeFun "bits" (AS.ExprLitInt 32)
+            structtp = AS.TypeTuple [valtp, idxtp]
+            funarg = FunctionArg name structtp (Just $ RegisterR)
+          Some tp <- computeType structtp
+          return ( Just (registerPostamble idx fieldName, structtp)
+                 , Some (LabeledValue funarg tp)
+                 , funarg)
+        _ -> E.throwError $ UnexpectedRegisterFieldLength fieldName fieldOffset
+      _ -> do
+        (Some tp, ty) <- computeFieldType field
+        let funarg = FunctionArg fieldName ty Nothing
+        return (Nothing, Some (LabeledValue funarg tp), funarg))
+  let (retExprs, tps) = unzip $ catMaybes mpostambles
+  let retFin = AS.StmtReturn (Just (AS.ExprTuple retExprs))
+  retT <- Ctx.fromList <$> mapM (computeType) tps
+  let stmts'' = map (TR.mapSyntax (swapEOI retFin)) (stmts' ++ [retFin])
+
+  return (stmts'', labeledArgs, args, retT)
+  where
+    swapEOI :: AS.Stmt -> forall t. TR.KnownSyntaxRepr t => t -> t
+    swapEOI retFin = TR.useKnownSyntaxRepr $ \syn -> \case
+      TR.SyntaxStmtRepr
+        | AS.StmtCall (AS.VarName "EndOfInstruction") [] <- syn ->
+          retFin
+      _ -> syn
 
 -- | According to the 'dependentVariableHints', lift the given instruction body
 -- over all possible assignments to the given variables in the "decode" section
@@ -1180,8 +1236,6 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
       logMsg 3 $ "Possible environments found: " <> T.pack (show possibleEnvs)
       case cases possibleEnvs of
         [] -> E.throwError $ FailedToDetermineStaticEnvironment vars
-        -- FIXME: Debugging
-        (x1 : x2 : xs) ->  return $ [staticEnvironmentStmt [x1, x2] stmts]
         x -> return $ [staticEnvironmentStmt x stmts]
 
 
