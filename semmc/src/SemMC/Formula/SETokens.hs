@@ -42,7 +42,7 @@ data FAtom = AIdent String
            | ANat Natural
            | ABV Int Integer
            | ANamed String Int FAtom
-           deriving (Show, Eq)
+           deriving (Show, Eq, Ord)
 
 
 string :: String -> SC.SExpr FAtom
