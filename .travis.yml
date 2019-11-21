@@ -1,0 +1,31 @@
+sudo: true
+language: haskell
+
+git:
+  depth: 5
+
+cabal: "2.4"
+
+cache:
+  directories:
+  - "$HOME/.cabal/store"
+
+matrix:
+  include:
+  - ghc: 8.4.4
+  - ghc: 8.6.5
+
+install:
+  - ghc --version
+  - cabal --version
+  - git submodule update --init
+  - ln -s cabal.project.newbuild cabal.project
+  - cabal v2-configure
+  - cabal v2-build semmc
+  - cabal v2-build semmc-asl
+
+script:
+  - cabal v2-test semmc
+
+notifications:
+  email: false
