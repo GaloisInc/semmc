@@ -854,9 +854,10 @@ data RegIdxMap = RegIdxMap
   deriving Show
 
 -- | Unpack register/index operand and setup global state to match
+-- RGen generalizes R where RGen[15] is the PC.
 -- (__R_temp, d_bits) = Rd
 -- d = UInt(d_bits)
--- R[d] = __R_temp
+-- RGen[d] = __R_temp
 registerPreamble :: T.Text -> T.Text -> AS.Stmt
 registerPreamble opvar idx  =
   let rtemp = "__R_temp"
@@ -870,11 +871,11 @@ registerPreamble opvar idx  =
        , AS.StmtAssign (AS.LValVarRef (AS.VarName idx))
           (AS.ExprCall (AS.VarName "UInt")
            [AS.ExprVarRef (AS.VarName opvar)])
-       , AS.StmtCall (AS.VarName "SETTER_R") [AS.ExprVarRef (AS.VarName rtemp), AS.ExprVarRef (AS.VarName idx)]
+       , AS.StmtCall (AS.VarName "SETTER_RGen") [AS.ExprVarRef (AS.VarName rtemp), AS.ExprVarRef (AS.VarName idx)]
        ]
 
--- | Pack up resulting register values. RGen is a generalized R which
--- supports retrieving the PC for RGen[15]
+-- | Pack up resulting register values.
+-- RGen generalizes R where RGen[15] is the PC.
 -- return (.. (RGen[d], d_bits) ..)
 registerPostamble :: T.Text -> T.Text -> AS.Expr
 registerPostamble idx opvar =
