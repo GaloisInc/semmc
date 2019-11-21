@@ -9,13 +9,27 @@ array bits(32) _R[0..15];
 bits(32) _PC;
 
 PC[] = bits(32) value
-    R[15] = value;
+    _PC = value;
     return;
 
 bits(32) PC[]
-    return R[15];
+    return _PC;
+
+//Consistent treatment for GPRs and PC
+bits(32) RGen[integer n]
+    if n == 15 then
+        return _PC;
+    else
+        return R[n];
+
+RGen[integer n] = bits(32) value
+    if n == 15 then
+        _PC = value;
+    else
+        R[n] = value;
 
 bits(32) Rmode[integer n, bits(5) mode]
+    assert n >= 0 && n <= 14;
     // Check for attempted use of Monitor mode in Non-secure state.
     if !IsSecure() then assert mode != M32_Monitor;
     assert !BadMode(mode);
@@ -25,16 +39,10 @@ bits(32) Rmode[integer n, bits(5) mode]
             return SP_mon;
         elsif n == 14 then
             return LR_mon;
-        elsif n == 15 then
-            return _PC;
         else
             return _R[n];
     else
-        idx = LookUpRIndex(n, mode);
-        if idx == 15 then
-            return _PC;
-        else
-            return _R[n];
+        return _R[LookUpRIndex(n, mode)];
 
 Rmode[integer n, bits(5) mode] = bits(32) value
     assert n >= 0 && n <= 14;
@@ -48,16 +56,10 @@ Rmode[integer n, bits(5) mode] = bits(32) value
             SP_mon = value;
         elsif n == 14 then
             LR_mon = value;
-        elsif n == 15 then
-            _PC = value;
         else
             _R[n] = value;
     else
-        idx = LookUpRIndex(n, mode);
-        if idx == 15 then
-            _PC = value;
-        else
-            _R[n] = value;
+        _R[LookUpRIndex(n, mode)] = value;
     return;
 
 // Allow us to model the internal PC as a 32 bit value

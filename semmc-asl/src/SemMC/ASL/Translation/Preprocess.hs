@@ -873,12 +873,13 @@ registerPreamble opvar idx  =
        , AS.StmtCall (AS.VarName "SETTER_R") [AS.ExprVarRef (AS.VarName rtemp), AS.ExprVarRef (AS.VarName idx)]
        ]
 
--- | Pack up resulting register values
--- return (.. (R[d], d_bits) ..)
+-- | Pack up resulting register values. RGen is a generalized R which
+-- supports retrieving the PC for RGen[15]
+-- return (.. (RGen[d], d_bits) ..)
 registerPostamble :: T.Text -> T.Text -> AS.Expr
 registerPostamble idx opvar =
   AS.ExprTuple
-    [ AS.ExprCall (AS.VarName "GETTER_R") [AS.ExprVarRef (AS.VarName idx)]
+    [ AS.ExprCall (AS.VarName "GETTER_RGen") [AS.ExprVarRef (AS.VarName idx)]
     , AS.ExprVarRef (AS.VarName opvar)
     ]
 
