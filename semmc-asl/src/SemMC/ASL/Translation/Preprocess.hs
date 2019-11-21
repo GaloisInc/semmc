@@ -718,7 +718,7 @@ computeType' tp = case applyTypeSynonyms tp of
   AS.TypeFun "__RAM" (AS.ExprLitInt n)
     | Just (Some nRepr) <- NR.someNat n
     , Just NR.LeqProof <- NR.isPosNat nRepr ->
-      Left $ Some (WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr))
+      Left $ Some (WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr nRepr) (WT.BaseBVRepr (WT.knownNat @8)))
   AS.TypeTuple tps -> let
     ctps = map (\t -> case computeType' t of {Left bt -> bt; _ -> error "Bad type tuple"}) tps
     in case Ctx.fromList ctps of

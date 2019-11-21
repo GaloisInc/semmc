@@ -590,277 +590,110 @@
             (ExprVarRef
               (QualifiedIdentifier Any TRUE)))
           (StmtReturn Nothing)))))
+  (DefVariable
+    (QualifiedIdentifier Any __Memory)
+    (TypeFun
+      __RAM
+      (ExprLitNat 32)))
   (DefCallable
-    (QualifiedIdentifier Any read_mem_1)
+    (QualifiedIdentifier Any Mem_Internal_Set)
     (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
       (SymDecl
         address
         (TypeFun
           bits
-          (ExprLitNat 52))))
+          (ExprLitNat 32)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        value
+        (TypeFun
+          bits
+          (ExprBinOp
+            "*"
+            (ExprLitNat 8)
+            (ExprVarRef
+              (QualifiedIdentifier Any size))))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValArrayIndex
+              (LValVarRef
+                (QualifiedIdentifier Any __Memory))
+              (list
+                (SliceSingle
+                  (ExprVarRef
+                    (QualifiedIdentifier Any address)))))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 8))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any Mem_Internal_Get)
+    (list
+      (SymDecl
+        address
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
     (Just
       (ReturnType
         (list
           (TypeFun
             bits
-            (ExprLitNat 8)))))
+            (ExprBinOp
+              "*"
+              (ExprLitNat 8)
+              (ExprVarRef
+                (QualifiedIdentifier Any size)))))))
     (Just
       (StmtBlock
         (list
+          (StmtVarDeclInit
+            (SymDecl
+              somebit
+              (TypeFun
+                bits
+                (ExprLitNat 8)))
+            (ExprIndex
+              (ExprVarRef
+                (QualifiedIdentifier Any __Memory))
+              (list
+                (SliceSingle
+                  (ExprVarRef
+                    (QualifiedIdentifier Any address))))))
           (StmtReturn
             (Just
               (ExprUnknown
                 (TypeFun
                   bits
-                  (ExprLitNat 8)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any read_mem_2)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 16)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprLitNat 16)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any read_mem_4)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 32)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprLitNat 32)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any read_mem_8)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 64)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprLitNat 64)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any read_mem_16)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 128)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprLitNat 128)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any write_mem_1)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 8))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any write_mem_2)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 16))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any write_mem_4)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 32))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any write_mem_8)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 64))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any write_mem_16)
-    (list
-      (SymDecl
-        mem
-        (TypeFun
-          __RAM
-          (ExprLitNat 52)))
-      (SymDecl
-        address
-        (TypeFun
-          bits
-          (ExprLitNat 52)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 128))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn Nothing)))))
+                  (ExprBinOp
+                    "*"
+                    (ExprLitNat 8)
+                    (ExprVarRef
+                      (QualifiedIdentifier Any size)))))))))))
   (DefGetter
-    (QualifiedIdentifier Any _Mem)
+    (QualifiedIdentifier Any MemA)
     (Just
       (list
         (SymDecl
-          desc
-          (TypeRef
-            (QualifiedIdentifier Any AddressDescriptor)))
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32)))
         (SymDecl
           size
           (TypeRef
-            (QualifiedIdentifier Any integer)))
-        (SymDecl
-          accdesc
-          (TypeRef
-            (QualifiedIdentifier Any AccessDescriptor)))))
+            (QualifiedIdentifier Any integer)))))
     (ReturnType
       (list
         (TypeFun
@@ -873,75 +706,29 @@
     (Just
       (StmtBlock
         (list
-          (StmtAssert
-            (ExprInSet
-              (ExprVarRef
-                (QualifiedIdentifier Any size))
-              (Set
-                (list
-                  (SetElementSingle
-                    (ExprLitNat 1))
-                  (SetElementSingle
-                    (ExprLitNat 2))
-                  (SetElementSingle
-                    (ExprLitNat 4))
-                  (SetElementSingle
-                    (ExprLitNat 8))
-                  (SetElementSingle
-                    (ExprLitNat 16))))))
-          (StmtVarDeclInit
-            (SymDecl
-              address
-              (TypeFun
-                bits
-                (ExprLitNat 52)))
-            (ExprMember
-              (ExprMember
-                (ExprVarRef
-                  (QualifiedIdentifier Any desc))
-                paddress)
-              address))
-          (StmtAssert
-            (ExprBinOp
-              "=="
-              (ExprVarRef
-                (QualifiedIdentifier Any address))
-              (ExprCall
-                (QualifiedIdentifier Any Align)
-                (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any address))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any size))))))
           (StmtReturn
             (Just
               (ExprCall
-                (QualifiedIdentifier Any read_mem)
+                (QualifiedIdentifier Any Mem_Internal_Get)
                 (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any __Memory))
                   (ExprVarRef
                     (QualifiedIdentifier Any address))
                   (ExprVarRef
                     (QualifiedIdentifier Any size))))))))))
   (DefSetter
-    (QualifiedIdentifier Any _Mem)
+    (QualifiedIdentifier Any MemA)
     (Just
       (list
         (SetterArg
-          desc
-          (TypeRef
-            (QualifiedIdentifier Any AddressDescriptor))
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32))
           Value)
         (SetterArg
           size
           (TypeRef
             (QualifiedIdentifier Any integer))
-          Value)
-        (SetterArg
-          accdesc
-          (TypeRef
-            (QualifiedIdentifier Any AccessDescriptor))
           Value)))
     (SymDecl
       value
@@ -955,57 +742,272 @@
     (Just
       (StmtBlock
         (list
-          (StmtAssert
-            (ExprInSet
-              (ExprVarRef
-                (QualifiedIdentifier Any size))
-              (Set
-                (list
-                  (SetElementSingle
-                    (ExprLitNat 1))
-                  (SetElementSingle
-                    (ExprLitNat 2))
-                  (SetElementSingle
-                    (ExprLitNat 4))
-                  (SetElementSingle
-                    (ExprLitNat 8))
-                  (SetElementSingle
-                    (ExprLitNat 16))))))
-          (StmtVarDeclInit
-            (SymDecl
-              address
-              (TypeFun
-                bits
-                (ExprLitNat 52)))
-            (ExprMember
-              (ExprMember
-                (ExprVarRef
-                  (QualifiedIdentifier Any desc))
-                paddress)
-              address))
-          (StmtAssert
-            (ExprBinOp
-              "=="
-              (ExprVarRef
-                (QualifiedIdentifier Any address))
-              (ExprCall
-                (QualifiedIdentifier Any Align)
-                (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any address))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any size))))))
           (StmtCall
-            (QualifiedIdentifier Any write_mem)
+            (QualifiedIdentifier Any Mem_Internal_Set)
             (list
-              (ExprVarRef
-                (QualifiedIdentifier Any __Memory))
               (ExprVarRef
                 (QualifiedIdentifier Any address))
               (ExprVarRef
                 (QualifiedIdentifier Any size))
               (ExprVarRef
                 (QualifiedIdentifier Any value))))
+          (StmtReturn Nothing)))))
+  (DefGetter
+    (QualifiedIdentifier Any MemU_unpriv)
+    (Just
+      (list
+        (SymDecl
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32)))
+        (SymDecl
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprBinOp
+            "*"
+            (ExprLitNat 8)
+            (ExprVarRef
+              (QualifiedIdentifier Any size))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Mem_Internal_Get)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any address))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any size))))))))))
+  (DefSetter
+    (QualifiedIdentifier Any MemU_unpriv)
+    (Just
+      (list
+        (SetterArg
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32))
+          Value)
+        (SetterArg
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprBinOp
+          "*"
+          (ExprLitNat 8)
+          (ExprVarRef
+            (QualifiedIdentifier Any size)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any Mem_Internal_Set)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any address))
+              (ExprVarRef
+                (QualifiedIdentifier Any size))
+              (ExprVarRef
+                (QualifiedIdentifier Any value))))
+          (StmtReturn Nothing)))))
+  (DefGetter
+    (QualifiedIdentifier Any MemU)
+    (Just
+      (list
+        (SymDecl
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32)))
+        (SymDecl
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprBinOp
+            "*"
+            (ExprLitNat 8)
+            (ExprVarRef
+              (QualifiedIdentifier Any size))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Mem_Internal_Get)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any address))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any size))))))))))
+  (DefSetter
+    (QualifiedIdentifier Any MemU)
+    (Just
+      (list
+        (SetterArg
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32))
+          Value)
+        (SetterArg
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprBinOp
+          "*"
+          (ExprLitNat 8)
+          (ExprVarRef
+            (QualifiedIdentifier Any size)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any Mem_Internal_Set)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any address))
+              (ExprVarRef
+                (QualifiedIdentifier Any size))
+              (ExprVarRef
+                (QualifiedIdentifier Any value))))
+          (StmtReturn Nothing)))))
+  (DefGetter
+    (QualifiedIdentifier Any MemO)
+    (Just
+      (list
+        (SymDecl
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32)))
+        (SymDecl
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprBinOp
+            "*"
+            (ExprLitNat 8)
+            (ExprVarRef
+              (QualifiedIdentifier Any size))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Mem_Internal_Get)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any address))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any size))))))))))
+  (DefSetter
+    (QualifiedIdentifier Any MemO)
+    (Just
+      (list
+        (SetterArg
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32))
+          Value)
+        (SetterArg
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprBinOp
+          "*"
+          (ExprLitNat 8)
+          (ExprVarRef
+            (QualifiedIdentifier Any size)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any Mem_Internal_Set)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any address))
+              (ExprVarRef
+                (QualifiedIdentifier Any size))
+              (ExprVarRef
+                (QualifiedIdentifier Any value))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 ExclusiveMonitorsPass)
+    (list
+      (SymDecl
+        address
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any FALSE))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 SetExclusiveMonitors)
+    (list
+      (SymDecl
+        address
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
           (StmtReturn Nothing)))))
   (DefConst
     LOG2_TAG_GRANULE

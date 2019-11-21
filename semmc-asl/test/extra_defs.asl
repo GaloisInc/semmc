@@ -119,52 +119,57 @@ ASLSetUnpredictable()
 
 // Memory model
 
-// Faking global reads
-bits(8) read_mem_1(__RAM(52) mem, bits(52) address)
-  return bits(8) UNKNOWN;
+__RAM(32) __Memory;
 
-bits(16) read_mem_2(__RAM(52) mem, bits(52) address)
-  return bits(16) UNKNOWN;
+// Fake functions used for globals collection.
+// To be overridden by the translator
 
-bits(32) read_mem_4(__RAM(52) mem, bits(52) address)
-  return bits(32) UNKNOWN;
-
-bits(64) read_mem_8(__RAM(52) mem, bits(52) address)
-  return bits(64) UNKNOWN;
-
-bits(128) read_mem_16(__RAM(52) mem, bits(52) address)
-  return bits(128) UNKNOWN;
-
-// Faking global writes
-write_mem_1(__RAM(52) mem, bits(52) address, bits(8) value)
+Mem_Internal_Set(bits(32) address, integer size, bits(8*size) value)
+  __Memory[address] = bits(8) UNKNOWN;
   return;
 
-write_mem_2(__RAM(52) mem, bits(52) address, bits(16) value)
-  return;
-
-write_mem_4(__RAM(52) mem, bits(52) address, bits(32) value)
-  return;
-
-write_mem_8(__RAM(52) mem, bits(52) address, bits(64) value)
-  return;
-
-write_mem_16(__RAM(52) mem, bits(52) address, bits(128) value)
-  return;
+bits(8*size) Mem_Internal_Get(bits(32) address, integer size)
+  bits(8) somebit = __Memory[address];
+  return bits(8*size) UNKNOWN;
 
 
-// Translator overrides dispatch to the correctly-named variant based on the concrete
-// value of the given size
-bits(8*size) _Mem[AddressDescriptor desc, integer size, AccessDescriptor accdesc]
-    assert size IN {1, 2, 4, 8, 16};
-    bits(52) address = desc.paddress.address;
-    assert address == Align(address, size);
-    return read_mem(__Memory, address, size);
+// Overriding memory access functions to short-circuit address translation
 
-_Mem[AddressDescriptor desc, integer size, AccessDescriptor accdesc] = bits(8*size) value
-    assert size IN {1, 2, 4, 8, 16};
-    bits(52) address = desc.paddress.address;
-    assert address == Align(address, size);
-    write_mem(__Memory, address, size, value);
+bits(8*size) MemA[bits(32) address, integer size]
+    return Mem_Internal_Get(address, size);
+
+MemA[bits(32) address, integer size] = bits(8*size) value
+    Mem_Internal_Set(address, size, value);
+    return;
+
+bits(8*size) MemU_unpriv[bits(32) address, integer size]
+    return Mem_Internal_Get(address, size);
+
+MemU_unpriv[bits(32) address, integer size] = bits(8*size) value
+    Mem_Internal_Set(address, size, value);
+    return;
+
+bits(8*size) MemU[bits(32) address, integer size]
+    return Mem_Internal_Get(address, size);
+
+MemU[bits(32) address, integer size] = bits(8*size) value
+    Mem_Internal_Set(address, size, value);
+    return;
+
+bits(8*size) MemO[bits(32) address, integer size]
+    return Mem_Internal_Get(address, size);
+
+MemO[bits(32) address, integer size] = bits(8*size) value
+    Mem_Internal_Set(address, size, value);
+    return;
+
+// Since IsExclusiveGlobal is stubbed to be FALSE, this will always be FALSE
+boolean AArch32.ExclusiveMonitorsPass(bits(32) address, integer size)
+    return FALSE;
+
+// Since MarkExclusiveVA simply asserts FALSE, this will always assert FALSE
+AArch32.SetExclusiveMonitors(bits(32) address, integer size)
+    assert FALSE;
     return;
 
 // Constant lifted from mra_tools

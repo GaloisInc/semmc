@@ -693,6 +693,7 @@ data ElemKey =
  deriving (Eq, Ord, Show)
 
 
+
 -- FIXME: Seperate this into RWS
 data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
                      , instrExcepts :: Map.Map InstructionIdent TranslatorException

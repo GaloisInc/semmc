@@ -2274,31 +2274,33 @@ getBVLength mexpr ty = do
         return $ Some $ BVRepr $ nr
     _ -> throwTrace $ CannotDetermineBVLength mexpr ty
 
-
-getSymbolicBVLength :: AS.Expr
-                    -> Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))
-getSymbolicBVLength e = case e of
-    AS.ExprCall (AS.QualifiedIdentifier _ nm) [e]
-      | nm == "Zeros" || nm == "Ones" -> Just $ do
-        (Some argAtom) <- translateExpr overrides e
-        Refl <- assertAtomType e CT.IntegerRepr argAtom
-        mkAtom $ CCG.AtomExpr argAtom
-    AS.ExprLitBin bits -> Just $ do
-      mkAtom $ CCG.App $ CCE.IntLit $ fromIntegral $ length bits
-    AS.ExprSlice _ [slice] -> Just $ do
-      (loAtom, hiAtom) <- getSymbolicSliceRange overrides slice
-      mkAtom $ CCG.App $ CCE.IntSub (CCG.AtomExpr hiAtom) (CCG.AtomExpr loAtom)
-    AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> Just $ do
-      mTy <- lookupVarType ident
-      case mTy of
-        Just (Some (CT.BVRepr wRepr)) ->
-          mkAtom $ CCG.App $ CCE.IntLit $ WT.intValue wRepr
-        _ -> throwTrace $ UnboundName ident
-    AS.ExprBinOp AS.BinOpConcat e1 e2
-      | Just f1 <- getSymbolicBVLength e1
-      , Just f2 <- getSymbolicBVLength e2 -> Just $ f1 >>= \len1 -> f2 >>= \len2 ->
-        mkAtom $ CCG.App $ CCE.IntAdd (CCG.AtomExpr len1) (CCG.AtomExpr len2)
-    _ -> Nothing
+-- This is a dead code path that no longer appears when all of the memory translation
+-- functions are stubbed out.
+  
+-- getSymbolicBVLength :: AS.Expr
+--                     -> Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))
+-- getSymbolicBVLength e = case e of
+--     AS.ExprCall (AS.QualifiedIdentifier _ nm) [e]
+--       | nm == "Zeros" || nm == "Ones" -> Just $ do
+--         (Some argAtom) <- translateExpr overrides e
+--         Refl <- assertAtomType e CT.IntegerRepr argAtom
+--         mkAtom $ CCG.AtomExpr argAtom
+--     AS.ExprLitBin bits -> Just $ do
+--       mkAtom $ CCG.App $ CCE.IntLit $ fromIntegral $ length bits
+--     AS.ExprSlice _ [slice] -> Just $ do
+--       (loAtom, hiAtom) <- getSymbolicSliceRange overrides slice
+--       mkAtom $ CCG.App $ CCE.IntSub (CCG.AtomExpr hiAtom) (CCG.AtomExpr loAtom)
+--     AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> Just $ do
+--       mTy <- lookupVarType ident
+--       case mTy of
+--         Just (Some (CT.BVRepr wRepr)) ->
+--           mkAtom $ CCG.App $ CCE.IntLit $ WT.intValue wRepr
+--         _ -> throwTrace $ UnboundName ident
+--     AS.ExprBinOp AS.BinOpConcat e1 e2
+--       | Just f1 <- getSymbolicBVLength e1
+--       , Just f2 <- getSymbolicBVLength e2 -> Just $ f1 >>= \len1 -> f2 >>= \len2 ->
+--         mkAtom $ CCG.App $ CCE.IntAdd (CCG.AtomExpr len1) (CCG.AtomExpr len2)
+--     _ -> Nothing
 
 list1ToMaybe :: [a] -> Maybe (Maybe a)
 list1ToMaybe xs = case xs of
@@ -2335,34 +2337,37 @@ polymorphicBVOverrides e ty env = case e of
   AS.ExprBinOp AS.BinOpConcat expr1 (AS.ExprCall (AS.VarName "Zeros") [expr2])
     | Just (StaticInt 0) <- SE.exprToStatic env expr2 ->
       Just $ translateExpr' overrides expr1 ty
-  AS.ExprBinOp AS.BinOpConcat expr1 expr2
-    | Just hint <- getConstraintHint ty
-    , (mLen1 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr1
-    , (mLen2 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr2
-    , isJust mLen1 || isJust mLen2 -> Just $ do
-        (Some atom1', _) <- translateExpr' overrides expr1 (relaxConstraint ty)
-        (Some atom2', _) <- translateExpr' overrides expr2 (relaxConstraint ty)
-        BVAtomPair wRepr atom1 atom2 <- case hint of
-          HintMaxSignedBVSize wRepr -> do
-            atom1 <- extBVAtom False wRepr atom1' -- will inherit signed bits from atom2
-            atom2 <- extBVAtom True wRepr atom2'
-            return $ BVAtomPair wRepr atom1 atom2
-          HintMaxBVSize wRepr -> do
-            atom1 <- extBVAtom False wRepr atom1'
-            atom2 <- extBVAtom False wRepr atom2'
-            return $ BVAtomPair wRepr atom1 atom2
-          HintAnyBVSize -> do
-            matchBVSizes atom1' atom2'
-        shift <- case (mLen1, mLen2) of
-          (Just f1, _) -> f1 >>= \len1 ->
-            return $ CCG.App $ CCE.IntegerToBV wRepr $ CCG.App $
-              CCE.IntSub (CCG.App (CCE.IntLit $ WT.intValue wRepr)) (CCG.AtomExpr len1)
-          (_, Just f2) -> f2 >>= \len2 ->
-            return $ CCG.App $ CCE.IntegerToBV wRepr $ (CCG.AtomExpr len2)
-        let atom1Shifted = CCG.App $ CCE.BVShl wRepr (CCG.AtomExpr atom1) shift
 
-        result <- mkAtom $ CCG.App $ CCE.BVOr wRepr atom1Shifted (CCG.AtomExpr atom2)
-        return (Some result, TypeBasic)
+  -- This is a dead code path that no longer appears when all of the memory translation
+  -- functions are stubbed out.
+  -- AS.ExprBinOp AS.BinOpConcat expr1 expr2
+  --   | Just hint <- getConstraintHint ty
+  --   , (mLen1 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr1
+  --   , (mLen2 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr2
+  --   , isJust mLen1 || isJust mLen2-> Just $ do
+  --       (Some atom1', _) <- translateExpr' overrides expr1 (relaxConstraint ty)
+  --       (Some atom2', _) <- translateExpr' overrides expr2 (relaxConstraint ty)
+  --       BVAtomPair wRepr atom1 atom2 <- case hint of
+  --         HintMaxSignedBVSize wRepr -> do
+  --           atom1 <- extBVAtom False wRepr atom1' -- will inherit signed bits from atom2
+  --           atom2 <- extBVAtom True wRepr atom2'
+  --           return $ BVAtomPair wRepr atom1 atom2
+  --         HintMaxBVSize wRepr -> do
+  --           atom1 <- extBVAtom False wRepr atom1'
+  --           atom2 <- extBVAtom False wRepr atom2'
+  --           return $ BVAtomPair wRepr atom1 atom2
+  --         HintAnyBVSize -> do
+  --           matchBVSizes atom1' atom2'
+  --       shift <- case (mLen1, mLen2) of
+  --         (Just f1, _) -> f1 >>= \len1 ->
+  --           return $ CCG.App $ CCE.IntegerToBV wRepr $ CCG.App $
+  --             CCE.IntSub (CCG.App (CCE.IntLit $ WT.intValue wRepr)) (CCG.AtomExpr len1)
+  --         (_, Just f2) -> f2 >>= \len2 ->
+  --           return $ CCG.App $ CCE.IntegerToBV wRepr $ (CCG.AtomExpr len2)
+  --       let atom1Shifted = CCG.App $ CCE.BVShl wRepr (CCG.AtomExpr atom1) shift
+
+  --       result <- mkAtom $ CCG.App $ CCE.BVOr wRepr atom1Shifted (CCG.AtomExpr atom2)
+  --       return (Some result, TypeBasic)
 
   AS.ExprCall (AS.QualifiedIdentifier _ "Int") [argExpr, isUnsigned] -> Just $ do
     Some unsigned <- translateExpr overrides isUnsigned
@@ -2565,12 +2570,35 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ nm) [x]
             | nm `elem` ["print", "putchar"] -> Just $ do
               return ()
-          AS.StmtCall (AS.QualifiedIdentifier q "write_mem") [mem, addr, szExpr, value] -> Just $ do
+          AS.StmtCall (AS.QualifiedIdentifier q "Mem_Internal_Set") [addrExpr, szExpr, valueExpr] -> Just $ do
+            Some addr <- translateExpr overrides addrExpr
+            Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr
+            globals <- MS.gets tsGlobals
+            Just (Some mem) <- return $ Map.lookup "__Memory" globals
+            memAtom <- (liftGenerator $ CCG.readGlobal mem) >>= mkAtom
             env <- getStaticEnv
             case SE.exprToStatic env szExpr of
-              Just sz ->
-                translateStatement overrides $
-                  AS.StmtCall (AS.QualifiedIdentifier q ("write_mem_" <> (T.pack $ show sz))) [mem, addr, value]
+              Just (SE.StaticInt sz)
+                | Some (BVRepr szRepr) <- intToBVRepr sz
+                , bvSize <- (WT.knownNat @8) `WT.natMultiply` szRepr
+                , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
+                  Some value <- translateExpr overrides valueExpr 
+                  Refl <- assertAtomType valueExpr (CT.BVRepr bvSize) value
+                  let sz = WT.intValue szRepr
+                  let ramRepr = CCG.typeOfAtom memAtom
+                  case CT.asBaseType ramRepr of
+                    CT.AsBaseType btramRepr -> do
+                      let uf = UF ("write_mem_" <> (T.pack $ show sz)) btramRepr
+                            (Ctx.empty
+                             Ctx.:> ramRepr
+                             Ctx.:> CT.BVRepr (WT.knownNat @32)
+                             Ctx.:> CT.BVRepr bvSize)
+                            (Ctx.empty
+                             Ctx.:> (CCG.AtomExpr memAtom)
+                             Ctx.:> (CCG.AtomExpr addr)
+                             Ctx.:> (CCG.AtomExpr value))
+                      liftGenerator $ CCG.writeGlobal mem (CCG.App (CCE.ExtensionApp uf))
+                    _ -> throwTrace $ ExpectedBaseTypeRepr ramRepr
               _ -> throwTrace $ RequiredConcreteValue szExpr (staticEnvMapVals env)
           _ -> Nothing
 
@@ -2589,13 +2617,33 @@ overrides = Overrides {..}
               Some xAtom <- translateExpr overrides x
               BVRepr nr <- getAtomBVRepr xAtom
               translateExpr' overrides (AS.ExprLitInt (WT.intValue nr)) ConstraintNone
-            AS.ExprCall (AS.QualifiedIdentifier q "read_mem") [mem, addr, szExpr] -> Just $ do
+            AS.ExprCall (AS.QualifiedIdentifier q "Mem_Internal_Get") [mem, addrExpr, szExpr] -> Just $ do
+              Some addr <- translateExpr overrides addrExpr
+              Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr
+              globals <- MS.gets tsGlobals
+              Just (Some mem) <- return $ Map.lookup "__Memory" globals
+              memAtom <- (liftGenerator $ CCG.readGlobal mem) >>= mkAtom
               env <- getStaticEnv
               case SE.exprToStatic env szExpr of
-                Just sz ->
-                  translateExpr' overrides
-                    (AS.ExprCall (AS.QualifiedIdentifier q ("read_mem_" <> (T.pack $ show sz))) [mem, addr])
-                    ty
+                Just (SE.StaticInt sz)
+                  | Some (BVRepr szRepr) <- intToBVRepr sz
+                  , bvSize <- (WT.knownNat @8) `WT.natMultiply` szRepr
+                  , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
+                    let sz = WT.intValue szRepr
+                    let ramRepr = CCG.typeOfAtom memAtom
+                    case CT.asBaseType ramRepr of
+                      CT.AsBaseType btramRepr -> do
+                        let uf = UF ("read_mem_" <> (T.pack $ show sz)) (WT.BaseBVRepr bvSize)
+                              (Ctx.empty
+                               Ctx.:> ramRepr
+                               Ctx.:> (CT.BVRepr (WT.knownNat @32)))
+                              (Ctx.empty
+                               Ctx.:> (CCG.AtomExpr memAtom)
+                               Ctx.:> (CCG.AtomExpr addr))
+                        atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
+                        return (Some atom, TypeBasic)
+                      _ -> throwTrace $ ExpectedBaseTypeRepr ramRepr
+                _ -> throwTrace $ RequiredConcreteValue szExpr (staticEnvMapVals env)
             _ ->
               polymorphicBVOverrides e ty env <|>
               arithmeticOverrides e ty <|>

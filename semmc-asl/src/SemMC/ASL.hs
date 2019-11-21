@@ -342,6 +342,7 @@ simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResul
 globalToA32Location :: T.Text -> Maybe (Pair (L.Location A32) CT.BaseTypeRepr)
 globalToA32Location globName = case globName of
   "_PC" -> Just $ Pair AL.LocPC (CT.BaseBVRepr knownNat)
+  "__Memory" -> Just $ Pair AL.LocMem knownRepr
   "PSTATE_N" -> Just $ Pair (AL.LocPSTATE AL.PSTATE_N) (CT.BaseBVRepr knownNat)
   "PSTATE_Z" -> Just $ Pair (AL.LocPSTATE AL.PSTATE_Z) (CT.BaseBVRepr knownNat)
   "PSTATE_C" -> Just $ Pair (AL.LocPSTATE AL.PSTATE_C) (CT.BaseBVRepr knownNat)
