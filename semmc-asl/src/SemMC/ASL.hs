@@ -379,37 +379,40 @@ data BVTypeProof n where
 
 -- | Clumsily reversing the symbol mapping
 
-getRetRepr :: forall n. WT.NatRepr n -> BVTypeProof n
+getRetRepr :: forall n. 1 WT.<= n => WT.NatRepr n -> BVTypeProof n
 getRetRepr n =
    fromMaybe (error $ "bad bv" ++ show n) $
-   testEq @"Bv1" (knownNat @1) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv2" (knownNat @2) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv3" (knownNat @3) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv4" (knownNat @4) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv5" (knownNat @5) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv6" (knownNat @6) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv7" (knownNat @7) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv8" (knownNat @8) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv9" (knownNat @9) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv10" (knownNat @10) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv11" (knownNat @11) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv12" (knownNat @12) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv13" (knownNat @13) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv14" (knownNat @14) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv15" (knownNat @15) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv16" (knownNat @16) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv17" (knownNat @17) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv18" (knownNat @18) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv19" (knownNat @19) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv20" (knownNat @20) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv21" (knownNat @21) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv22" (knownNat @22) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv23" (knownNat @23) (\Refl -> BVTypeProof Refl)
-   <|> testEq @"Bv24" (knownNat @24) (\Refl -> BVTypeProof Refl)
+   testEq @"Bv1" knownRepr
+   <|> testEq @"Bv2" knownRepr
+   <|> testEq @"Bv3" knownRepr
+   <|> testEq @"Bv4" knownRepr
+   <|> testEq @"Bv5" knownRepr
+   <|> testEq @"Bv6" knownRepr
+   <|> testEq @"Bv7" knownRepr
+   <|> testEq @"Bv8" knownRepr
+   <|> testEq @"Bv9" knownRepr
+   <|> testEq @"Bv10" knownRepr
+   <|> testEq @"Bv11" knownRepr
+   <|> testEq @"Bv12" knownRepr
+   <|> testEq @"Bv13" knownRepr
+   <|> testEq @"Bv14" knownRepr
+   <|> testEq @"Bv15" knownRepr
+   <|> testEq @"Bv16" knownRepr
+   <|> testEq @"Bv17" knownRepr
+   <|> testEq @"Bv18" knownRepr
+   <|> testEq @"Bv19" knownRepr
+   <|> testEq @"Bv20" knownRepr
+   <|> testEq @"Bv21" knownRepr
+   <|> testEq @"Bv22" knownRepr
+   <|> testEq @"Bv23" knownRepr
+   <|> testEq @"Bv24" knownRepr
   where
-    testEq :: forall s n' a. CT.KnownSymbol s => WT.NatRepr n' -> (WT.NatRepr n :~: WT.NatRepr n' -> CT.SymbolRepr s -> a) -> Maybe a
-    testEq n' f = case testEquality n n' of
-      Just Refl -> Just $ (f Refl CT.knownSymbol)
+    testEq :: forall s. CT.KnownSymbol s => CT.BaseTypeRepr (A.OperandType A32 s) -> Maybe (BVTypeProof n)
+    testEq btrepr =
+      let
+        srepr = CT.knownSymbol :: CT.SymbolRepr s
+      in case testEquality btrepr (CT.BaseBVRepr n) of
+      Just Refl -> Just $ BVTypeProof Refl srepr
       Nothing -> Nothing
 
 symbolIndex :: CT.SymbolRepr s -> PL.Index (s ': sh) s
