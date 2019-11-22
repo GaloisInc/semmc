@@ -922,6 +922,9 @@ readExpr (SC.SAtom (AInt n)) = do
 readExpr (SC.SAtom (ANat n)) = do
   sym <- MR.reader getSym
   liftIO $ (Some <$> S.natLit sym n)
+readExpr (SC.SAtom (ABool b)) = do
+  sym <- MR.reader getSym
+  liftIO $ return $ Some $ S.backendPred sym b
 readExpr (SC.SAtom (AString op)) = do
   -- This is an uninterpreted function.
   sym <- MR.reader getSym

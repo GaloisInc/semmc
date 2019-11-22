@@ -13,6 +13,7 @@ module SemMC.Formula.SETokens
     ( FAtom(..)
     , string, ident, quoted, int, nat, bitvec
     , string', ident', quoted', int', nat', bitvec'
+    , bool, bool'
     , fromFoldable, fromFoldable'
     , printAtom, printTokens, printTokens'
     , parseLL
@@ -41,6 +42,7 @@ data FAtom = AIdent String
            | AInt Integer
            | ANat Natural
            | ABV Int Integer
+           | ABool Bool
            | ANamed String Int FAtom
            deriving (Show, Eq, Ord)
 
@@ -79,6 +81,12 @@ bitvec :: Natural -> Integer -> SC.SExpr FAtom
 bitvec w v = SE.fromRich $ bitvec' w v
 bitvec' :: Natural -> Integer -> SE.RichSExpr FAtom
 bitvec' w v = SE.A $ ABV (fromEnum w) v
+
+-- | Lift a boolean.
+bool :: Bool -> SC.SExpr FAtom
+bool = SE.fromRich . bool'
+bool' :: Bool -> SE.RichSExpr FAtom
+bool' = SE.A . ABool
 
 
 -- * Miscellaneous operations on the S-Expressions
@@ -123,6 +131,7 @@ printAtom a =
     AInt i -> T.pack (show i)
     ANat n -> T.pack (show n++"u")
     ABV w val -> formatBV w val
+    ABool b -> if b then "#true" else "#false"
     ANamed _ _ e -> printAtom e
 
 
@@ -151,14 +160,6 @@ parseString = do
   _ <- P.char '"'
   return s
 
-
-parseNat :: Parser String
-parseNat = do
-  ds <- P.many1 P.digit
-  _ <- P.char 'u'
-  return ds
-
-
 parseBV :: Parser (Int, Integer)
 parseBV = P.char '#' >> ((P.char 'b' >> parseBin) P.<|> (P.char 'x' >> parseHex))
   where parseBin = P.oneOf "10" >>= \d -> parseBin' (1, if d == '1' then 1 else 0)
@@ -179,6 +180,9 @@ parseAtom
   P.<|> AIdent      <$> parseIdent
   P.<|> AQuoted     <$> (P.char '\'' >> parseIdent)
   P.<|> AString     <$> parseString
+  P.<|> ABool       <$> P.try (P.try (P.string "#false" *> return False)
+                               P.<|>
+                               (P.string "#true" *> return True))
   P.<|> uncurry ABV <$> parseBV
    -- n.b. an ANamed is an internal marker and not expressed or
    -- recoverable in the streamed text version
