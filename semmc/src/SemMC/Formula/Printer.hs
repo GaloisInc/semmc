@@ -53,7 +53,8 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula
 import           SemMC.Formula.SETokens ( FAtom(..), printTokens'
-                                        , ident', quoted', int', nat', string', bitvec'
+                                        , ident', quoted', int', nat', string'
+                                        , bitvec', bool'
                                         )
 
 type SExp = SE.RichSExpr FAtom
@@ -252,7 +253,7 @@ convertExpr paramLookup initialExpr = do
         go (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatExpr not supported"
         go (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = return $ SE.A (ABV (widthVal sz) val)
         go (S.StringExpr {}) = error "StringExpr is not supported"
-        go (S.BoolExpr b _) = return $ ident' $ if b then "true" else "false"
+        go (S.BoolExpr b _) = return $ bool' b
         go (S.AppExpr appExpr) = convertAppExpr' paramLookup appExpr
         go (S.NonceAppExpr nae) =
           case S.nonceExprApp nae of
