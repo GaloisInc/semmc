@@ -27,11 +27,11 @@ install:
   - git submodule update --init
   - ln -s cabal.project.newbuild cabal.project
   - cabal v2-configure
-  - cabal v2-build semmc
-  - cabal v2-build semmc-asl
 
 script:
-  - cabal v2-test semmc
+  - cabal v2-build semmc
+  - cabal v2-build semmc-asl
+# - cabal v2-test semmc
 
 notifications:
   email: false
