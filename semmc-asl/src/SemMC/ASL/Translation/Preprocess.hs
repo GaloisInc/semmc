@@ -455,7 +455,7 @@ allDefs :: ASLSpec -> [AS.Definition]
 allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
 
 globalFunctions :: [(T.Text, Int)]
-globalFunctions = [("BVMul", 2), ("IntMul", 2), ("IntMod", 2), ("IntDiv", 2)]
+globalFunctions = [("BVMul", 2), ("IntMul", 2), ("IntMod", 2), ("IntDiv", 2), ("setSlice", 4), ("getSlice", 4)]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do

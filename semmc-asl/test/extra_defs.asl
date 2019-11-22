@@ -12,6 +12,76 @@ integer IntMod(integer i1, integer i2)
 integer IntDiv(integer i1, integer i2)
     return primitive(i1 / i2);
 
+
+// Defining slicing with primitive bitvector operations
+
+bits(M) truncate(bits(N) bv, integer M);
+
+// The target length may be larger than hi - lo, with
+// the expectation that the resulting bitvector must be
+// either zero or sign-extended (according to the signed flag) to the
+// target length.
+
+bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
+    assert length <= N;
+    assert length >= 1;
+    assert hi >= lo;
+    assert hi <= length;
+    assert lo >= 0;
+    assert (hi - lo) <= length;
+
+    bits(N) bv = inbv;
+    // bv = [ bv_(N-1) .. bv_hi(hi) .. bv_lo(lo) .. bv_0](N)
+    if signed then
+        bv = primitive_ASR(bv, lo);
+        // bv = [ 1 1 .. bv_hi(hi-lo) .. bv_lo(0) ] (N)
+    else
+        bv = bv >> lo;
+        // bv = [ 0 0 .. bv_hi(hi-lo) .. bv_lo(0) ] (N)
+
+    // where S == 1 iff signed
+    // bv = [ S S .. bv_hi(hi-lo) .. bv_lo(lo) ] (N)
+    bits(N) mask = Ones(N);
+    // mask = [ 1 1 .. 1 1 ] (N)
+    mask = NOT (mask << length);
+    // mask = [ 0 0 .. 1(length) .. 1(0) ] (N)
+    bv = bv AND mask;
+    // bv = [ 0 0 .. S(length) S .. bv_hi(hi - lo) .. bv_lo(0) ] (N)
+    return truncate(bv, length);
+    // [ S(length) S .. bv_hi(hi - lo) .. bv_lo(0) ] (length)
+
+// The length of the input bitvector may be larger than
+// the range we are setting, in which case we simply drop
+// any bits above hi - lo.
+
+bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
+    assert length <= N;
+    assert length >= 1;
+    assert hi >= lo;
+    assert hi <= length;
+    assert lo >= 0;
+    assert (hi - lo) <= length;
+
+    bits(length) bv = asnbv;
+    // bv = [bv(length) .. bv_hi(hi) .. bv_0(0)](length)
+
+    bv = bv << (length - hi);
+    // bv = [ bv_hi (length) .. bv_0(length - hi) .. 0 0 ](length)
+
+    bv = bv >> (length - hi);
+    // bv = [ 0 0 .. bv_hi(hi) .. bv_0(0)](length)
+
+    ebv = ZeroExtend(NOT(bv), N);
+    // ebv = [0 0 0 .. -bv_hi(hi) .. -bv_0(0)](N)
+
+    ebv = NOT(ebv << lo);
+    // ebv = [1 1 .. bv_hi(hi + lo) .. bv_0(lo) .. 1](N)
+
+    result = basebv AND ebv;
+    // [basebv_(N-1) .. bv_hi(hi + lo) .. bv_0(lo) .. basebv_0](N)
+    return result;
+
+
 // Toplevel flags for execution status
 
 boolean __AssertionFailure;

@@ -996,19 +996,7 @@ translatelValSlice ov lv slice asnAtom' constraint = do
   Some atom' <- translateExpr ov lve
   SliceRange signed lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
   asnAtom <- extBVAtom signed lenRepr asnAtom'
-  let uf =
-        UF "SymbolicSliceSet" (CT.BaseBVRepr wRepr)
-          (Ctx.empty
-           Ctx.:> CT.IntegerRepr
-           Ctx.:> CT.IntegerRepr
-           Ctx.:> CT.BVRepr lenRepr
-           Ctx.:> CT.BVRepr wRepr)
-          (Ctx.empty
-           Ctx.:> (CCG.AtomExpr loAtom)
-           Ctx.:> (CCG.AtomExpr hiAtom)
-           Ctx.:> (CCG.AtomExpr asnAtom)
-           Ctx.:> (CCG.AtomExpr atom))
-  result <- mkAtom (CCG.App $ CCE.ExtensionApp uf)
+  Just (Some result, _) <- translateFunctionCall overrides (AS.VarName "setSlice") [Some atom, Some loAtom, Some hiAtom, Some asnAtom] ConstraintNone
   translateAssignment' ov lv result TypeBasic Nothing
 
 
@@ -1279,7 +1267,9 @@ instance InputArgument s AS.Expr where
       _ -> return ()
 
 instance InputArgument s (Some (CCG.Atom s)) where
-  unifyArg _ _ _ e = return e
+  unifyArg _ _ (_, t) (Some atom) = do
+    unifyType t (ConstraintSingle (CCG.typeOfAtom atom))
+    return (Some atom)
   collectStaticValues _ _ _ = return ()
 
 
@@ -1801,11 +1791,11 @@ translateSlice' ov atom' slice constraint = do
     WT.NatCaseEQ ->
       -- when the slice covers the whole range we just return the whole atom
       return $ Some $ atom
-    WT.NatCaseLT WT.LeqProof -> let
-      uf = UF "SymbolicSlice" (CT.BaseBVRepr lenRepr)
-        (Ctx.empty Ctx.:> CT.BoolRepr Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
-        (Ctx.empty Ctx.:> (CCG.App (CCE.BoolLit True)) Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
-      in Some <$> mkAtom (CCG.App $ CCE.ExtensionApp uf)
+    WT.NatCaseLT WT.LeqProof -> do
+      signedAtom <- mkAtom $ CCG.App $ CCE.BoolLit signed
+      Just (sresult, _) <- translateFunctionCall overrides (AS.VarName "getSlice")
+        [Some atom, Some signedAtom, Some loAtom, Some hiAtom] (ConstraintSingle (CT.BVRepr lenRepr))
+      return sresult
     _ -> throwTrace $ UnsupportedSlice slice constraint
 
 withStaticTest :: AS.Expr
@@ -2648,6 +2638,20 @@ overrides = Overrides {..}
               Some xAtom <- translateExpr overrides x
               BVRepr nr <- getAtomBVRepr xAtom
               translateExpr' overrides (AS.ExprLitInt (WT.intValue nr)) ConstraintNone
+            AS.ExprCall (AS.VarName "truncate") [bvE, lenE] -> Just $ do
+              Some bv <- translateExpr overrides bvE
+              BVRepr bvRepr <- getAtomBVRepr bv
+              env <- getStaticEnv
+              case SE.exprToStatic env lenE of
+                Just (SE.StaticInt len)
+                  | Some (BVRepr lenRepr) <- intToBVRepr len ->
+                    case bvRepr `WT.testNatCases` lenRepr of
+                      WT.NatCaseEQ -> return $ (Some bv, TypeBasic)
+                      WT.NatCaseGT WT.LeqProof ->
+                        mkAtom' $ CCG.App $ CCE.BVTrunc lenRepr bvRepr (CCG.AtomExpr bv)
+                      WT.NatCaseLT _ ->
+                        throwTrace $ UnexpectedBitvectorLength (CT.BVRepr lenRepr) (CT.BVRepr bvRepr)
+                _ -> throwTrace $ RequiredConcreteValue lenE (staticEnvMapVals env)
             AS.ExprCall (AS.QualifiedIdentifier q "Mem_Internal_Get") [mem, addrExpr, szExpr] -> Just $ do
               Some addr <- translateExpr overrides addrExpr
               Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr
