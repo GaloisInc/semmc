@@ -356,8 +356,13 @@ convertAppExpr' paramLookup = go . S.appExprApp
               case maybeS of
                 Just s -> return s
                 Nothing -> return $ bitvec' (natValue w) 1
+            S.SemiRingIntegerRepr -> do
+              let pmul x y = return $ SE.L [ ident' "intmul", x, y ]
+              maybeS <- WSum.prodEvalM pmul goE pd
+              case maybeS of
+                Just s -> return s
+                Nothing -> return $ int' 1
             S.SemiRingNatRepr     -> error "convertApp S.SemiRingProd Nat unsupported"
-            S.SemiRingIntegerRepr -> error "convertApp S.SemiRingProd Integer unsupported"
             S.SemiRingRealRepr    -> error "convertApp S.SemiRingProd Real unsupported"
 
         go (S.SemiRingLe sr e1 e2) = do
@@ -417,6 +422,10 @@ convertAppExpr' paramLookup = go . S.appExprApp
           s <- goE e
           return $ SE.L [ident' "sbvToInteger", s]
 
+        go (S.IntDiv e1 e2) = do
+          s1 <- goE e1
+          s2 <- goE e2
+          return $ SE.L [ident' "intdiv", s1, s2]
         go (S.IntMod e1 e2) = do
           s1 <- goE e1
           s2 <- goE e2
@@ -448,15 +457,6 @@ convertAppExpr' paramLookup = go . S.appExprApp
           ss <- convertExprAssignment paramLookup es
           return $ SE.L [ ident' "select", s, ss]
 
-        go (S.RealIsInteger _) = error "Printer: RealIsInteger not supported"
-        go (S.NatDiv _ _) = error "Printer: NatDiv not supported"
-        go (S.NatMod _ _) = error "Printer: NatMod not supported"
-        go (S.IntDiv _ _) = error "Printer: IntDiv not supported"
-        -- FIXME: include all non-supported cases?
-        -- (S.IntAbs _)
-        -- (S.IntDivisible _ _)
-        -- (S.RealDiv _ _)
-        -- (S.RealSqrt _)
         go app = error $ "unhandled App: " ++ show app
 
 
