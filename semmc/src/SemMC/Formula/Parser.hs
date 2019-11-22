@@ -571,7 +571,9 @@ readApp ::
   -> m (Some (S.SymExpr sym))
 readApp opRaw@(SC.SAtom (AIdent operator)) operands = do
   sym <- MR.reader getSym
-  prefixError ("in reading "++operator++" expression: ") $
+  prefixError ("in reading expression:\n"
+              -- ++(show $ SC.SCons opRaw operands)++"\n") $ -- the raw display version
+               ++(T.unpack $ printTokens mempty $ SC.SCons opRaw operands)++"\n") $
   -- Parse an expression of the form @(fnname operands ...)@
     case lookupOp operator of
       Just (Op1 arg_types fn) -> do
