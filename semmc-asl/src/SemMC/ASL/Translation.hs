@@ -495,10 +495,11 @@ translateStatement' ov stmt
       _ -> throwTrace $ UnsupportedStmt stmt
 
 
-translateFunctionCall :: forall arch h s ret
-                       . Overrides arch
+translateFunctionCall :: forall arch h s ret e
+                       . InputArgument s e
+                      => Overrides arch
                       -> AS.QualifiedIdentifier
-                      -> [AS.Expr]
+                      -> [e]
                       -> TypeConstraint
                       -> Generator h s arch ret (Maybe (Some (CCG.Atom s), ExtendedTypeData))
 translateFunctionCall ov qIdent args ty = do
@@ -1165,18 +1166,6 @@ mapStaticVals f = do
   MS.modify' $ \s -> s { tsStaticValues = f env }
 
 
-collectStaticValues :: TranslationState h ret s
-                    -> AS.SymbolDecl
-                    -> AS.Expr
-                    -> Generator h s arch ret ()
-collectStaticValues outerState (nm, t) e = do
-  sv <- withState outerState $ do
-    env <- getStaticEnv
-    return $ SE.exprToStatic env e
-  case sv of
-    Just i -> mapStaticVals (Map.insert nm i)
-    _ -> return ()
-
 -- Unify a syntactic ASL type against a crucible type, and update
 -- the current static variable evironment with any discovered instantiations
 unifyType :: AS.Type
@@ -1260,18 +1249,40 @@ getConcreteTypeConstraint t = do
 someTypeOfAtom :: CCG.Atom s tp
                -> TypeConstraint
 someTypeOfAtom atom = ConstraintSingle (CCG.typeOfAtom atom)
-        
-unifyArg :: Overrides arch
-         -> TranslationState h ret s
-         -> AS.SymbolDecl
-         -> AS.Expr
-         -> Generator h s arch ret (Some (CCG.Atom s))
-unifyArg ov outerState (nm,t) e = do
-  cty <- getConcreteTypeConstraint t
-  (Some atom, _) <- withState outerState $ translateExpr' ov e cty
-  let atomT = CCG.typeOfAtom atom
-  unifyType t (ConstraintSingle (CCG.typeOfAtom atom))
-  return $ Some atom
+
+
+class InputArgument s t where
+  unifyArg :: Overrides arch
+           -> TranslationState h ret s
+           -> AS.SymbolDecl
+           -> t
+           -> Generator h s arch ret (Some (CCG.Atom s))
+  collectStaticValues :: TranslationState h ret s
+                      -> AS.SymbolDecl
+                      -> t
+                      -> Generator h s arch ret ()
+
+instance InputArgument s AS.Expr where
+  unifyArg ov outerState (nm,t) e = do
+    cty <- getConcreteTypeConstraint t
+    (Some atom, _) <- withState outerState $ translateExpr' ov e cty
+    let atomT = CCG.typeOfAtom atom
+    unifyType t (ConstraintSingle (CCG.typeOfAtom atom))
+    return $ Some atom
+
+  collectStaticValues outerState (nm, t) e = do
+    sv <- withState outerState $ do
+      env <- getStaticEnv
+      return $ SE.exprToStatic env e
+    case sv of
+      Just i -> mapStaticVals (Map.insert nm i)
+      _ -> return ()
+
+instance InputArgument s (Some (CCG.Atom s)) where
+  unifyArg _ _ _ e = return e
+  collectStaticValues _ _ _ = return ()
+
+
 
 asBaseType :: Some CT.TypeRepr -> Some WT.BaseTypeRepr
 asBaseType (Some t) = case CT.asBaseType t of
@@ -1280,9 +1291,10 @@ asBaseType (Some t) = case CT.asBaseType t of
 
 
 
-unifyArgs :: Overrides arch
+unifyArgs :: InputArgument s e
+          => Overrides arch
           -> T.Text
-          -> [(FunctionArg, AS.Expr)]
+          -> [(FunctionArg, e)]
           -> [AS.Type]
           -> TypeConstraint
           -> Generator h s arch ret
@@ -1982,11 +1994,11 @@ translateBinaryOp ov op e1 e2 tc = do
 
 -- Linear Arithmetic operators
 
-addOp :: BinaryOperatorBundle ext s 'SameK
-addOp = BinaryOperatorBundle CCE.BVAdd CCE.NatAdd CCE.IntAdd
+addOp :: BinaryOperatorBundle h s arch ret 'SameK
+addOp = BinaryOperatorBundle (mkBVBinOP CCE.BVAdd) (mkBinOP CCE.NatAdd) (mkBinOP CCE.IntAdd)
 
-subOp :: BinaryOperatorBundle ext s 'SameK
-subOp = BinaryOperatorBundle CCE.BVSub CCE.NatSub CCE.IntSub
+subOp :: BinaryOperatorBundle h s arch ret 'SameK
+subOp = BinaryOperatorBundle (mkBVBinOP CCE.BVSub) (mkBinOP CCE.NatSub) (mkBinOP CCE.IntSub)
 
 -- Nonlinear Arithmetic operators
 
@@ -2002,49 +2014,55 @@ subOp = BinaryOperatorBundle CCE.BVSub CCE.NatSub CCE.IntSub
 -- divOp :: BinaryOperatorBundle ext s 'SameK
 -- divOp = BinaryOperatorBundle (error "BV div not supported") CCE.NatDiv CCE.IntDiv
 
-mkBVUF :: (1 WT.<= w)
-     => T.Text
-     -> WT.NatRepr w
-     -> CCG.Expr (ASLExt arch) s (CT.BVType w)
-     -> CCG.Expr (ASLExt arch) s (CT.BVType w)
-     -> CCE.App (ASLExt arch) (CCG.Expr (ASLExt arch) s) (CT.BVType w)
-mkBVUF nm natRepr arg1 arg2 = do
-  let brepr = CT.BaseBVRepr natRepr
-  let repr = CT.BVRepr natRepr
-  let uf = UF nm brepr (Ctx.empty Ctx.:> repr Ctx.:> repr) (Ctx.empty Ctx.:> arg1 Ctx.:> arg2)
-  CCE.ExtensionApp uf
-
 mkUF :: T.Text
-     -> CT.TypeRepr tp
      -> CCG.Expr (ASLExt arch) s tp
      -> CCG.Expr (ASLExt arch) s tp
-     -> CCE.App (ASLExt arch) (CCG.Expr (ASLExt arch) s) tp
-mkUF nm repr arg1 arg2 = case CT.asBaseType repr of
-    CT.AsBaseType brepr -> do
-      let uf = UF nm brepr (Ctx.empty Ctx.:> repr Ctx.:> repr) (Ctx.empty Ctx.:> arg1 Ctx.:> arg2)
-      CCE.ExtensionApp uf
-    _ -> error $ "Illegal crucible type: " <> show repr
+     -> Generator h s arch ret (CCG.Atom s tp)
+mkUF nm arg1E arg2E = do
+  arg1 <- mkAtom arg1E
+  arg2 <- mkAtom arg2E
+  Just (Some atom, _) <- translateFunctionCall overrides (AS.VarName nm) [Some arg1, Some arg2] ConstraintNone
+  Refl <- assertAtomType' (CCG.typeOfAtom arg1) atom
+  return atom
 
-mulOp :: BinaryOperatorBundle (ASLExt arch) s 'SameK
-mulOp = BinaryOperatorBundle (mkBVUF "BVMul") (mkUF "NatMul" CT.NatRepr) (mkUF "IntMul" CT.IntegerRepr)
+mulOp :: BinaryOperatorBundle h s arch ret 'SameK
+mulOp = BinaryOperatorBundle (\_ -> mkUF "BVMul") (mkUF "NatMul") (mkUF "IntMul")
 
-modOp :: BinaryOperatorBundle (ASLExt arch) s 'SameK
-modOp = BinaryOperatorBundle (error "BV mod not supported") (mkUF "NatMod" CT.NatRepr) (mkUF "IntMod" CT.IntegerRepr)
+modOp :: BinaryOperatorBundle h s arch ret 'SameK
+modOp = BinaryOperatorBundle (error "BV mod not supported") (mkUF "NatMod") (mkUF "IntMod")
 
-divOp :: BinaryOperatorBundle (ASLExt arch) s 'SameK
-divOp = BinaryOperatorBundle (error "BV div not supported") (mkUF "NatDiv" CT.NatRepr) (mkUF "IntDiv" CT.IntegerRepr)
+divOp :: BinaryOperatorBundle h s arch ret 'SameK
+divOp = BinaryOperatorBundle (error "BV div not supported") (mkUF "NatDiv") (mkUF "IntDiv")
+
+
+realmulOp :: BinaryOperatorBundle h s arch ret 'SameK
+realmulOp = BinaryOperatorBundle (mkBVBinOP CCE.BVMul) (mkBinOP CCE.NatMul) (mkBinOP CCE.IntMul)
+
+realmodOp :: BinaryOperatorBundle h s arch ret 'SameK
+realmodOp = BinaryOperatorBundle (error "BV mod not supported") (mkBinOP CCE.NatMod) (mkBinOP CCE.IntMod)
+
+realdivOp :: BinaryOperatorBundle h s arch ret 'SameK
+realdivOp = BinaryOperatorBundle (error "BV div not supported") (mkBinOP CCE.NatDiv) (mkBinOP CCE.IntDiv)
 
 -- Comparison operators
 
-eqOp :: BinaryOperatorBundle ext s 'BoolK
-eqOp = BinaryOperatorBundle CCE.BVEq CCE.NatEq CCE.IntEq
+eqOp :: BinaryOperatorBundle h s arch ret 'BoolK
+eqOp = BinaryOperatorBundle (mkBVBinOP CCE.BVEq) (mkBinOP CCE.NatEq) (mkBinOP CCE.IntEq)
 
-leOp :: BinaryOperatorBundle ext s 'BoolK
-leOp = BinaryOperatorBundle CCE.BVUle CCE.NatLe CCE.IntLe
+leOp :: BinaryOperatorBundle h s arch ret 'BoolK
+leOp = BinaryOperatorBundle (mkBVBinOP CCE.BVUle) (mkBinOP CCE.NatLe) (mkBinOP CCE.IntLe)
 
-ltOp :: BinaryOperatorBundle ext s 'BoolK
-ltOp = BinaryOperatorBundle CCE.BVUlt CCE.NatLt CCE.IntLt
+ltOp :: BinaryOperatorBundle h s arch ret 'BoolK
+ltOp = BinaryOperatorBundle (mkBVBinOP CCE.BVUlt) (mkBinOP CCE.NatLt) (mkBinOP CCE.IntLt)
 
+
+mkBVBinOP :: (a -> b -> c -> CCE.App (ASLExt arch) (CCR.Expr (ASLExt arch) s) tp) -> (a -> b -> c -> Generator h s arch ret (CCG.Atom s tp))
+mkBVBinOP f a b c = do
+  mkAtom (CCG.App (f a b c))
+
+mkBinOP :: (a -> b -> CCE.App (ASLExt arch) (CCR.Expr (ASLExt arch) s) tp) -> (a -> b -> Generator h s arch ret (CCG.Atom s tp))
+mkBinOP f a b = do
+  mkAtom (CCG.App (f a b))
 
 data ReturnK = BoolK
              -- ^ Tag used for comparison operations, which always return BoolType
@@ -2055,17 +2073,16 @@ type family BinaryOperatorReturn (r :: ReturnK) (tp :: CT.CrucibleType) where
   BinaryOperatorReturn 'BoolK tp = CT.BoolType
   BinaryOperatorReturn 'SameK tp = tp
 
-data BinaryOperatorBundle ext s (rtp :: ReturnK) =
-  BinaryOperatorBundle { obBV :: forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr ext s (CT.BVType n) -> CCG.Expr ext s (CT.BVType n) -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp (CT.BVType n))
-                       , obNat :: CCG.Expr ext s CT.NatType -> CCG.Expr ext s CT.NatType -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp CT.NatType)
-                       , obInt :: CCG.Expr ext s CT.IntegerType -> CCG.Expr ext s CT.IntegerType -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp CT.IntegerType)
+data BinaryOperatorBundle h s arch ret (rtp :: ReturnK) =
+  BinaryOperatorBundle { obBV :: forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr (ASLExt arch) s (CT.BVType n) -> CCG.Expr (ASLExt arch) s (CT.BVType n) -> Generator h s arch ret (CCG.Atom s (BinaryOperatorReturn rtp (CT.BVType n)))
+                       , obNat :: CCG.Expr (ASLExt arch) s CT.NatType -> CCG.Expr (ASLExt arch) s CT.NatType -> Generator h s arch ret (CCG.Atom s (BinaryOperatorReturn rtp CT.NatType))
+                       , obInt :: CCG.Expr (ASLExt arch) s CT.IntegerType -> CCG.Expr (ASLExt arch) s CT.IntegerType -> Generator h s arch ret (CCG.Atom s (BinaryOperatorReturn rtp CT.IntegerType))
                        }
 
 
 
 -- | Apply a binary operator to two operands, performing the necessary type checks
-applyBinOp :: (ext ~ ASLExt arch)
-           => BinaryOperatorBundle ext s rtp
+applyBinOp :: BinaryOperatorBundle h s arch ret rtp
            -> (AS.Expr, CCG.Atom s tp1)
            -> (AS.Expr, CCG.Atom s tp2)
            -> Generator h s arch ret (Some (CCG.Atom s))
@@ -2075,28 +2092,28 @@ applyBinOp bundle (e1, a1) (e2, a2) =
       case CCG.typeOfAtom a2 of
         CT.IntegerRepr -> do
             let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
-            Some <$> mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) a2'))
+            Some <$> obBV bundle nr (CCG.AtomExpr a1) a2'
         _ -> do
           Refl <- assertAtomType e2 (CT.BVRepr nr) a2
-          Some <$> mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+          Some <$> obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)
     CT.NatRepr -> do
       Refl <- assertAtomType e2 CT.NatRepr a2
-      Some <$> mkAtom (CCG.App (obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      Some <$> obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)
     CT.IntegerRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BVRepr nr -> do
           let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
-          Some <$> mkAtom (CCG.App (obBV bundle nr a1' (CCG.AtomExpr a2)))
+          Some <$> obBV bundle nr a1' (CCG.AtomExpr a2)
         _ -> do
           Refl <- assertAtomType e2 CT.IntegerRepr a2
-          Some <$> mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+          Some <$> obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)
     CT.BoolRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BoolRepr -> do
           let nr = WT.knownNat @1
           let a1' = CCG.App $ CCE.BoolToBV nr (CCG.AtomExpr a1)
           let a2' = CCG.App $ CCE.BoolToBV nr (CCG.AtomExpr a2)
-          Some <$> mkAtom (CCG.App (obBV bundle nr a1' a2'))
+          Some <$> obBV bundle nr a1' a2'
 
     _ -> X.throw (UnsupportedComparisonType e1 (CCG.typeOfAtom a1))
 
@@ -2491,35 +2508,49 @@ arithmeticOverrides :: forall h s arch ret
                        -> TypeConstraint
                        -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
 arithmeticOverrides e ty = case e of
+  AS.ExprCall (AS.VarName "primitive") [AS.ExprBinOp op e1 e2] -> Just $ do
+    let (tc1, tc2) = constraintsOfArgs op ty
+    (Some a1, _) <- translateExpr' overrides e1 tc1
+    (Some a2, _) <- translateExpr' overrides e2 tc2
+    let p1 = (e1, a1)
+    let p2 = (e2, a2)
+    satom <- case op of
+      AS.BinOpMul -> applyBinOp realmulOp p1 p2
+      AS.BinOpDiv -> applyBinOp realdivOp p1 p2
+      AS.BinOpDivide -> applyBinOp realdivOp p1 p2
+      AS.BinOpMod -> applyBinOp realmodOp p1 p2
+      _ -> throwTrace $ UnsupportedExpr e
+    return (satom, TypeBasic)
+
   --FIXME: determine actual rounding here
-   AS.ExprCall (AS.QualifiedIdentifier _ fun@"RoundTowardsZero") args@[e] -> Just $ do
-     case e of
-       (AS.ExprBinOp AS.BinOpDivide
-         (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
-                        [e1])
-         (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
-                        [e2]))
-           -> translateExpr' overrides (AS.ExprBinOp AS.BinOpDiv e1 e2) ty
-       _ -> X.throw $ InvalidOverloadedFunctionCall fun args
-   --FIXME: determine actual rounding here
-   AS.ExprCall (AS.QualifiedIdentifier _ fun@"RoundUp") args@[e] -> Just $ do
-     case e of
-       (AS.ExprBinOp AS.BinOpDivide
-         (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
-                        [e1])
-         (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
-                        [e2]))
-           -> translateExpr' overrides (AS.ExprBinOp AS.BinOpDiv e1 e2) ty
-       _ -> X.throw $ InvalidOverloadedFunctionCall fun args
-   AS.ExprCall (AS.QualifiedIdentifier _ "NOT") [e] -> Just $ do
-     translateExpr' overrides (AS.ExprUnOp AS.UnOpNot e) ty
-   AS.ExprCall (AS.QualifiedIdentifier _ "Abs") [e] -> Just $ do
-     Some atom <- translateExpr overrides e
-     case CCG.typeOfAtom atom of
-       CT.IntegerRepr -> do
-         mkAtom' (CCG.App (CCE.IntAbs (CCG.AtomExpr atom)))
-       tp -> X.throw $ ExpectedIntegerType e tp
-   _ -> Nothing
+  AS.ExprCall (AS.QualifiedIdentifier _ fun@"RoundTowardsZero") args@[e] -> Just $ do
+    case e of
+      (AS.ExprBinOp AS.BinOpDivide
+        (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
+                       [e1])
+        (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
+                       [e2]))
+          -> translateExpr' overrides (AS.ExprBinOp AS.BinOpDiv e1 e2) ty
+      _ -> X.throw $ InvalidOverloadedFunctionCall fun args
+  --FIXME: determine actual rounding here
+  AS.ExprCall (AS.QualifiedIdentifier _ fun@"RoundUp") args@[e] -> Just $ do
+    case e of
+      (AS.ExprBinOp AS.BinOpDivide
+        (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
+                       [e1])
+        (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
+                       [e2]))
+          -> translateExpr' overrides (AS.ExprBinOp AS.BinOpDiv e1 e2) ty
+      _ -> X.throw $ InvalidOverloadedFunctionCall fun args
+  AS.ExprCall (AS.QualifiedIdentifier _ "NOT") [e] -> Just $ do
+    translateExpr' overrides (AS.ExprUnOp AS.UnOpNot e) ty
+  AS.ExprCall (AS.QualifiedIdentifier _ "Abs") [e] -> Just $ do
+    Some atom <- translateExpr overrides e
+    case CCG.typeOfAtom atom of
+      CT.IntegerRepr -> do
+        mkAtom' (CCG.App (CCE.IntAbs (CCG.AtomExpr atom)))
+      tp -> X.throw $ ExpectedIntegerType e tp
+  _ -> Nothing
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}

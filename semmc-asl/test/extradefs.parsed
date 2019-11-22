@@ -1,4 +1,130 @@
 (AslDefinitions
+  (DefCallable
+    (QualifiedIdentifier Any BVMul)
+    (list
+      (SymDecl
+        bv1
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N))))
+      (SymDecl
+        bv2
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N)))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any primitive)
+                (list
+                  (ExprBinOp
+                    "*"
+                    (ExprVarRef
+                      (QualifiedIdentifier Any bv1))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any bv2)))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any IntMul)
+    (list
+      (SymDecl
+        i1
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        i2
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any primitive)
+                (list
+                  (ExprBinOp
+                    "*"
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i1))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i2)))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any IntMod)
+    (list
+      (SymDecl
+        i1
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        i2
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any primitive)
+                (list
+                  (ExprBinOp
+                    "MOD"
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i1))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i2)))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any IntDiv)
+    (list
+      (SymDecl
+        i1
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        i2
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any primitive)
+                (list
+                  (ExprBinOp
+                    "/"
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i1))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i2)))))))))))
   (DefVariable
     (QualifiedIdentifier Any __AssertionFailure)
     (TypeRef

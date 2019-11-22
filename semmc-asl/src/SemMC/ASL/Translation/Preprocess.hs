@@ -454,12 +454,22 @@ globalStructNames = ["PSTATE"]
 allDefs :: ASLSpec -> [AS.Definition]
 allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
 
+globalFunctions :: [(T.Text, Int)]
+globalFunctions = [("BVMul", 2), ("IntMul", 2), ("IntMod", 2), ("IntDiv", 2)]
+
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do
   mapM_ (initDefGlobal insertUnique) aslExtraDefinitions
   mapM_ (initDefGlobal insertNoReplace) aslSupportDefinitions
   mapM_ (initDefGlobal insertNoReplace) aslDefinitions
+  mapM_ (uncurry computeGlobalFunctionSig) globalFunctions
   where
+    computeGlobalFunctionSig :: T.Text -> Int -> SigM ext f ()
+    computeGlobalFunctionSig nm nargs = do
+      lookupCallable (AS.VarName nm) nargs >>= \case
+        Just callable -> void $ computeCallableSignature callable
+        _ -> E.throwError $ CallableNotFound nm
+
     initDefGlobal :: (forall k a. Ord k => Show k => k -> a -> Map.Map k a -> Map.Map k a)
                   -> AS.Definition
                   -> SigM ext f ()

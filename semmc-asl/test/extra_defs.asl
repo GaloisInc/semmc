@@ -1,3 +1,17 @@
+// Shadowed arithmetic operations
+
+bits(N) BVMul(bits(N) bv1, bits(N) bv2)
+    return primitive(bv1 * bv2);
+
+integer IntMul(integer i1, integer i2)
+    return primitive(i1 * i2);
+
+integer IntMod(integer i1, integer i2)
+    return primitive(i1 MOD i2);
+
+integer IntDiv(integer i1, integer i2)
+    return primitive(i1 / i2);
+
 // Toplevel flags for execution status
 
 boolean __AssertionFailure;
