@@ -555,11 +555,13 @@ convertBaseType tp = case tp of
   S.BaseArrayRepr ixs repr -> SE.L [SE.A (AQuoted "array"), convertBaseTypes ixs , convertBaseType repr]
   _ -> error "can't print base type"
 
-convertBaseTypes :: Ctx.Assignment BaseTypeRepr tps
-               -> SExp
-convertBaseTypes tps = case tps of
-  Ctx.Empty -> SE.Nil
-  tps' Ctx.:> tp -> SE.cons (convertBaseType tp) (convertBaseTypes tps')
+convertBaseTypes ::
+  Ctx.Assignment BaseTypeRepr tps
+  -> SExp
+convertBaseTypes = go SE.Nil
+  where go :: SExp -> Ctx.Assignment BaseTypeRepr tps -> SExp
+        go acc Ctx.Empty = acc
+        go acc (tps Ctx.:> tp) = go (SE.cons (convertBaseType tp) acc) tps
 
 convertOperandVars :: forall arch sh t st fs
                     . (A.Architecture arch)
