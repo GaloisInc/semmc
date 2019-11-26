@@ -809,7 +809,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
           assn <- exprAssignment (S.fnArgTypes fn) []
           Some <$> liftIO (S.applySymFn sym fn assn)
         Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" (NR.widthVal nr)
--- Parse an expression of the form @((_ call 'foo) x y ...)@
+-- Parse an expression of the form @((_ call "foo") x y ...)@
 readApp (SC.SCons (SC.SAtom (AIdent "_"))
             (SC.SCons (SC.SAtom (AIdent "call"))
                (SC.SCons (SC.SAtom (AString fnName))
