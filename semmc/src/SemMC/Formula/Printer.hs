@@ -523,10 +523,10 @@ convertFnApp ::
 convertFnApp paramLookup fn args
   | name == "undefined"
   , BaseBVRepr nr <- S.fnReturnType fn = do
-      let call = SE.L [ ident' "_", ident' "call", quoted' "uf.undefined" ]
+      let call = SE.L [ ident' "_", ident' "call", string' "uf.undefined" ]
       return $ SE.L [ call, int' (NR.intValue nr) ]
   | otherwise = do
-    let call = SE.L [ ident' "_", ident' "call", quoted' (prefix ++ T.unpack name) ]
+    let call = SE.L [ ident' "_", ident' "call", string' (prefix ++ T.unpack name) ]
     ss <- convertExprAssignment paramLookup args
     return $ SE.cons call ss
   where
