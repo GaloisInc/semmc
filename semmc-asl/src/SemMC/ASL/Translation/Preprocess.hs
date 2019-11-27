@@ -454,8 +454,17 @@ globalStructNames = ["PSTATE"]
 allDefs :: ASLSpec -> [AS.Definition]
 allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
 
+
 globalFunctions :: [(T.Text, Int)]
-globalFunctions = [("BVMul", 2), ("IntMul", 2), ("IntMod", 2), ("IntDiv", 2), ("setSlice", 4), ("getSlice", 4)]
+globalFunctions =
+  [ ("BVMul", 2)
+  , ("IntMul", 2)
+  , ("IntMod", 2)
+  , ("IntDiv", 2)
+  , ("setSlice", 4)
+  , ("getSlice", 4)
+  , ("packRegister", 2)
+  , ("unpackRegister", 1)]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do
@@ -877,7 +886,7 @@ registerPreamble opvar idx  =
          [ AS.LValVarRef (AS.VarName rtemp)
          , AS.LValVarRef (AS.VarName opvar)
          ])
-           (AS.ExprVarRef (AS.VarName (opvar <> "_struct")))
+           (AS.ExprCall (AS.VarName "unpackRegister") [AS.ExprVarRef (AS.VarName (opvar <> "_packed"))])
        , AS.StmtAssign (AS.LValVarRef (AS.VarName idx))
           (AS.ExprCall (AS.VarName "UInt")
            [AS.ExprVarRef (AS.VarName opvar)])
@@ -889,7 +898,7 @@ registerPreamble opvar idx  =
 -- return (.. (RGen[d], d_bits) ..)
 registerPostamble :: T.Text -> T.Text -> AS.Expr
 registerPostamble idx opvar =
-  AS.ExprTuple
+  AS.ExprCall (AS.VarName "packRegister")
     [ AS.ExprCall (AS.VarName "GETTER_RGen") [AS.ExprVarRef (AS.VarName idx)]
     , AS.ExprVarRef (AS.VarName opvar)
     ]
@@ -1148,7 +1157,9 @@ computeInstructionSignature AS.Instruction{..} encName iset = do
       return (Some (SomeFunctionSignature pSig), finalInstStmts)
 
 
--- | Swap instruction field Rd for Rd_struct where Rd_struct = (R[d], Rd) and d = UInt(Rd)
+-- | Swap instruction field Rd for Rd_packed where Rd_packed = (R[d], Rd) and d = UInt(Rd)
+-- FIXME: Actually Rd_packed is just R[d] and we need to figure out where Rd (the register index)
+-- should be stored, or if we just need a single bit to indicate that R[d] is the PC
 extractRegisterArgs :: AS.InstructionEncoding
                     -> [AS.Stmt]
                     -> SigM ext f  ([AS.Stmt]
@@ -1164,10 +1175,13 @@ extractRegisterArgs enc stmts = do
       Just idx -> case fieldOffset of
         4 -> do
           let
-            name = fieldName <> "_struct"
+            name = fieldName <> "_packed"
             idxtp = AS.TypeFun "bits" (AS.ExprLitInt 4)
             valtp = AS.TypeFun "bits" (AS.ExprLitInt 32)
-            structtp = AS.TypeTuple [valtp, idxtp]
+            -- currently we treat register operands as just 32 bits,
+            -- and we invent their index as an uninterpreted value.
+            -- obviously this is wrong and needs further thought.
+            structtp = AS.TypeFun "bits" (AS.ExprLitInt 32) -- AS.TypeTuple [valtp, idxtp]
             funarg = FunctionArg name structtp (Just $ RegisterR)
           Some tp <- computeType structtp
           return ( Just (registerPostamble idx fieldName, structtp)

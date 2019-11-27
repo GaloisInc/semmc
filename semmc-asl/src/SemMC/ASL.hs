@@ -41,6 +41,8 @@ import           Data.Time.Clock
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Classes
+import           Data.Parameterized.Ctx ( type (<+>) )
+import           Data.Parameterized.Context ( (<++>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as PL
@@ -143,10 +145,10 @@ simulateFunction :: forall arch sym init globalReads globalWrites tps scope
                   . (CB.IsSymInterface sym, OnlineSolver scope sym)
                  => SimulatorConfig scope
                  -> AC.Function arch globalReads globalWrites init tps
-                 -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesListBase init, WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
+                 -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesListBase (init <+> globalReads), WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
 simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
-    extractResult re initArgs _ =
+    extractResult re initArgs freshGlobals =
       let sig = AC.funcSig crucFunc
           globalWriteTypes = WT.BaseStructRepr $ FC.fmapFC AT.projectValue (AS.funcGlobalWriteReprs sig)
           naturalRetType = WT.BaseStructRepr $ AS.funcRetRepr sig
@@ -157,15 +159,15 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
           | Just Refl <- testEquality btr retType -> do
               -- print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName sig)
-                  argTypes = reshape (FC.fmapFC AT.projectValue (AS.funcArgReprs sig))
-                  argVars = freshArgBoundVars' initArgs
+                  argTypes = reshape (FC.fmapFC AT.projectValue (AS.funcSigAllArgsRepr sig))
+                  argVars = freshArgBoundVars' (initArgs <++> freshGlobals)
                   solverSymbolName = case WI.userSymbol name of
                     Left err -> error (show err)
                     Right symbol -> symbol
               fn <- WI.definedFn
                 (simSym symCfg)
                 solverSymbolName
-                (freshArgBoundVars initArgs)
+                (freshArgBoundVars (initArgs <++> freshGlobals))
                 (CS.regValue re)
                 (const False)
               return $ SF.FunctionFormula name argTypes argVars retType fn

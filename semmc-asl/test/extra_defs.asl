@@ -13,6 +13,16 @@ integer IntDiv(integer i1, integer i2)
     return primitive(i1 / i2);
 
 
+// Unclear how to actually determine the register index
+(bits(32), bits(4)) unpackRegister(bits(32) register)
+    bits(32) realRegister = register;
+    bits(4) registerIdx = bits(4) UNKNOWN;
+    return (realRegister, registerIdx);
+
+// Throw away the register index currently
+bits(32) packRegister(bits(32) realRegister, bits(4) registerIdx)
+    return realRegister;
+
 // Defining slicing with primitive bitvector operations
 
 bits(M) truncate(bits(N) bv, integer M);

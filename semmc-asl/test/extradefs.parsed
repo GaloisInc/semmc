@@ -126,6 +126,78 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any i2)))))))))))
   (DefCallable
+    (QualifiedIdentifier Any unpackRegister)
+    (list
+      (SymDecl
+        register
+        (TypeFun
+          bits
+          (ExprLitNat 32))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 32))
+          (TypeFun
+            bits
+            (ExprLitNat 4)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtVarDeclInit
+            (SymDecl
+              realRegister
+              (TypeFun
+                bits
+                (ExprLitNat 32)))
+            (ExprVarRef
+              (QualifiedIdentifier Any register)))
+          (StmtVarDeclInit
+            (SymDecl
+              registerIdx
+              (TypeFun
+                bits
+                (ExprLitNat 4)))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
+          (StmtReturn
+            (Just
+              (ExprTuple
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any realRegister))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any registerIdx))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any packRegister)
+    (list
+      (SymDecl
+        realRegister
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        registerIdx
+        (TypeFun
+          bits
+          (ExprLitNat 4))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 32)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any realRegister))))))))
+  (DefCallable
     (QualifiedIdentifier Any truncate)
     (list
       (SymDecl

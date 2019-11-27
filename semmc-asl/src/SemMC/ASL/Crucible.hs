@@ -23,6 +23,8 @@ module SemMC.ASL.Crucible (
   , FunctionSignature
   , funcRetRepr
   , funcArgReprs
+  , funcSigBaseRepr
+  , funcSigAllArgsRepr
   , funcGlobalReadReprs
   , funcGlobalWriteReprs
   , SomeFunctionSignature(..)
