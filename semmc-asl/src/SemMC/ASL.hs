@@ -21,6 +21,7 @@ module SemMC.ASL (
   , SimulationException(..)
   ) where
 
+import           Data.Proxy
 import           GHC.TypeLits ( Symbol )
 import qualified Data.Type.List as TL
 
@@ -94,7 +95,7 @@ data SimulatorConfig scope =
 
 type OnlineSolver scope sym = sym ~ CBO.YicesOnlineBackend scope (WEB.Flags WEB.FloatReal)
 
-reshape :: Ctx.Assignment CT.BaseTypeRepr btps -> PL.List WT.BaseTypeRepr (AT.ToBaseTypesListBase btps)
+reshape :: Ctx.Assignment CT.BaseTypeRepr btps -> PL.List WT.BaseTypeRepr (AT.CtxToList btps)
 reshape Ctx.Empty = PL.Nil
 reshape (reprs Ctx.:> brepr) = brepr PL.:< reshape reprs
 
@@ -145,31 +146,43 @@ simulateFunction :: forall arch sym init globalReads globalWrites tps scope
                   . (CB.IsSymInterface sym, OnlineSolver scope sym)
                  => SimulatorConfig scope
                  -> AC.Function arch globalReads globalWrites init tps
-                 -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesListBase (init <+> globalReads), WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
+                 -> IO (SF.FunctionFormula sym '(AT.CtxToList (init Ctx.::> WT.BaseStructType globalReads), WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
 simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
+    sig = AC.funcSig crucFunc
+    sym = simSym symCfg
+    globalReadReprs = FC.fmapFC AT.projectValue (AS.funcGlobalReadReprs sig)
+    globalReadStructRepr = WT.BaseStructRepr globalReadReprs
+    argReprs = FC.fmapFC AT.projectValue (AS.funcArgReprs sig)
+    retType = AS.funcSigBaseRepr sig
+
     extractResult re initArgs freshGlobals =
-      let sig = AC.funcSig crucFunc
-          globalWriteTypes = WT.BaseStructRepr $ FC.fmapFC AT.projectValue (AS.funcGlobalWriteReprs sig)
-          naturalRetType = WT.BaseStructRepr $ AS.funcRetRepr sig
-          retType = WT.BaseStructRepr (Ctx.empty Ctx.:> globalWriteTypes Ctx.:> naturalRetType )
-      in case CT.asBaseType (CS.regType re) of
+      case CT.asBaseType (CS.regType re) of
         CT.NotBaseType -> X.throwIO (NonBaseTypeReturn (CS.regType re))
         CT.AsBaseType btr
           | Just Refl <- testEquality btr retType -> do
               -- print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName sig)
-                  argTypes = reshape (FC.fmapFC AT.projectValue (AS.funcSigAllArgsRepr sig))
-                  argVars = freshArgBoundVars' (initArgs <++> freshGlobals)
+                  globalReadBVs = FC.fmapFC freshArgBoundVar freshGlobals
+                  argBVs = FC.fmapFC freshArgBoundVar initArgs
                   solverSymbolName = case WI.userSymbol name of
                     Left err -> error (show err)
                     Right symbol -> symbol
+              globalsName <- toSolverSymbol (T.unpack "globalReads")
+              bv <- WI.freshBoundVar sym globalsName globalReadStructRepr
+              let globalStruct = WI.varExpr sym bv
+              globals <- Ctx.traverseWithIndex (\idx _ -> WI.structField sym globalStruct idx) globalReadReprs
+              fnexpr <- WEB.evalBoundVars sym (CS.regValue re) globalReadBVs globals
+              --print (WI.printSymExpr fnexpr)
+              let allArgBvs = TL.toAssignmentFwd $ AT.assignmentToList (argBVs Ctx.:> bv)
               fn <- WI.definedFn
-                (simSym symCfg)
+                sym
                 solverSymbolName
-                (freshArgBoundVars (initArgs <++> freshGlobals))
-                (CS.regValue re)
+                allArgBvs
+                fnexpr
                 (const False)
+              let argTypes = AT.assignmentToList (argReprs Ctx.:> WT.BaseStructRepr globalReadReprs)
+              let argVars = AT.assignmentToList (argBVs Ctx.:> bv)
               return $ SF.FunctionFormula name argTypes argVars retType fn
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
@@ -464,10 +477,14 @@ data FreshArg sym bt = FreshArg { freshArgEntry :: CS.RegEntry sym (CT.BaseToTyp
                                 , freshArgName :: T.Text
                                 }
 
-freshArgBoundVars :: Ctx.Assignment (FreshArg sym) init -> Ctx.Assignment (WI.BoundVar sym) (TL.ToContextFwd (AT.ToBaseTypesListBase init))
+type family ToCrucTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType where
+  ToCrucTypes CT.EmptyCtx = CT.EmptyCtx
+  ToCrucTypes (wtps CT.::> wtp) = ToCrucTypes wtps CT.::> CT.BaseToType wtp
+
+freshArgBoundVars :: Ctx.Assignment (FreshArg sym) init -> Ctx.Assignment (WI.BoundVar sym) (TL.ToContextFwd (AT.CtxToList init))
 freshArgBoundVars args = TL.toAssignmentFwd (freshArgBoundVars' args)
 
-freshArgBoundVars' :: Ctx.Assignment (FreshArg sym) init -> PL.List (WI.BoundVar sym) (AT.ToBaseTypesListBase init)
+freshArgBoundVars' :: Ctx.Assignment (FreshArg sym) init -> PL.List (WI.BoundVar sym) (AT.CtxToList init)
 freshArgBoundVars' Ctx.Empty = PL.Nil
 freshArgBoundVars' (args Ctx.:> arg) = freshArgBoundVar arg PL.:< freshArgBoundVars' args
 
@@ -575,7 +592,11 @@ initGlobals symCfg globals = do
       let baseGlobalType = AT.toBaseType (CCG.globalType gv)
       arg <- liftIO $ allocateFreshArg (simSym symCfg) (AC.LabeledValue (CCG.globalName gv) baseGlobalType)
       MS.put $ CSG.insertGlobal gv (CS.regValue (freshArgEntry arg)) gs
-      return arg
+      gs' <- MS.get
+      case CSG.lookupGlobal gv gs' of
+        Just (WEB.BoundVarExpr bv) -> do
+          return arg { freshArgBoundVar = bv }
+        _ -> error "Unexpected global variable type"
 
 executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
                   => WPO.OnlineSolver scope solver

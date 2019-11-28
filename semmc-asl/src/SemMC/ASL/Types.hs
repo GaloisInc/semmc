@@ -10,12 +10,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
+
 -- | Functions for converting between What4 and Crucible types.
 module SemMC.ASL.Types
   ( ToBaseType
   , ToBaseTypes
   , ToBaseTypesList
-  , ToBaseTypesListBase
+  , CtxToList
   , ToCrucTypes
   , ConstVal(..)
   , UserType(..)
@@ -28,6 +29,7 @@ module SemMC.ASL.Types
   , ConstraintHint(..)
   , RegisterKind(..)
   , AccessMode(..)
+  , assignmentToList
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -48,6 +50,7 @@ module SemMC.ASL.Types
   ) where
 
 
+import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Some ( Some(..) )
@@ -60,10 +63,8 @@ import qualified Data.BitVector.Sized as BVS
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Map as Map
 import qualified Data.List as List
+import qualified Data.Type.List as TL
 import qualified Data.Set as Set
-
--- StateF stuff
-import           Control.Monad.IO.Class
 
 type family ToBaseType (ctp :: CT.CrucibleType) :: WT.BaseType where
   ToBaseType (CT.BaseToType bt) = bt
@@ -89,9 +90,20 @@ type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WT.BaseType] wh
   ToBaseTypesList CT.EmptyCtx = '[]
   ToBaseTypesList (tps CT.::> tp) = ToBaseType tp ': ToBaseTypesList tps
 
-type family ToBaseTypesListBase (ctps :: CT.Ctx CT.BaseType) :: [WT.BaseType] where
-  ToBaseTypesListBase CT.EmptyCtx = '[]
-  ToBaseTypesListBase (tps CT.::> tp) = tp ': ToBaseTypesListBase tps
+type family CtxToList (ctx :: CT.Ctx k) :: [k] where
+  CtxToList CT.EmptyCtx = '[]
+  CtxToList (ctx CT.::> k) = k ': CtxToList ctx
+
+assignmentToList :: Ctx.Assignment f ctx -> PL.List f (CtxToList ctx)
+assignmentToList Ctx.Empty = PL.Nil
+assignmentToList (args Ctx.:> arg) = arg PL.:< assignmentToList args
+
+
+-- toFromContextProofStep :: f tps -> g tp -> TL.ToContext (TL.ReverseAcc (CtxToList tps) '[ tp ]) :~: tps Ctx.::> tp
+-- toFromContextProofStep _ _ = unsafeCoerce Refl
+
+-- toFromContextProof :: p t -> TL.ToContextFwd (CtxToList t) :~: t
+-- toFromContextProof _ = unsafeCoerce Refl
 
 type family ToCrucTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType where
   ToCrucTypes CT.EmptyCtx = CT.EmptyCtx

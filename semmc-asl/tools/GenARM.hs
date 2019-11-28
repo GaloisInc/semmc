@@ -457,7 +457,7 @@ translateFunction fromInstr key sig stmts defs = do
   (catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl) >>= \case
     Just func | KeyFun nm <- key -> do
         let sig = AC.funcSig func
-        let args = Some $ FC.fmapFC (projectValue) (AC.funcSigAllArgsRepr sig)
+        let args = Some $ (AC.funcSigAllArgsRepr sig)
         let ret = Some (AC.funcSigBaseRepr sig)
         FormulaEnv fenv <- MSS.gets sFormulaEnv
         MSS.modify' $ \s -> s { sFormulaEnv = FormulaEnv $ Map.insert nm (args, ret) fenv }
@@ -507,6 +507,21 @@ testExprEquality (B.ExprSymFn _ _ fnInfo _) (B.ExprSymFn _ _ fnInfo' _) = case (
   (B.DefinedFnInfo _ expr _, B.DefinedFnInfo _ expr' _) -> expr == expr'
   _ -> False
 
+data SimulationException =
+    SimulationDeserializationFailure String T.Text
+  | SimulationDeserializationMismatch T.Text
+  | SimulationFailure
+
+instance Show SimulationException where
+  show se = case se of
+    SimulationDeserializationFailure err formula ->
+      "SimulationDeserializationFailure:\n" ++ err ++ "\n" ++ T.unpack formula
+    SimulationDeserializationMismatch formula ->
+      "SimulationDeserializationMismatch:\n" ++ T.unpack formula
+    SimulationFailure -> "SimulationFailure"
+instance X.Exception SimulationException
+
+
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
 simulateFunction :: IsARMArch arch
@@ -536,15 +551,14 @@ simulateFunction fromInstr key deps p = do
           when checkSerialization $ B.startCaching backend
           symFn <- ASL.simulateFunction cfg p
           let serializedSymFn = FP.printFunctionFormula symFn
-          when checkSerialization $ do
+          ex <- if checkSerialization then do
             lcfg <- U.mkLogCfg "check serialization"
             fenv' <- getUninterpretedFEnv backend deps fenv
             res <- U.withLogCfg lcfg $
               readDefinedFunction backend fenv' serializedSymFn
             case res of
               Left err -> do
-                hPutStrLn stderr $ ("Failed to parse serialized function formula " ++ (prettyKey key) ++ "!"
-                                    ++ "\n    " ++ err)
+                return $ Just $ SimulationDeserializationFailure err serializedSymFn
               Right (Some symFn') -> do
                 logMsgIO opts 1 $ "Serialization/Deserialization succeeded."
                 case (symFn, symFn') of
@@ -552,18 +566,23 @@ simulateFunction fromInstr key deps p = do
                     | Just Refl <- testEquality argTypes argTypes'
                     , Just Refl <- testEquality retType retType' -> do
                       if (testExprEquality fn fn')
-                        then logMsgIO opts 1 $ "Serialized function matches."
-                        else logMsgIO opts 0 $ T.pack $ "Deserialized function does not match for " ++ (prettyKey key)
-          return $ Right (nm, Some symFn, serializedSymFn)
+                        then do
+                          logMsgIO opts 1 $ "Serialized function matches."
+                          return Nothing
+                        else return $ Just $ SimulationDeserializationMismatch serializedSymFn
+            else return Nothing
+          return $ Right (nm, Some symFn, serializedSymFn, ex)
   case mresult of
     Just result -> do
       logMsg 1 "Simulation succeeded!"
       case result of
-        Right (nm, Some symFn, serializedSymFn) -> do
+        Right (nm, Some symFn, serializedSymFn, mex) -> do
           MSS.modify $ \s -> s { sFormulas = Map.insert key serializedSymFn (sFormulas s) }
+          case mex of
+            Just ex -> void $ catchIO key $ X.throw ex
+            _ -> return ()
         _ -> return ()
-    _ -> do
-      logMsg 1 "Simulation failed."
+    _ -> X.throw $ SimulationFailure
 
 getASL :: TranslatorOptions -> IO (ASLSpec)
 getASL opts = do
@@ -621,10 +640,12 @@ data ExpectedException =
   | CruciblePanic
   | ASLSpecMissingZeroCheck
   | BVLengthFromGlobalState
+  | PrinterParserError
    deriving (Eq, Ord, Show)
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
+  SimExcept _ (SimulationDeserializationMismatch _) -> Just $ PrinterParserError
   SExcept _ (TypeNotFound "real") -> Just $ RealValueUnsupported
   -- TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
@@ -752,6 +773,7 @@ prettyKey (KeyFun fnName) = T.unpack fnName
 data TranslatorException =
     TExcept ElemKey TranslationException
   | SExcept ElemKey SigException
+  | SimExcept ElemKey SimulationException
   | BadTranslatedInstructionsFile
   | SomeExcept X.SomeException
 
@@ -759,6 +781,7 @@ instance Show TranslatorException where
   show e = case e of
     TExcept k te -> "Translator exception in: " ++ prettyKey k ++ "\n" ++ show te
     SExcept k se -> "Signature exception in:" ++ prettyKey k ++ "\n" ++ show se
+    SimExcept k se -> "Simulation exception in:" ++ prettyKey k ++ "\n" ++ show se
     SomeExcept err -> "General exception:\n" ++ show err
 
 instance X.Exception TranslatorException
@@ -866,6 +889,7 @@ catchIO :: ElemKey -> IO a -> SigMapM sym arch (Maybe a)
 catchIO k f = do
   a <- liftIO ((Left <$> f)
                   `X.catch` (\(e :: TranslationException) -> return $ Right $ TExcept k e)
+                  `X.catch` (\(e :: SimulationException) -> return $ Right $ SimExcept k e)
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
     Left r -> return (Just r)

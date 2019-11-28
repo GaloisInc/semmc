@@ -33,9 +33,9 @@ module SemMC.ASL.Signature (
   , FunctionArg(..)
   ) where
 
-import           Data.Parameterized.Classes
 import           Data.Parameterized.Ctx ( type (<+>) )
 import           Data.Parameterized.Context ( (<++>) )
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
@@ -65,7 +65,7 @@ data FunctionSignature globalReads globalWrites init tps =
   deriving (Show)
 
 type FuncReturnCtx globalWrites tps =
-  (Ctx.EmptyCtx Ctx.::> CT.BaseStructType globalWrites Ctx.::> CT.BaseStructType tps)
+  (Ctx.EmptyCtx Ctx.::> (CT.BaseStructType globalWrites) Ctx.::> (CT.BaseStructType tps))
 
 type FuncReturn globalWrites tps =
   CT.SymbolicStructType (FuncReturnCtx globalWrites tps)
@@ -99,8 +99,8 @@ funcSigBaseRepr fSig = CT.BaseStructRepr
   (Ctx.empty Ctx.:> (projectStruct $ funcGlobalWriteReprs fSig) Ctx.:> CT.BaseStructRepr (funcRetRepr fSig))
 
 funcSigAllArgsRepr :: FunctionSignature globalReads globalWrites init tps
-               -> Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) (init <+> globalReads)
-funcSigAllArgsRepr fSig = FC.fmapFC (\(LabeledValue (FunctionArg nm _ _) t) -> LabeledValue nm t) (funcArgReprs fSig) <++> (funcGlobalReadReprs fSig)
+               -> Ctx.Assignment WT.BaseTypeRepr (init Ctx.::> WT.BaseStructType globalReads)
+funcSigAllArgsRepr fSig = FC.fmapFC projectValue (funcArgReprs fSig) Ctx.:> projectStruct (funcGlobalReadReprs fSig)
 
 
 someSigRepr :: SomeFunctionSignature ret -> CT.TypeRepr ret
