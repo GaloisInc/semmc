@@ -52,6 +52,8 @@ import           Data.Typeable
 import qualified Data.BitVector.Sized as BVS
 import           Data.Maybe ( fromMaybe, catMaybes, maybeToList )
 import qualified Data.Bimap as BM
+import           Data.Void ( Void )
+import qualified Data.Void as Void
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
@@ -309,7 +311,7 @@ data TranslationState h ret s =
                    , tsFunctionSigs :: Map.Map T.Text SomeSimpleFunctionSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
-                   , tsHandle :: STRef.STRef h (Map.Map T.Text StaticValues)
+                   , tsHandle :: STRef.STRef h (Set.Set (T.Text,StaticValues))
                    -- ^ Used to name functions encountered during translation
                    , tsStaticValues :: StaticValues
                    -- ^ Environment to give concrete instantiations to polymorphic variables
@@ -421,9 +423,8 @@ abnormalExit :: Overrides arch -> Generator h s arch ret ()
 abnormalExit ov = do
   SomeFunctionSignature sig <- MS.gets tsSig
   let retT = CT.SymbolicStructRepr (funcRetRepr sig)
-  let expr = getDefaultValue retT
-  atom <- mkAtom expr
-  returnWithGlobals atom
+  defaultv <- getDefaultValue retT
+  returnWithGlobals defaultv
 
 returnWithGlobals :: ret ~ FuncReturn globalWrites tps
                   => CCG.Atom s (CT.SymbolicStructType tps)
@@ -495,7 +496,7 @@ translateStatement' ov stmt
       _ -> throwTrace $ UnsupportedStmt stmt
 
 
-translateFunctionCall :: forall arch h s ret e
+translateFunctionCall :: forall e arch h s ret
                        . InputArgument s e
                       => Overrides arch
                       -> AS.QualifiedIdentifier
@@ -503,6 +504,7 @@ translateFunctionCall :: forall arch h s ret e
                       -> TypeConstraint
                       -> Generator h s arch ret (Maybe (Some (CCG.Atom s), ExtendedTypeData))
 translateFunctionCall ov qIdent args ty = do
+  logMsg 2 $ "CALL: " <> (T.pack (show qIdent))
   sigMap <- MS.gets tsFunctionSigs
   let ident = mkFunctionName qIdent (length args)
   case Map.lookup ident sigMap of
@@ -1003,25 +1005,25 @@ translatelValSlice ov lv slice asnAtom' constraint = do
 -- | Get the "default" value for a given crucible type. We can't use unassigned
 -- registers, as ASL functions occasionally return values uninitialized.
 getDefaultValue :: CT.TypeRepr tp
-                -> CCG.Expr (ASLExt arch) s tp
+                -> Generator h s arch ret (CCG.Atom s tp)
 getDefaultValue repr = case repr of
-  CT.BVRepr wRepr -> CCG.App $ CCE.BVUndef wRepr
+  CT.BVRepr _ -> mkUF "UNDEFINED_bitvector" repr
   CT.SymbolicStructRepr tps -> do
     let crucAsn = toCrucTypes tps
-    if | Refl <- baseCrucProof tps ->
-          CCG.App $ CCE.ExtensionApp $ MkBaseStruct crucAsn (FC.fmapFC getDefaultValue crucAsn)
-  CT.IntegerRepr -> mkUF "UNDEFINED_Integer" repr
-  CT.NatRepr -> mkUF "UNDEFINED_Nat" repr
-  CT.BoolRepr -> mkUF "UNDEFINED_Bool" repr
-  CT.SymbolicArrayRepr idx xs -> mkUF "UNDEFINED_Array" repr
+    if | Refl <- baseCrucProof tps -> do
+         fields <- FC.traverseFC getDefaultValue crucAsn
+         mkAtom $ CCG.App $ CCE.ExtensionApp $
+           MkBaseStruct crucAsn (FC.fmapFC CCG.AtomExpr fields)
+  CT.IntegerRepr -> mkUF "UNDEFINED_integer" repr
+  CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
+  -- CT.SymbolicArrayRepr idx xs -> mkUF "UNDEFINED_Array" repr
   _ -> error $ "Invalid undefined value: " <> show repr
   where
-    mkUF :: T.Text -> CT.TypeRepr tp -> CCG.Expr (ASLExt arch) s tp
-    mkUF nm repr = case CT.asBaseType repr of
-      CT.AsBaseType brepr -> do
-        let uf = UF nm brepr Ctx.empty Ctx.empty
-        CCG.App (CCE.ExtensionApp uf)
-      _ -> error $ "Illegal crucible type: " <> show repr
+    mkUF :: T.Text -> CT.TypeRepr tp -> Generator h s arch ret (CCG.Atom s tp)
+    mkUF nm repr = do
+      Just (Some atom, _) <- translateFunctionCall @Void overrides (AS.VarName nm) [] (ConstraintSingle repr)
+      Refl <- assertAtomType' repr atom
+      return $ atom
 
 
 -- | Put a new local in scope and initialize it to an undefined value
@@ -1036,8 +1038,8 @@ declareUndefinedVar ty ident = do
   tty <- translateType ty
   case tty of
     Some rep -> do
-      e <- return $ getDefaultValue rep
-      reg <- Generator $ CCG.newReg e
+      defaultv <- getDefaultValue rep
+      reg <- Generator $ CCG.newReg (CCG.AtomExpr defaultv)
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 
@@ -1272,7 +1274,10 @@ instance InputArgument s (Some (CCG.Atom s)) where
     return (Some atom)
   collectStaticValues _ _ _ = return ()
 
-
+-- | For functions without arguments
+instance InputArgument s Void where
+  unifyArg _ _ _ v = Void.absurd v
+  collectStaticValues _ _ v = Void.absurd v
 
 asBaseType :: Some CT.TypeRepr -> Some WT.BaseTypeRepr
 asBaseType (Some t) = case CT.asBaseType t of
@@ -1305,7 +1310,7 @@ unifyArgs ov fnname fargs rets constraint = do
   listenv <- mapM (getConcreteValue tenv) dvars
   let env = Map.fromList listenv
   hdl <- MS.gets tsHandle
-  MST.liftST (STRef.modifySTRef hdl (Map.insert fnname env))
+  MST.liftST (STRef.modifySTRef hdl (Set.insert (fnname,env)))
   return (mkFinalFunctionName env fnname, atoms, retT)
   where
     unifyRet :: [AS.Type] -- return type of function
@@ -1335,8 +1340,9 @@ initVars :: [Some (CCG.Reg s)]
 initVars regs = do
     mapM_ initVar regs
   where
-    initVar (Some reg) =
-      Generator $ CCG.assignReg reg (getDefaultValue (CCG.typeOfReg reg))
+    initVar (Some reg) = do
+      defaultVal <- getDefaultValue (CCG.typeOfReg reg)
+      Generator $ CCG.assignReg reg (CCG.AtomExpr defaultVal)
 
 -- | Statement-level if-then-else. Newly assigned variables from
 -- either branch are implicitly assigned to default
@@ -1536,7 +1542,8 @@ translateExpr'' ov expr ty = do
           -- FIXME: Should this trip a global flag?
           AS.ExprImpDef _ t -> do
             Some ty <- translateType t
-            mkAtom' (getDefaultValue ty)
+            defaultv <- getDefaultValue ty
+            return (Some defaultv, TypeBasic)
 
           AS.ExprMember struct memberName -> do
             (Some structAtom, ext) <- translateExpr' ov struct ConstraintNone
@@ -1593,7 +1600,9 @@ translateExpr'' ov expr ty = do
                | otherwise -> throwTrace $ UnsupportedExpr expr
           AS.ExprUnknown t -> do
             Some ty <- translateType t
-            mkAtom' (getDefaultValue ty)
+            defaultv <- getDefaultValue ty
+            return (Some defaultv, TypeBasic)
+
           _ -> throwTrace $ UnsupportedExpr expr
   where
     basicExpr f = do
@@ -1697,56 +1706,51 @@ getSliceRange :: Overrides arch
               -> TypeConstraint
               -> Generator h s arch ret (SliceRange s)
 getSliceRange ov slice slicedAtom constraint = do
-  range <- getSlice
-  sliceValidTests ov range
-  return range
-  where
-    getSlice = do
-      (loAtom, hiAtom) <- getSymbolicSliceRange ov slice
-      mLength <- getStaticSliceLength slice
-      (Some lenRepr :: Some WT.NatRepr, signed :: Bool) <- case mLength of
-        Just (Some (BVRepr length)) -> return $ (Some length, False)
-        _ -> case constraint of
-          ConstraintSingle (CT.BVRepr length) -> return $ (Some length, False)
-          ConstraintHint (HintMaxBVSize maxlength) ->
-            case CCG.typeOfAtom slicedAtom of
-              CT.BVRepr wRepr -> case wRepr `WT.testNatCases` maxlength of
-                WT.NatCaseEQ -> return $ (Some wRepr, False)
-                WT.NatCaseLT _ -> return $ (Some wRepr, False)
-                WT.NatCaseGT WT.LeqProof -> return $ (Some maxlength, False)
-              CT.IntegerRepr -> return $ (Some maxlength, False)
-              _ -> throwTrace $ UnsupportedSlice slice constraint
-          ConstraintHint (HintMaxSignedBVSize maxlength) ->
-            case CCG.typeOfAtom slicedAtom of
-              CT.BVRepr wRepr -> case wRepr `WT.testNatCases` maxlength of
-                WT.NatCaseEQ -> return $ (Some wRepr, False)
-                WT.NatCaseLT _ -> return $ (Some wRepr, False)
-                WT.NatCaseGT WT.LeqProof -> return $ (Some maxlength, True)
-              CT.IntegerRepr -> return $ (Some maxlength, True)
-              _ -> throwTrace $ UnsupportedSlice slice constraint
-          ConstraintHint HintAnyBVSize ->
-            case CCG.typeOfAtom slicedAtom of
-              CT.BVRepr wRepr -> return $ (Some wRepr, False)
-              _ -> throwTrace $ UnsupportedSlice slice constraint
+  (loAtom, hiAtom) <- getSymbolicSliceRange ov slice
+  mLength <- getStaticSliceLength slice
+  (Some lenRepr :: Some WT.NatRepr, signed :: Bool) <- case mLength of
+    Just (Some (BVRepr length)) -> return $ (Some length, False)
+    _ -> case constraint of
+      ConstraintSingle (CT.BVRepr length) -> return $ (Some length, False)
+      ConstraintHint (HintMaxBVSize maxlength) ->
+        case CCG.typeOfAtom slicedAtom of
+          CT.BVRepr wRepr -> case wRepr `WT.testNatCases` maxlength of
+            WT.NatCaseEQ -> return $ (Some wRepr, False)
+            WT.NatCaseLT _ -> return $ (Some wRepr, False)
+            WT.NatCaseGT WT.LeqProof -> return $ (Some maxlength, False)
+          CT.IntegerRepr -> return $ (Some maxlength, False)
           _ -> throwTrace $ UnsupportedSlice slice constraint
-      WT.LeqProof <- case (WT.knownNat @1) `WT.testLeq` lenRepr of
-        Just x -> return x
-        _ -> throwTrace $ UnsupportedSlice slice constraint
-      case CCG.typeOfAtom slicedAtom of
-        CT.BVRepr wRepr
-          | Just WT.LeqProof <- lenRepr `WT.testLeq` wRepr ->
-            return $ SliceRange signed lenRepr wRepr loAtom hiAtom slicedAtom
-        CT.IntegerRepr -> do
-          env <- getStaticEnv
-          let (_, hi) = normalizeSlice slice
-          case SE.exprToStatic env hi of
-            Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
-                if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
-                     intAtom <- mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
-                     return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
-                   | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
-            _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
-        _ -> throwTrace $ UnsupportedSlice slice constraint
+      ConstraintHint (HintMaxSignedBVSize maxlength) ->
+        case CCG.typeOfAtom slicedAtom of
+          CT.BVRepr wRepr -> case wRepr `WT.testNatCases` maxlength of
+            WT.NatCaseEQ -> return $ (Some wRepr, False)
+            WT.NatCaseLT _ -> return $ (Some wRepr, False)
+            WT.NatCaseGT WT.LeqProof -> return $ (Some maxlength, True)
+          CT.IntegerRepr -> return $ (Some maxlength, True)
+          _ -> throwTrace $ UnsupportedSlice slice constraint
+      ConstraintHint HintAnyBVSize ->
+        case CCG.typeOfAtom slicedAtom of
+          CT.BVRepr wRepr -> return $ (Some wRepr, False)
+          _ -> throwTrace $ UnsupportedSlice slice constraint
+      _ -> throwTrace $ UnsupportedSlice slice constraint
+  WT.LeqProof <- case (WT.knownNat @1) `WT.testLeq` lenRepr of
+    Just x -> return x
+    _ -> throwTrace $ UnsupportedSlice slice constraint
+  case CCG.typeOfAtom slicedAtom of
+    CT.BVRepr wRepr
+      | Just WT.LeqProof <- lenRepr `WT.testLeq` wRepr ->
+        return $ SliceRange signed lenRepr wRepr loAtom hiAtom slicedAtom
+    CT.IntegerRepr -> do
+      env <- getStaticEnv
+      let (_, hi) = normalizeSlice slice
+      case SE.exprToStatic env hi of
+        Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
+            if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
+                 intAtom <- mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
+                 return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
+               | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
+        _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
+    _ -> throwTrace $ UnsupportedSlice slice constraint
 
 translateSlice :: Overrides arch
                -> AS.Expr
@@ -1757,28 +1761,6 @@ translateSlice ov e slice constraint = do
    Some atom <- translateExpr ov e
    translateSlice' ov atom slice constraint
 
-sliceValidTests :: Overrides arch
-                -> SliceRange s
-                -> Generator h s arch ret ()
-sliceValidTests ov (SliceRange _ lenRepr wRepr loAtom hiAtom atom) = let
-    lo = CCG.AtomExpr loAtom
-    hi = CCG.AtomExpr hiAtom
-    len = CCG.App (CCE.IntLit (CT.intValue lenRepr))
-    wlen = CCG.App (CCE.IntLit (CT.intValue wRepr))
-
-    tests = map CCG.App
-      [ CCE.IntLe lo hi
-        -- lo <= hi
-      , CCE.IntLe (CCG.App (CCE.IntAdd (CCG.App $ CCE.IntSub hi lo) (CCG.App $ CCE.IntLit 1))) len
-        -- (hi - lo) + 1 <= len
-      , CCE.IntLe (CCG.App (CCE.IntAdd hi (CCG.App $ CCE.IntLit 1))) wlen
-        -- hi + 1 <= wlen
-      ]
-    in mapM_ mkTest tests
-  where
-    mkTest test = do
-      atest <- mkAtom test
-      assertAtom ov atest Nothing ("Slicing constraint failure: " <> (T.pack $ show test))
 
 translateSlice' :: Overrides arch
                 -> CCG.Atom s tp

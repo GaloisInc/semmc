@@ -464,7 +464,10 @@ globalFunctions =
   , ("setSlice", 4)
   , ("getSlice", 4)
   , ("packRegister", 2)
-  , ("unpackRegister", 1)]
+  , ("unpackRegister", 1)
+  , ("UNDEFINED_bitvector", 0)
+  , ("UNDEFINED_integer", 0)
+  , ("UNDEFINED_boolean", 0)]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do
@@ -850,9 +853,10 @@ globalsOfStmts stmts = let
       AS.LValMemberBits e bits ->
         mconcat <$> traverse (TR.collectSyntax collectors) (map (AS.LValMember e) bits)
       _ -> return mempty
-    TR.SyntaxStmtRepr
-      | AS.StmtCase _ alts <- syn ->
+    TR.SyntaxStmtRepr -> case syn of
+      AS.StmtCase _ alts ->
         mconcat <$> traverse caseAlternativeGlobalVars alts
+      _ -> return mempty
     TR.SyntaxCallRepr -> collectCallables (\c args -> callableGlobalVars c) syn
     _ -> return mempty
   in collectStmts "globalsOfStmts" collectors stmts

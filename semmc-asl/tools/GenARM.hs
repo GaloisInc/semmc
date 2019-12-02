@@ -339,16 +339,16 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
           logMsg 1 $ "Translating instruction: " <> T.pack (prettyIdent instrIdent)
           logMsg 1 $ T.pack $ (show iSig)
           mfunc <- translateFunction instrIdent (KeyInstr instrIdent) iSig instStmts defs
-          let deps = maybe Map.empty AC.funcDepends mfunc
+          let deps = maybe Set.empty AC.funcDepends mfunc
           MSS.gets (optTranslationDepth . sOptions) >>= \case
             TranslateRecursive -> do
               logMsg 1 $ "--------------------------------"
               logMsg 1 $ "Translating functions: "
-              alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
+              alldeps <- mapM (translationLoop instrIdent [] defs) (Set.toList deps)
               let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
               MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
             TranslateShallow -> return ()
-          maybeSimulateFunction instrIdent (KeyInstr instrIdent) deps mfunc
+          maybeSimulateFunction instrIdent (KeyInstr instrIdent) (finalDepsOf deps) mfunc
 
 -- FIXME: hack to inject concrete type parameter
 toDefinitions32 :: Definitions arch -> Definitions A32
@@ -387,12 +387,13 @@ translationLoop fromInstr callStack defs' (fnname, env) = do
                ++ "\n CallStack: " ++ show callStack
                ++ "\n" ++ show sig ++ "\n"
             mfunc <- translateFunction fromInstr (KeyFun finalName) sig stmts defs
-            let deps = maybe Map.empty AC.funcDepends mfunc
+            let deps = maybe Set.empty AC.funcDepends mfunc
+            logMsg 2 $ T.pack $ "Function Dependencies: " ++ show deps
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
-            alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
+            alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Set.toList deps)
             let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
-            maybeSimulateFunction fromInstr (KeyFun finalName) deps mfunc
+            maybeSimulateFunction fromInstr (KeyFun finalName) (finalDepsOf deps) mfunc
             return alldepsSet
 
 execSigMapWithScope :: TranslatorOptions
@@ -469,16 +470,15 @@ translateFunction fromInstr key sig stmts defs = do
 maybeSimulateFunction :: IsARMArch arch
                       => InstructionIdent
                       -> ElemKey
-                      -> Map.Map T.Text StaticValues -- ^ immediate function dependencies
+                      -> Set.Set T.Text -- ^ immediate function dependencies
                       -> Maybe (AC.Function arch globalReads globalWrites init tps)
                       -> SigMapM sym arch ()
 maybeSimulateFunction fromInstr key deps mfunc = do
-  let finaldeps = Set.fromList $ map (\(nm,env) -> mkFinalFunctionName env nm) (Map.assocs deps)
   filteredOut <- case key of
     KeyInstr instr -> isInstrTransFilteredOut instr
     KeyFun fnName -> isFunTransFilteredOut fromInstr fnName
   case (mfunc, filteredOut) of
-    (Just func, False) -> simulateFunction fromInstr key finaldeps func
+    (Just func, False) -> simulateFunction fromInstr key deps func
     _ -> return ()
 
 getUninterpretedFEnv :: forall sym arch
@@ -797,8 +797,8 @@ deriving instance Ord InstructionIdent
 instrToIdent :: AS.Instruction -> T.Text -> AS.InstructionSet -> InstructionIdent
 instrToIdent AS.Instruction{..} enc iset = InstructionIdent instName enc iset
 
-finalDepsOf :: Map.Map T.Text StaticValues -> Set.Set T.Text
-finalDepsOf deps = Set.fromList (map (\(nm, env) -> mkFinalFunctionName env nm) (Map.assocs deps))
+finalDepsOf :: Set.Set (T.Text, StaticValues) -> Set.Set T.Text
+finalDepsOf deps = Set.map (\(nm, env) -> mkFinalFunctionName env nm) deps
 
 
 data Filters = Filters { funFilter :: InstructionIdent -> T.Text -> Bool

@@ -12,6 +12,18 @@ integer IntMod(integer i1, integer i2)
 integer IntDiv(integer i1, integer i2)
     return primitive(i1 / i2);
 
+// Undefined values. UNKNOWN actually loops back to just calling these, so
+// we need to tie this off somewhere.
+
+bits(N) UNDEFINED_bitvector()
+    return bits(N) UNKNOWN;
+
+integer UNDEFINED_integer()
+    return integer UNKNOWN;
+
+boolean UNDEFINED_boolean()
+    return boolean UNKNOWN;
+
 
 // Unclear how to actually determine the register index
 (bits(32), bits(4)) unpackRegister(bits(32) register)
@@ -539,6 +551,9 @@ TLBRecord AArch32.TranslationTableWalkSD(bits(32) vaddress, AccType acctype, boo
   return result;
 
 // Misc stubs for system and debug functions
+
+DCPSInstruction(bits(2) target_el)
+    return;
 
 ConsumptionOfSpeculativeDataBarrier()
     return;

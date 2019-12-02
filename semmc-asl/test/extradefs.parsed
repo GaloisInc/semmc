@@ -126,6 +126,58 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any i2)))))))))))
   (DefCallable
+    (QualifiedIdentifier Any UNDEFINED_bitvector)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprUnknown
+                (TypeFun
+                  bits
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any UNDEFINED_integer)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprUnknown
+                (TypeRef
+                  (QualifiedIdentifier Any integer)))))))))
+  (DefCallable
+    (QualifiedIdentifier Any UNDEFINED_boolean)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprUnknown
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
+  (DefCallable
     (QualifiedIdentifier Any unpackRegister)
     (list
       (SymDecl
@@ -3850,6 +3902,19 @@
             (Just
               (ExprVarRef
                 (QualifiedIdentifier Any result))))))))
+  (DefCallable
+    (QualifiedIdentifier Any DCPSInstruction)
+    (list
+      (SymDecl
+        target_el
+        (TypeFun
+          bits
+          (ExprLitNat 2))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier Any ConsumptionOfSpeculativeDataBarrier)
     (list)

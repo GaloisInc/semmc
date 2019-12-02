@@ -59,6 +59,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Nonce ( newSTNonceGenerator )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
+import qualified Data.Set as Set
 import qualified Data.List as List
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -90,7 +91,7 @@ data Function arch globalReads globalWrites init tps =
    Function { funcSig :: FunctionSignature globalReads globalWrites init tps
             , funcCFG :: CCC.SomeCFG (ASLExt arch) (ToCrucTypes init) (FuncReturn globalWrites tps)
             , funcGlobalReads :: Ctx.Assignment BaseGlobalVar globalReads
-            , funcDepends :: Map.Map T.Text StaticValues
+            , funcDepends :: Set.Set (T.Text, StaticValues)
             }
 
 -- | This type alias is a constraint relating the 'globals' (base types) to the
@@ -154,12 +155,12 @@ printLog log = putStrLn (T.unpack $ T.unlines $ List.reverse $ log)
 defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
                -> CFH.FnHandle init ret
-               -> ((STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text]) ->
+               -> ((STRef.STRef h (Set.Set (T.Text,StaticValues)), STRef.STRef h [T.Text]) ->
                     CCG.FunctionDef ext t init ret (ST h))
-               -> ST h ((CCG.SomeCFG ext init ret, Map.Map T.Text StaticValues), [T.Text])
+               -> ST h ((CCG.SomeCFG ext init ret, Set.Set (T.Text,StaticValues)), [T.Text])
 defineCCGFunction p h f = do
     ng <- newSTNonceGenerator
-    funDepRef <- STRef.newSTRef Map.empty
+    funDepRef <- STRef.newSTRef Set.empty
     logRef <- STRef.newSTRef []
     (cfg, _) <- CCG.defineFunction p ng h (f (funDepRef, logRef))
     log <- STRef.readSTRef logRef
@@ -169,7 +170,7 @@ defineCCGFunction p h f = do
 funcDef :: (ReturnsGlobals ret globalWrites tps)
         => Definitions arch
         -> FunctionSignature globalReads globalWrites init tps
-        -> (STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text])
+        -> (STRef.STRef h (Set.Set (T.Text, StaticValues)), STRef.STRef h [T.Text])
         -> Ctx.Assignment BaseGlobalVar globalReads
         -> [AS.Stmt]
         -> Integer -- ^ Logging level
@@ -182,7 +183,7 @@ funcInitialState :: forall init globalReads globalWrites tps h s arch ret
                   . (ReturnsGlobals ret globalWrites tps)
                  => Definitions arch
                  -> FunctionSignature globalReads globalWrites init tps
-                 -> (STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text])
+                 -> (STRef.STRef h (Set.Set (T.Text, StaticValues)), STRef.STRef h [T.Text])
                  -> Integer -- ^ Logging level
                  -> Ctx.Assignment BaseGlobalVar globalReads
                  -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
