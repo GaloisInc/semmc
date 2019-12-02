@@ -676,7 +676,6 @@ readApp opRaw@(SC.SAtom (AIdent operator)) operands = do
                          (show resRepr)
                          (show (S.exprType expr))
           "updateArray" -> do
-            -- Note, this is identical to "store"... unsure why both exist...
             (Some arr, Some idx, Some expr)  <- readThreeArgs operands
             ArraySingleDim resRepr <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
             case testEquality resRepr (S.exprType expr) of
@@ -863,22 +862,25 @@ exprAssignment' :: (E.MonadError String m,
                     S.IsExpr ex)
                 => Ctx.Assignment BaseTypeRepr ctx
                 -> [Some ex]
+                -> Int
+                -> Int
                 -> m (Ctx.Assignment ex ctx)
-exprAssignment' (Ctx.viewAssign -> Ctx.AssignEmpty) [] = return Ctx.empty
-exprAssignment' (Ctx.viewAssign -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
+exprAssignment' (Ctx.viewAssign -> Ctx.AssignEmpty) [] _ _ = return Ctx.empty
+exprAssignment' (Ctx.viewAssign -> Ctx.AssignExtend restTps tp) (Some e : restExprs) idx len = do
   Refl <- case testEquality tp (S.exprType e) of
             Just pf -> return pf
-            Nothing -> E.throwError ("unexpected type, assigning to: " ++ show tp ++ " from expr: " ++ show (S.exprType e))
-  restAssn <- exprAssignment' restTps restExprs
+            Nothing -> E.throwError ("unexpected type in index " ++ (show idx) ++ " (total length " ++ (show len)
+                                     ++ "), assigning to: " ++ show tp ++ " from expr: " ++ show (S.exprType e))
+  restAssn <- exprAssignment' restTps restExprs (idx + 1) len
   return $ restAssn Ctx.:> e
-exprAssignment' _ _ = E.throwError "mismatching numbers of arguments"
+exprAssignment' _ _ _  _ = E.throwError "mismatching numbers of arguments"
 
 exprAssignment :: (E.MonadError String m,
                    S.IsExpr ex)
                => Ctx.Assignment BaseTypeRepr ctx
                -> [Some ex]
                -> m (Ctx.Assignment ex ctx)
-exprAssignment tpAssn exs = exprAssignment' tpAssn (reverse exs)
+exprAssignment tpAssn exs = exprAssignment' tpAssn (reverse exs) 0 (Ctx.sizeInt $ Ctx.size tpAssn)
 
 -- | Given the s-expressions for the bindings and body of a
 -- let, parse the bindings into the Reader monad's state and
