@@ -451,12 +451,15 @@ convertAppExpr' paramLookup = go . S.appExprApp
           s1 <- goE e1
           ss <- convertExprAssignment paramLookup es
           s2 <- goE e2
-          return $ SE.L [ ident' "updateArray", s1, ss, s2]
-
+          case ss of
+            SE.RSList [idx] -> return $ SE.L [ ident' "updateArray", s1, idx, s2]
+            _ -> error $ "multidimensional arrays not supported"
         go (S.SelectArray _ e es) = do
           s <- goE e
           ss <- convertExprAssignment paramLookup es
-          return $ SE.L [ ident' "select", s, ss]
+          case ss of
+            SE.RSList [idx] -> return $ SE.L [ ident' "select", s, idx]
+            _ -> error $ "multidimensional arrays not supported"
 
         go app = error $ "unhandled App: " ++ show app
 
