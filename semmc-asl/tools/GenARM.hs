@@ -483,12 +483,15 @@ maybeSimulateFunction fromInstr key deps mfunc = do
 
 getUninterpretedFEnv :: forall sym arch
                       . WI.IsSymExprBuilder sym
-                     => sym
+                     => TranslatorOptions
+                     -> sym
                      -> Set.Set T.Text -- ^ immediate function dependencies
                      -> FormulaEnv arch
                      -> IO (FE.FormulaEnv sym arch)
-getUninterpretedFEnv sym deps (FormulaEnv fenv) = do
+getUninterpretedFEnv opts sym deps (FormulaEnv fenv) = do
   let depenv = Map.assocs $ Map.restrictKeys fenv deps
+  logMsgIO opts 3 $ "Serialization formula environment:"
+  logMsgIO opts 3 $ T.pack (show depenv)
   undefinedBit <- WI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
   ufs <- Map.fromList <$> mapM toUF depenv
   return FE.FormulaEnv { FE.envFunctions = ufs
@@ -553,7 +556,7 @@ simulateFunction fromInstr key deps p = do
           let serializedSymFn = FP.printFunctionFormula symFn
           ex <- if checkSerialization then do
             lcfg <- U.mkLogCfg "check serialization"
-            fenv' <- getUninterpretedFEnv backend deps fenv
+            fenv' <- getUninterpretedFEnv opts backend deps fenv
             res <- U.withLogCfg lcfg $
               readDefinedFunction backend fenv' serializedSymFn
             case res of

@@ -161,7 +161,7 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
         CT.NotBaseType -> X.throwIO (NonBaseTypeReturn (CS.regType re))
         CT.AsBaseType btr
           | Just Refl <- testEquality btr retType -> do
-              -- print (WI.printSymExpr (CS.regValue re))
+              --print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName sig)
                   globalReadBVs = FC.fmapFC freshArgBoundVar freshGlobals
                   argBVs = FC.fmapFC freshArgBoundVar initArgs

@@ -1096,7 +1096,7 @@ mkSignature env sig =
         , funcRetRepr = retTs
         , funcArgReprs = args
         , funcGlobalReadReprs = sfuncGlobalReadReprs fsig
-        , funcGlobalWriteReprs = sfuncGlobalReadReprs fsig
+        , funcGlobalWriteReprs = sfuncGlobalWriteReprs fsig
         , funcStaticVals = env
         }
   where
