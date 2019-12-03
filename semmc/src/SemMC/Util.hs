@@ -191,7 +191,7 @@ groundValToExpr sym indices (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
 
 
 groundValToExpr _ _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
-groundValToExpr _ _ BaseStringRepr     _ = error "groundValToExpr: string base types are not supported yet"
+groundValToExpr _ _ (BaseStringRepr _) _ = error "groundValToExpr: string base types are not supported yet"
 
 
 showGroundValue :: BaseTypeRepr b -> GE.GroundValue b -> String
@@ -202,7 +202,7 @@ showGroundValue BaseRealRepr r = show r
 showGroundValue (BaseBVRepr _w) i = show i
 showGroundValue (BaseFloatRepr _fpp) f = show f
 showGroundValue BaseComplexRepr i = show i
-showGroundValue BaseStringRepr s = show s
+showGroundValue (BaseStringRepr _) s = show s
 showGroundValue (BaseArrayRepr _idx _b) _i = "No show instance for BaseArrayRepr"
 showGroundValue (BaseStructRepr _ctx) _i = "No show instance for BaseStructType"
 
@@ -250,7 +250,7 @@ exprToGroundVal (BaseArrayRepr _iTp _elmTp) _e = Nothing
 exprToGroundVal (BaseStructRepr _r)          e = do
     v <- S.asStruct e
     traverseFC (\e' -> GE.GVW <$> exprToGroundVal @sym (S.exprType e') e') v
-exprToGroundVal BaseStringRepr               e = S.asString e
+exprToGroundVal (BaseStringRepr _)           e = S.asString e
 
 concreteToGVW :: W.ConcreteVal tp -> GE.GroundValueWrapper tp
 concreteToGVW = GE.GVW . concreteToGroundVal

@@ -182,7 +182,7 @@ readBaseType sexpr =
         "nat" -> return $ Some BaseNatRepr
         "int" -> return $ Some BaseIntegerRepr
         "real" -> return $ Some BaseRealRepr
-        "string" -> return $ Some BaseStringRepr
+        "string" -> return $ Some (BaseStringRepr UnicodeRepr)
         "complex" -> return $ Some BaseComplexRepr
         _ -> panic
     SC.SCons (SC.SAtom (AQuoted "bv")) (SC.SCons (SC.SAtom (AInt w)) SC.SNil)
