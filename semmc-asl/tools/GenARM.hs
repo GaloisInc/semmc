@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -481,6 +482,27 @@ maybeSimulateFunction fromInstr key deps mfunc = do
     (Just func, False) -> simulateFunction fromInstr key deps func
     _ -> return ()
 
+memoryUFSigs :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
+memoryUFSigs = concatMap mkUF [1,2,4,8,16]
+  where
+    ramRepr = WI.BaseArrayRepr (Ctx.empty Ctx.:> WI.BaseBVRepr (WI.knownNat @32)) (WI.BaseBVRepr (WI.knownNat @8))
+    mkUF :: Integer -> [(T.Text, (Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr))]
+    mkUF sz
+      | Just (Some szRepr) <- WI.someNat sz
+      , Just WI.LeqProof <- WI.knownNat @1 `WI.testLeq` szRepr
+      , bvSize <- (WI.knownNat @8) `WI.natMultiply` szRepr
+      , WI.LeqProof <- WI.leqMulPos (WI.knownNat @8) szRepr =
+        [( "write_mem_" <> (T.pack (show sz))
+         , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)) Ctx.:> WI.BaseBVRepr bvSize)
+           , Some ramRepr))
+        ,( "read_mem_" <> (T.pack (show sz))
+         , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)))
+           , Some (WI.BaseBVRepr bvSize)))
+        ]
+
+
+
+
 getUninterpretedFEnv :: forall sym arch
                       . WI.IsSymExprBuilder sym
                      => TranslatorOptions
@@ -493,7 +515,7 @@ getUninterpretedFEnv opts sym deps (FormulaEnv fenv) = do
   logMsgIO opts 3 $ "Serialization formula environment:"
   logMsgIO opts 3 $ T.pack (show depenv)
   undefinedBit <- WI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
-  ufs <- Map.fromList <$> mapM toUF depenv
+  ufs <- Map.fromList <$> mapM toUF (depenv ++ memoryUFSigs)
   return FE.FormulaEnv { FE.envFunctions = ufs
                        , FE.envUndefinedBit = undefinedBit
                        }
@@ -505,22 +527,26 @@ getUninterpretedFEnv opts sym deps (FormulaEnv fenv) = do
       uf <- FE.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
       return (("uf." ++ name), (uf, retRep))
 
-testExprEquality :: B.ExprSymFn scope args rets -> B.ExprSymFn scope args rets -> Bool
-testExprEquality (B.ExprSymFn _ _ fnInfo _) (B.ExprSymFn _ _ fnInfo' _) = case (fnInfo, fnInfo') of
-  (B.DefinedFnInfo _ expr _, B.DefinedFnInfo _ expr' _) -> expr == expr'
-  _ -> False
+checkExprEquality :: B.ExprSymFn scope args rets -> B.ExprSymFn scope args rets -> (Maybe SimulationException)
+checkExprEquality (B.ExprSymFn _ _ fnInfo _) (B.ExprSymFn _ _ fnInfo' _) = case (fnInfo, fnInfo') of
+  (B.DefinedFnInfo _ expr _, B.DefinedFnInfo _ expr' _) ->
+    if expr == expr' then
+       Nothing
+    else
+       Just $ SimulationDeserializationMismatch (show $ WI.printSymExpr expr) (show $ WI.printSymExpr expr')
+  _ -> error "Unexpected expression type"
 
 data SimulationException =
     SimulationDeserializationFailure String T.Text
-  | SimulationDeserializationMismatch T.Text
+  | SimulationDeserializationMismatch String String
   | SimulationFailure
 
 instance Show SimulationException where
   show se = case se of
     SimulationDeserializationFailure err formula ->
       "SimulationDeserializationFailure:\n" ++ err ++ "\n" ++ T.unpack formula
-    SimulationDeserializationMismatch formula ->
-      "SimulationDeserializationMismatch:\n" ++ T.unpack formula
+    SimulationDeserializationMismatch formula1 formula2 ->
+      "SimulationDeserializationMismatch:\nOriginal:\n" ++ formula1 ++ "\nDeserialized:\n" ++ formula2
     SimulationFailure -> "SimulationFailure"
 instance X.Exception SimulationException
 
@@ -568,11 +594,13 @@ simulateFunction fromInstr key deps p = do
                   (SF.FunctionFormula _ argTypes _ retType fn, SF.FunctionFormula _ argTypes' _ retType' fn')
                     | Just Refl <- testEquality argTypes argTypes'
                     , Just Refl <- testEquality retType retType' -> do
-                      if (testExprEquality fn fn')
-                        then do
-                          logMsgIO opts 1 $ "Serialized function matches."
+                      case (checkExprEquality fn fn') of
+                        Nothing -> do
+                          logMsgIO opts 1 $ "Deserialized function matches."
                           return Nothing
-                        else return $ Just $ SimulationDeserializationMismatch serializedSymFn
+                        Just err -> do
+                          logMsgIO opts 1 $ "Mismatch in deserialized function."
+                          return $ Just err
             else return Nothing
           return $ Right (nm, Some symFn, serializedSymFn, ex)
   case mresult of
@@ -648,7 +676,7 @@ data ExpectedException =
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
-  SimExcept _ (SimulationDeserializationMismatch _) -> Just $ PrinterParserError
+  -- SimExcept _ (SimulationDeserializationMismatch _ _) -> Just $ PrinterParserError
   SExcept _ (TypeNotFound "real") -> Just $ RealValueUnsupported
   -- TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation

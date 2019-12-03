@@ -279,7 +279,6 @@ liftGenerator2 :: Generator h s arch ret a
                -> Generator h s arch ret c
 liftGenerator2 (Generator f) (Generator g) m = Generator $ m f g
 
-
 mkAtom :: CCG.Expr (ASLExt arch) s tp -> Generator h s arch ret (CCG.Atom s tp)
 mkAtom e = liftGenerator $ CCG.mkAtom e
 
