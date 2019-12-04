@@ -44,10 +44,13 @@ import qualified Data.Text.IO as TIO
 
 import qualified Data.List as List
 import qualified Data.List.Split as List
+import qualified Data.Type.List as TL
 import qualified Data.Tree as Tree
 import           Data.List.Index (imap)
 import qualified Lang.Crucible.Backend.Simple as CBS
+import qualified Lang.Crucible.Backend as CBO
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.Simulator.SimError as CBO
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
@@ -82,6 +85,7 @@ import SemMC.ASL.Signature
 import SemMC.ASL.Types
 import SemMC.ASL.StaticExpr
 import SemMC.ASL.Exceptions
+import qualified SemMC.ASL.Extension as AE
 
 import Control.Concurrent
 import Control.Concurrent.MVar
@@ -456,15 +460,14 @@ translateFunction fromInstr key sig stmts defs = do
   logMsg 1 $ T.pack $ "Rough function body size:" ++ show (measureStmts stmts)
   handleAllocator <- MSS.gets sHandleAllocator
   logLvl <- MSS.gets (optVerbosity . sOptions)
-  (catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl) >>= \case
-    Just func | KeyFun nm <- key -> do
-        let sig = AC.funcSig func
-        let args = Some $ (AC.funcSigAllArgsRepr sig)
-        let ret = Some (AC.funcSigBaseRepr sig)
-        FormulaEnv fenv <- MSS.gets sFormulaEnv
-        MSS.modify' $ \s -> s { sFormulaEnv = FormulaEnv $ Map.insert nm (args, ret) fenv }
-        return $ Just func
-    mfunc -> return mfunc
+  case key of
+    KeyFun nm -> do
+      let args = Some $ (AC.funcSigAllArgsRepr sig)
+      let ret = Some (AC.funcSigBaseRepr sig)
+      FormulaEnv fenv <- MSS.gets sFormulaEnv
+      MSS.modify' $ \s -> s { sFormulaEnv = FormulaEnv $ Map.insert nm (args, ret) fenv }
+    _ -> return ()
+  catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl
 
 
 -- | Simulate a function if we have one, and it is not filtered out
@@ -503,38 +506,62 @@ memoryUFSigs = concatMap mkUF [1,2,4,8,16]
 
 
 
-getUninterpretedFEnv :: forall sym arch
+-- getUninterpretedFEnv :: forall sym arch
+--                       .
+--                      => TranslatorOptions
+--                      -> sym
+--                      -> Set.Set T.Text -- ^ immediate function dependencies
+--                      -> FormulaEnv arch
+--                      -> IO (FE.FormulaEnv sym arch)
+-- getUninterpretedFEnv opts sym deps (FormulaEnv fenv) = do
+--   let depenv = Map.assocs $ Map.restrictKeys fenv deps
+--   logMsgIO opts 3 $ "Serialization formula environment:"
+--   logMsgIO opts 3 $ T.pack (show depenv)
+--   undefinedBit <- WI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
+--   ufs <- Map.fromList <$> mapM toUF (depenv ++ memoryUFSigs)
+--   return FE.FormulaEnv { FE.envFunctions = ufs
+--                        , FE.envUndefinedBit = undefinedBit
+--                        }
+--   where
+--     toUF :: (T.Text, (Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr))
+--          -> IO (String, (FE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
+--     toUF (name', (Some args, retRep@(Some ret))) = do
+--       let name = T.unpack name'
+--       uf <- FE.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol name) args ret
+--       return (("uf." ++ name), (uf, retRep))
+
+getUninterpretedFEnv :: forall arch sym
                       . WI.IsSymExprBuilder sym
-                     => TranslatorOptions
-                     -> sym
-                     -> Set.Set T.Text -- ^ immediate function dependencies
-                     -> FormulaEnv arch
+                     => sym
+                     -> AE.SymFnEnv sym
                      -> IO (FE.FormulaEnv sym arch)
-getUninterpretedFEnv opts sym deps (FormulaEnv fenv) = do
-  let depenv = Map.assocs $ Map.restrictKeys fenv deps
-  logMsgIO opts 3 $ "Serialization formula environment:"
-  logMsgIO opts 3 $ T.pack (show depenv)
+getUninterpretedFEnv sym fenv = do
+  let ufs = Map.fromList $ map reshape (Map.assocs fenv)
   undefinedBit <- WI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
-  ufs <- Map.fromList <$> mapM toUF (depenv ++ memoryUFSigs)
   return FE.FormulaEnv { FE.envFunctions = ufs
                        , FE.envUndefinedBit = undefinedBit
                        }
   where
-    toUF :: (T.Text, (Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr))
-         -> IO (String, (FE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
-    toUF (name', (Some args, retRep@(Some ret))) = do
-      let name = T.unpack name'
-      uf <- FE.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
-      return (("uf." ++ name), (uf, retRep))
+    reshape :: (T.Text, AE.SymFnWrapper sym) -> (String, (FE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
+    reshape (nm, AE.SymFnWrapper fn _ retT) = ("uf." ++ (T.unpack nm), (FE.SomeSome fn, Some retT))
 
-checkExprEquality :: B.ExprSymFn scope args rets -> B.ExprSymFn scope args rets -> (Maybe SimulationException)
-checkExprEquality (B.ExprSymFn _ _ fnInfo _) (B.ExprSymFn _ _ fnInfo' _) = case (fnInfo, fnInfo') of
-  (B.DefinedFnInfo _ expr _, B.DefinedFnInfo _ expr' _) ->
-    if expr == expr' then
-       Nothing
-    else
-       Just $ SimulationDeserializationMismatch (show $ WI.printSymExpr expr) (show $ WI.printSymExpr expr')
-  _ -> error "Unexpected expression type"
+checkFunEquality :: CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) ~ sym
+                 => sym
+                 -> SF.FunctionFormula sym sig
+                 -> SF.FunctionFormula sym sig' -> IO (Maybe SimulationException)
+checkFunEquality sym (SF.FunctionFormula _ argTypes1 argVars1 retType1 fn1) (SF.FunctionFormula _ argTypes2 argVars2 retType2 fn2) =
+    if | Just Refl <- testEquality argTypes1 argTypes2
+       , Just Refl <- testEquality retType1 retType2
+       , B.ExprSymFn _ _ (B.DefinedFnInfo argBVs1 efn1 _) _ <- fn1
+       , B.ExprSymFn _ _ (B.DefinedFnInfo argBVs2 efn2 _) _ <- fn2 -> do
+         args <- FC.traverseFC (\bv -> WI.freshConstant sym (B.bvarName bv) (B.bvarType bv)) (TL.toAssignmentFwd argVars1)
+         expr1 <- B.evalBoundVars sym efn1 argBVs1 args
+         expr2 <- B.evalBoundVars sym efn2 argBVs2 args
+         case testEquality expr1 expr2 of
+           Just Refl -> return Nothing
+           Nothing ->
+             return $ Just $ SimulationDeserializationMismatch (show $ WI.printSymExpr expr1) (show $ WI.printSymExpr expr2)
+       | otherwise -> error "Unexpected function type"
 
 data SimulationException =
     SimulationDeserializationFailure String T.Text
@@ -553,7 +580,8 @@ instance X.Exception SimulationException
 
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
-simulateFunction :: IsARMArch arch
+simulateFunction :: forall arch sym globalReads globalWrites init tps
+                  . IsARMArch arch
                  => InstructionIdent
                  -> ElemKey
                  -> Set.Set T.Text -- ^ immediate function dependencies
@@ -562,7 +590,7 @@ simulateFunction :: IsARMArch arch
 simulateFunction fromInstr key deps p = do
   logMsg 1 $ T.pack $ "Simulating: " ++ prettyKey key
   checkSerialization <- MSS.gets (optCheckSerialization . sOptions)
-  fenv <- MSS.gets sFormulaEnv
+  gfenv <- MSS.gets sFormulaEnv
   opts <- MSS.gets sOptions
   handleAllocator <- MSS.gets sHandleAllocator
   NonceGeneratorSym nonceGenerator <- MSS.gets sNonceGenerator
@@ -574,33 +602,29 @@ simulateFunction fromInstr key deps p = do
                                     }
       case key of
         KeyInstr _ -> do
-          symInstr <- ASL.simulateInstruction cfg p
+          (symInstr, _) <- ASL.simulateInstruction cfg p
           return $ Left ()
         KeyFun nm -> do
           when checkSerialization $ B.startCaching backend
-          symFn <- ASL.simulateFunction cfg p
+          (symFn, fenv') <- ASL.simulateFunction cfg p
           let serializedSymFn = FP.printFunctionFormula symFn
           ex <- if checkSerialization then do
             lcfg <- U.mkLogCfg "check serialization"
-            fenv' <- getUninterpretedFEnv opts backend deps fenv
+            fenv <- getUninterpretedFEnv @arch backend fenv'
             res <- U.withLogCfg lcfg $
-              readDefinedFunction backend fenv' serializedSymFn
+              readDefinedFunction backend fenv serializedSymFn
             case res of
               Left err -> do
                 return $ Just $ SimulationDeserializationFailure err serializedSymFn
               Right (Some symFn') -> do
                 logMsgIO opts 1 $ "Serialization/Deserialization succeeded."
-                case (symFn, symFn') of
-                  (SF.FunctionFormula _ argTypes _ retType fn, SF.FunctionFormula _ argTypes' _ retType' fn')
-                    | Just Refl <- testEquality argTypes argTypes'
-                    , Just Refl <- testEquality retType retType' -> do
-                      case (checkExprEquality fn fn') of
-                        Nothing -> do
-                          logMsgIO opts 1 $ "Deserialized function matches."
-                          return Nothing
-                        Just err -> do
-                          logMsgIO opts 1 $ "Mismatch in deserialized function."
-                          return $ Just err
+                checkFunEquality backend symFn symFn' >>= \case
+                  Nothing -> do
+                    logMsgIO opts 1 $ "Deserialized function matches."
+                    return Nothing
+                  Just err -> do
+                    logMsgIO opts 1 $ "Mismatch in deserialized function."
+                    return $ Just err
             else return Nothing
           return $ Right (nm, Some symFn, serializedSymFn, ex)
   case mresult of

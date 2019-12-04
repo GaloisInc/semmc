@@ -13,13 +13,18 @@ module SemMC.ASL.Extension (
     ASLExt
   , ASLApp(..)
   , ASLStmt(..)
+  , SymFnWrapper(..)
+  , SymFnEnv
   , aslExtImpl
   ) where
 
 import qualified Control.Exception as X
 import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Monad ( guard )
+import           Data.IORef
 import           Data.Functor.Product ( Product(..) )
+import           Data.Map ( Map )
+import qualified Data.Map as Map
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
@@ -91,6 +96,12 @@ data ASLStmt arch f tp where
               -> ASLStmt arch f CT.UnitType
 
 
+data SymFnWrapper sym where
+  SymFnWrapper ::
+    WI.SymFn sym args ret -> Ctx.Assignment WT.BaseTypeRepr args -> WT.BaseTypeRepr ret -> SymFnWrapper sym
+
+type SymFnEnv sym = Map T.Text (SymFnWrapper sym)
+
 -- | The ASLExt app evaluator
 --
 -- NOTE: Right now, this generates a fresh uninterpreted function for each call.  That should be
@@ -98,20 +109,30 @@ data ASLStmt arch f tp where
 aslAppEvalFunc :: forall sym arch proxy
                 . (CB.IsSymInterface sym)
                => proxy arch
+               -> IORef (SymFnEnv sym)
                -> sym
                -> CS.IntrinsicTypes sym
                -> (Int -> String -> IO ())
                -> CSE.EvalAppFunc sym ASLApp
-aslAppEvalFunc _ sym _ _ = \evalApp app ->
+aslAppEvalFunc _ funsref sym _ _ = \evalApp app ->
   case app of
-    UF name trep argTps args ->
+    UF name trep argTps args -> do
       case WS.userSymbol (T.unpack name) of
         Left _err -> X.throw (InvalidFunctionName name)
         Right funcSymbol -> do
-          Some baseTypesArgs <- extractBase name (\v -> CS.RV <$> evalApp v) argTps args (Some Ctx.empty)
-          let baseTps = FC.fmapFC fstFC baseTypesArgs
-          let baseArgs = FC.fmapFC (unSE @sym . sndFC) baseTypesArgs
-          symFn <- WI.freshTotalUninterpFn sym funcSymbol baseTps trep
+          baseArgs <- FC.fmapFC (unSE @sym) <$> extractBase' (\v -> CS.RV <$> evalApp v) argTps args
+          let baseTps = toBaseTypes argTps
+          funmap <- readIORef funsref
+          symFn <- case Map.lookup name funmap of
+            Just (SymFnWrapper symFn baseTps' trep')
+              | Just Refl <- testEquality baseTps baseTps'
+              , Just Refl <- testEquality trep trep' -> do
+                return symFn
+            Nothing -> do
+              symFn <- WI.freshTotalUninterpFn sym funcSymbol baseTps trep
+              modifyIORef funsref (Map.insert name (SymFnWrapper symFn baseTps trep))
+              return symFn
+            _ -> X.throw $ BadUninterpretedFunctionCache name
           WI.applySymFn sym symFn baseArgs
     GetBaseStruct _srep idx term -> do
       rv <- evalApp term
@@ -207,9 +228,9 @@ type instance CCExt.StmtExtension (ASLExt arch) = ASLStmt arch
 
 instance CCExt.IsSyntaxExtension (ASLExt arch)
 
-aslExtImpl :: forall arch p sym . CS.ExtensionImpl p sym (ASLExt arch)
-aslExtImpl =
-  CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc (Proxy @arch)
+aslExtImpl :: forall arch p sym . IORef (SymFnEnv sym) -> CS.ExtensionImpl p sym (ASLExt arch)
+aslExtImpl funsref =
+  CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc (Proxy @arch) funsref
                    , CS.extensionExec = aslStmtEvalFunc
                    }
 

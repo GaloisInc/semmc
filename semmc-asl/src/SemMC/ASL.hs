@@ -24,6 +24,7 @@ module SemMC.ASL (
 import           Data.Proxy
 import           GHC.TypeLits ( Symbol )
 import qualified Data.Type.List as TL
+import           Data.IORef
 
 import qualified Control.Exception as X
 import           Control.Lens ( (^.) )
@@ -79,6 +80,7 @@ import qualified SemMC.Formula as SF
 import qualified SemMC.ASL.Crucible as AC
 import qualified SemMC.ASL.Signature as AS
 import qualified SemMC.ASL.Types as AT
+import qualified SemMC.ASL.Extension as AE
 
 import           SemMC.Architecture.ARM.Location ( A32, T32 )
 import qualified SemMC.Architecture.ARM.Location as AL
@@ -112,7 +114,7 @@ genSimulation :: forall arch sym init globalReads globalWrites tps scope a
                   -> Ctx.Assignment (FreshArg sym) init
                   -> Ctx.Assignment (FreshArg sym) globalReads
                   -> IO a)
-              -> IO a
+              -> IO (a, AE.SymFnEnv sym)
 genSimulation symCfg crucFunc extractResult =
   case AC.funcCFG crucFunc of
     CCC.SomeCFG cfg -> do
@@ -125,16 +127,19 @@ genSimulation symCfg crucFunc extractResult =
             return (CS.regValue re)
       let globalReads = AC.funcGlobalReads crucFunc
       (freshGlobalReads, globalState) <- initGlobals symCfg globalReads
-      s0 <- initialSimulatorState symCfg globalState econt retRepr
+      (s0, funsref) <- initialSimulatorState symCfg globalState econt retRepr
       ft <- executionFeatures (AS.funcName $ AC.funcSig crucFunc) (simSym symCfg)
       eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeFunctionSignature sig)))
         CS.AbortedResult context ab -> X.throwIO $ SimulationAbort (Some (AC.SomeFunctionSignature sig)) (showAbortedResult ab)
-        CS.FinishedResult _ pres ->
-          case pres of
-            CS.TotalRes gp -> extractResult (gp ^. CS.gpValue) initArgs freshGlobalReads
-            CS.PartialRes _ _ gp _ -> extractResult (gp ^. CS.gpValue) initArgs freshGlobalReads
+        CS.FinishedResult _ pres -> do
+          gp <- case pres of
+            CS.TotalRes gp -> return gp
+            CS.PartialRes _ _ gp _ -> return gp
+          result <- extractResult (gp ^. CS.gpValue) initArgs freshGlobalReads
+          funenv <- readIORef funsref
+          return (result, funenv)
 
 -- | Simulate a function
 --
@@ -146,7 +151,7 @@ simulateFunction :: forall arch sym init globalReads globalWrites tps scope
                   . (CB.IsSymInterface sym, OnlineSolver scope sym)
                  => SimulatorConfig scope
                  -> AC.Function arch globalReads globalWrites init tps
-                 -> IO (SF.FunctionFormula sym '(AT.CtxToList (init Ctx.::> WT.BaseStructType globalReads), WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
+                 -> IO (SF.FunctionFormula sym '(AT.CtxToList (init Ctx.::> WT.BaseStructType globalReads), WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)), AE.SymFnEnv sym)
 simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
@@ -168,13 +173,12 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
                   solverSymbolName = case WI.userSymbol name of
                     Left err -> error (show err)
                     Right symbol -> symbol
-              globalsName <- toSolverSymbol (T.unpack "globalReads")
-              bv <- WI.freshBoundVar sym globalsName globalReadStructRepr
-              let globalStruct = WI.varExpr sym bv
+              FreshArg gre gbv _ _ <- allocateFreshArg sym (AC.LabeledValue "globalReads" globalReadStructRepr)
+              let globalStruct = WI.varExpr sym gbv
               globals <- Ctx.traverseWithIndex (\idx _ -> WI.structField sym globalStruct idx) globalReadReprs
               fnexpr <- WEB.evalBoundVars sym (CS.regValue re) globalReadBVs globals
               --print (WI.printSymExpr fnexpr)
-              let allArgBvs = TL.toAssignmentFwd $ AT.assignmentToList (argBVs Ctx.:> bv)
+              let allArgBvs = TL.toAssignmentFwd $ AT.assignmentToList (argBVs Ctx.:> gbv)
               fn <- WI.definedFn
                 sym
                 solverSymbolName
@@ -182,7 +186,7 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
                 fnexpr
                 (const False)
               let argTypes = AT.assignmentToList (argReprs Ctx.:> WT.BaseStructRepr globalReadReprs)
-              let argVars = AT.assignmentToList (argBVs Ctx.:> bv)
+              let argVars = AT.assignmentToList (argBVs Ctx.:> gbv)
               return $ SF.FunctionFormula name argTypes argVars retType fn
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
@@ -191,7 +195,7 @@ simulateInstruction :: forall sym init globalReads globalWrites tps scope
                      . (CB.IsSymInterface sym, OnlineSolver scope sym)
                     => SimulatorConfig scope
                     -> AC.Function A32 globalReads globalWrites init tps
-                    -> IO (Some (SF.ParameterizedFormula sym A32))
+                    -> IO (Some (SF.ParameterizedFormula sym A32), AE.SymFnEnv sym)
 simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
@@ -488,7 +492,7 @@ freshArgBoundVars' :: Ctx.Assignment (FreshArg sym) init -> PL.List (WI.BoundVar
 freshArgBoundVars' Ctx.Empty = PL.Nil
 freshArgBoundVars' (args Ctx.:> arg) = freshArgBoundVar arg PL.:< freshArgBoundVars' args
 
-allocateFreshArg :: (CB.IsSymInterface sym)
+allocateFreshArg :: (CB.IsSymInterface sym, OnlineSolver scope sym)
                  => sym
                  -> AC.LabeledValue T.Text CT.BaseTypeRepr btp
                  -> IO (FreshArg sym btp)
@@ -496,8 +500,8 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
   case rep of
     CT.BaseBVRepr w -> do
       sname <- toSolverSymbol (T.unpack name)
-      bv <- WI.freshBoundVar sym sname (WT.BaseBVRepr w)
-      rv <- WI.freshConstant sym sname (WT.BaseBVRepr w)
+      --bv <- WI.freshBoundVar sym sname (WT.BaseBVRepr w)
+      rv@(WEB.BoundVarExpr bv) <- WI.freshConstant sym sname (WT.BaseBVRepr w)
       return $ FreshArg
         ( CS.RegEntry { CS.regType = CT.baseToType rep
                       , CS.regValue = rv
@@ -507,8 +511,8 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
         name
     CT.BaseIntegerRepr -> do
       sname <- toSolverSymbol (T.unpack name)
-      bv <- WI.freshBoundVar sym sname WT.BaseIntegerRepr
-      rv <- WI.freshConstant sym sname WT.BaseIntegerRepr
+      --bv <- WI.freshBoundVar sym sname WT.BaseIntegerRepr
+      rv@(WEB.BoundVarExpr bv) <- WI.freshConstant sym sname WT.BaseIntegerRepr
       return $ FreshArg
         ( CS.RegEntry { CS.regType = CT.baseToType rep
                       , CS.regValue = rv
@@ -518,8 +522,8 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
         name
     CT.BaseBoolRepr -> do
       sname <- toSolverSymbol (T.unpack name)
-      bv <- WI.freshBoundVar sym sname WT.BaseBoolRepr
-      rv <- WI.freshConstant sym sname WT.BaseBoolRepr
+      --bv <- WI.freshBoundVar sym sname WT.BaseBoolRepr
+      rv@(WEB.BoundVarExpr bv) <- WI.freshConstant sym sname WT.BaseBoolRepr
       return $ FreshArg
         ( CS.RegEntry { CS.regType = CT.baseToType rep
                       , CS.regValue = rv
@@ -529,8 +533,8 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
         name
     CT.BaseArrayRepr idxTy vTy -> do
       sname <- toSolverSymbol (T.unpack name)
-      bv <- WI.freshBoundVar sym sname (WT.BaseArrayRepr idxTy vTy)
-      rv <- WI.freshConstant sym sname (WT.BaseArrayRepr idxTy vTy)
+      --bv <- WI.freshBoundVar sym sname (WT.BaseArrayRepr idxTy vTy)
+      rv@(WEB.BoundVarExpr bv) <- WI.freshConstant sym sname (WT.BaseArrayRepr idxTy vTy)
       return $ FreshArg
         ( CS.RegEntry { CS.regType = CT.baseToType rep
                       , CS.regValue = rv
@@ -540,8 +544,8 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
         name
     CT.BaseStructRepr idxTy -> do
       sname <- toSolverSymbol (T.unpack name)
-      bv <- WI.freshBoundVar sym sname (WT.BaseStructRepr idxTy)
-      rv <- WI.freshConstant sym sname (WT.BaseStructRepr idxTy)
+      --bv <- WI.freshBoundVar sym sname (WT.BaseStructRepr idxTy)
+      rv@(WEB.BoundVarExpr bv) <- WI.freshConstant sym sname (WT.BaseStructRepr idxTy)
       return $ FreshArg
         ( CS.RegEntry { CS.regType = CT.baseToType rep
                       , CS.regValue = rv
@@ -564,15 +568,16 @@ initialSimulatorState :: (CB.IsSymInterface sym, OnlineSolver scope sym)
                       -> CS.SymGlobalState sym
                       -> CS.ExecCont () sym (AC.ASLExt arch) (CS.RegEntry sym ret) (CSC.OverrideLang ret) ('Just CT.EmptyCtx)
                       -> CT.TypeRepr ret
-                      -> IO (CS.ExecState () sym (AC.ASLExt arch) (CS.RegEntry sym ret))
+                      -> IO (CS.ExecState () sym (AC.ASLExt arch) (CS.RegEntry sym ret), IORef (AE.SymFnEnv sym))
 initialSimulatorState symCfg symGlobalState econt retRepr = do
   let intrinsics = CS.emptyIntrinsicTypes
   let sym = simSym symCfg
   let hdlAlloc = simHandleAllocator symCfg
   let outputHandle = simOutputHandle symCfg
-  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle CFH.emptyHandleMap AC.aslExtImpl ()
+  funsref <- newIORef (Map.empty :: AE.SymFnEnv sym)
+  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle CFH.emptyHandleMap (AC.aslExtImpl funsref) ()
   let hdlr = CS.defaultAbortHandler
-  return (CS.InitialState simContext symGlobalState hdlr retRepr econt)
+  return (CS.InitialState simContext symGlobalState hdlr retRepr econt, funsref)
 
 -- | Allocate all of the globals that will be referred to by the statement
 -- sequence (even indirectly) and use them to populate a 'CS.GlobalSymState'

@@ -87,6 +87,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | BindingFailure String
                           | BadASLFunctionCall
                           | TExceptions [TranslationException]
+                          | BadUninterpretedFunctionCache T.Text
 
 
 deriving instance Show TranslationException
