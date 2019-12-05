@@ -826,7 +826,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
               _     -> "unrecognized function prefix: '%s'"
         in E.throwError $ printf template fnName
     args <- readExprs operands
-    assn <- exprAssignment (S.fnArgTypes fn) args
+    assn <- exprAssignment (S.fnArgTypes fn) (reverse args)
     liftIO (Some <$> S.applySymFn sym fn assn)
 readApp opRaw _ = E.throwError $ printf "couldn't parse application of %s" (printTokens mempty opRaw)
 
