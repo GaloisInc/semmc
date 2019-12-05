@@ -176,7 +176,7 @@ parseAtom :: Parser FAtom
 parseAtom
   =     ANat . read <$> P.try (P.many1 P.digit <* P.char 'u')
   P.<|> AInt . read <$> P.many1 P.digit
-  P.<|> AInt . read <$> (P.char '-' >> P.many1 P.digit)
+  P.<|> AInt . (*(-1)) . read <$> (P.char '-' >> P.many1 P.digit)
   P.<|> AIdent      <$> parseIdent
   P.<|> AQuoted     <$> (P.char '\'' >> parseIdent)
   P.<|> AString     <$> parseString
