@@ -238,13 +238,13 @@ checkSat :: (WPO.OnlineSolver t solver)
          -> (SatResult (GroundEvalFn t) () -> IO a)
          -> IO a
 checkSat sym testExpr handler = do
-  sp <- CBO.getSolverProcess sym
-  let conn = WPO.solverConn sp
-  WPO.inNewFrame sp $ do
-    f <- WPS.mkFormula conn testExpr
-    WPS.assumeFormula conn f
-    res <- WPO.checkAndGetModel sp "semmc equivalence formula"
-    handler res
+  CBO.withSolverProcess sym $ \sp -> do
+    let conn = WPO.solverConn sp
+    WPO.inNewFrame sp $ do
+      f <- WPS.mkFormula conn testExpr
+      WPS.assumeFormula conn f
+      res <- WPO.checkAndGetModel sp "semmc equivalence formula"
+      handler res
 
 checkSatEvalFn :: (WPO.OnlineSolver t solver)
           => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))

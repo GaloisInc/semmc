@@ -259,12 +259,15 @@ convertApp paramLookup = convertApp'
             S.SemiRingIntegerRepr -> error "convertApp' S.SemiRingProd Integer unsupported"
             S.SemiRingRealRepr    -> error "convertApp' S.SemiRingProd Real unsupported"
 
-        convertApp' (S.BVOrBits pd) =
-          case WSum.prodRepr pd of
-            S.SemiRingBVRepr _ w ->
-              let pmul x y = SE.L [ident' "bvor", x, y ]
-                  unit = bitvec' (natValue w) 0
-              in maybe unit id $ WSum.prodEval pmul convert pd
+        convertApp' (S.BVOrBits width bs) = do
+          let op = ident' "bvor"
+          case S.bvOrToList bs of
+            [] -> bitvec' (NR.natValue width) 0
+            (x:xs) ->
+              let bvor = (\b acc -> SE.L [op, b, acc])
+                  x' = (convert x)
+                  xs' = map convert xs
+              in foldr bvor x' xs'
 
         convertApp' (S.BVUdiv _ bv1 bv2) = SE.L [ident' "bvudiv", convert bv1, convert bv2]
         convertApp' (S.BVUrem _ bv1 bv2) = SE.L [ident' "bvurem", convert bv1, convert bv2]
