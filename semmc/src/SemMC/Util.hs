@@ -60,7 +60,8 @@ import qualified What4.Expr.Builder as B
 import qualified What4.Expr.GroundEval as GE
 import qualified What4.Interface as S
 import           What4.Symbol ( SolverSymbol, userSymbol )
-import qualified What4.Utils.Hashable as Hash
+import qualified What4.Expr.ArrayUpdateMap as AUM
+import qualified What4.Utils.AbstractDomains as AD
 import qualified What4.Concrete as W
 
 import           SemMC.Log
@@ -133,7 +134,7 @@ makeSymbol name = case userSymbol sanitizedName of
 -- | Convert a 'GroundValue' (a primitive type that represents the given
 -- Crucible type) back into a symbolic expression, just as a literal.
 groundValToExpr :: forall sym tp.
-                   (S.IsSymExprBuilder sym)
+                   (S.IsSymExprBuilder sym, AD.HasAbsValue (S.SymExpr sym))
                 => sym
                 -> [Integer]
                 -- ^ A list of relevant indices into memory
@@ -154,7 +155,9 @@ groundValToExpr sym _ (BaseFloatRepr fpp@(FloatingPointPrecisionRepr eb sb)) val
 groundValToExpr sym _        BaseComplexRepr val = S.mkComplexLit sym val
 groundValToExpr sym indices (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
   base' <- groundValToExpr sym indices elemTp base
-  entries <- Hash.mkMap <$> traverse (groundValToExpr sym indices elemTp) m
+  entries <- AUM.fromAscList elemTp
+             <$> Map.toAscList
+             <$> traverse (groundValToExpr sym indices elemTp) m
   S.arrayFromMap sym idxTp entries base'
 
 groundValToExpr sym indices (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
@@ -171,7 +174,7 @@ groundValToExpr sym indices (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
 --      :: Map.Map (Assignment S.IndexLit idx) (S.SymExpr sym xs)
     let arrayMap' = Map.fromList $ zip indexLits resultExprs
 
-    S.arrayFromMap sym idxs (Hash.mkMap arrayMap') defaultExpr
+    S.arrayFromMap sym idxs (AUM.fromAscList r $ Map.toAscList arrayMap') defaultExpr
 
 
   where

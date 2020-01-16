@@ -43,6 +43,7 @@ import qualified Data.Parameterized.TraversableFC as FC
 import qualified What4.Expr as S
 import qualified What4.Expr.WeightedSum as WSum
 import qualified What4.Interface as S
+import           What4.Expr.Builder ( bvOrToList )
 import qualified What4.Protocol.Online as WPO
 
 import qualified Dismantle.Instruction as D
@@ -507,7 +508,7 @@ isBVConstant e =
       case S.appExprApp appElt of
         S.SemiRingSum  sm -> WSum.eval (&&) (const isBVConstant) (const True) sm
         S.SemiRingProd pd -> maybe True id $  WSum.prodEval (&&) undefined pd
-        S.BVOrBits     pd -> maybe True id $  WSum.prodEval (&&) undefined pd
+        S.BVOrBits _w bs  -> all isBVConstant $ bvOrToList bs
         -- The 'appElt' argument will never be the following, because
         -- these are not BaseBVType expressions, even though they may
         -- be constants (if BoolMapUnit or BoolMapDualUnit).
