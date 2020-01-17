@@ -430,25 +430,25 @@ genBV32SymExpr sym params opvars litvars = do
       (genBV32SymExpr sym params opvars litvars)
       (fn2 sym "bvMul" WI.bvMul)
 
-    , HG.subtermM2
-      (genBV32SymExpr sym params opvars litvars)
-      (genBV32SymExpr sym params opvars litvars)
-      (fn2 sym "bvUdiv" WI.bvUdiv)
+    -- , HG.subtermM2
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (fn2 sym "bvUdiv" WI.bvUdiv)
 
-    , HG.subtermM2
-      (genBV32SymExpr sym params opvars litvars)
-      (genBV32SymExpr sym params opvars litvars)
-      (fn2 sym "bvUrem" WI.bvUrem)
+    -- , HG.subtermM2
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (fn2 sym "bvUrem" WI.bvUrem)
 
-    , HG.subtermM2
-      (genBV32SymExpr sym params opvars litvars)
-      (genBV32SymExpr sym params opvars litvars)
-      (fn2 sym "bvSdiv" WI.bvSdiv)
+    -- , HG.subtermM2
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (fn2 sym "bvSdiv" WI.bvSdiv)
 
-    , HG.subtermM2
-      (genBV32SymExpr sym params opvars litvars)
-      (genBV32SymExpr sym params opvars litvars)
-      (fn2 sym "bvSrem" WI.bvSrem)
+    -- , HG.subtermM2
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (fn2 sym "bvSrem" WI.bvSrem)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
@@ -652,7 +652,7 @@ locationsForLiteralParams sym params = MapF.fromList <$> F.foldrM appendLitVarPa
                  BaseBoolRepr -> error "lFLP unimplemented BaseBoolRepr"
                  BaseRealRepr -> error "lFLP unimplemented BaseRealRepr"
                  (BaseFloatRepr _) -> error "lFLP unimplemented BaseFloatRepr"
-                 BaseStringRepr -> error "lFLP unimplemented BaseStringRepr"
+                 BaseStringRepr _ -> error "lFLP unimplemented BaseStringRepr"
                  BaseComplexRepr -> error "lFLP unimplemented BaseComplexRepr"
                  (BaseStructRepr _) -> error "lFLP unimplemented BaseStructRepr"
                  (BaseArrayRepr _ _) -> error "lFLP unimplemented BaseArrayRepr"
