@@ -59,7 +59,7 @@ longtest = executeTests [longProg]
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
   PN.withIONonceGenerator $ \ng ->
-    CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
+    CBO.withZ3OnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv progsToTest)
