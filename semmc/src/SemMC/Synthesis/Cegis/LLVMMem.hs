@@ -18,6 +18,7 @@ module SemMC.Synthesis.Cegis.LLVMMem
   ) where
 
 import           Data.Proxy (Proxy(..))
+import qualified Control.Monad.Fail as MF
 import           Control.Monad.State
 -- import qualified Text.PrettyPrint.ANSI.Leijen as PP
 -- import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
@@ -49,7 +50,7 @@ data MemData sym arch = MemData { memSym :: sym
 -- the memory, which is an unbounded array of bytes indexed by @RegWidth
 -- arch@-bit bitvectors.
 newtype MemM sym arch a = MemM {runMemM :: StateT (MemData sym arch) IO a}
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MF.MonadFail)
 
 instance T.HasMemExpr MemM
   where

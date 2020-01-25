@@ -208,7 +208,6 @@ convertApp paramLookup = convertApp'
         convertApp' (S.BaseEq _bt v1 v2) = SE.L [ident' "=", convert v1, convert v2]
         convertApp' (S.NotPred x) = SE.L [ident' "notp", convert x]
         convertApp' (S.ConjPred bm) = convertBoolMap "andp" True bm
-        convertApp' (S.DisjPred bm) = convertBoolMap "orp" False bm
 
         convertApp' (S.BVSlt bv1 bv2) = SE.L [ident' "bvslt", convert bv1, convert bv2]
         convertApp' (S.BVUlt bv1 bv2) = SE.L [ident' "bvult", convert bv1, convert bv2]
