@@ -55,9 +55,9 @@ type Trace = String
 ----------------------------------------------------------------------
 
 genNat :: Monad m => GenT m Natural
-genNat = HG.frequency [ (5, return 0)
-                      , (5, return 1)
-                      , (90, toEnum . abs <$> HG.int (linearBounded :: Range Int))
+genNat = HG.frequency [ (10, return 0)
+                      , (10, return 1)
+                      , (80, toEnum . abs <$> HG.int (linearBounded :: Range Int))
                       ]
          -- Ensures that 0 and 1 are present in any reasonably-sized distribution
 
@@ -70,9 +70,9 @@ genNatLocation = TestNatLoc <$> genNat
 
 genIntLocation :: Monad m => GenT m (TestLocation BaseIntegerType)
 genIntLocation = TestIntLoc <$>
-                 HG.frequency [ (5, return 0)
-                              , (5, return 1)
-                              , (90, fromInteger . toEnum . fromEnum <$>
+                 HG.frequency [ (10, return 0)
+                              , (10, return 1)
+                              , (80, fromInteger . toEnum . fromEnum <$>
                                      HG.integral (linearBounded :: Range Int64))
                               ]
                  -- Ensures that 0 and 1 are present in any reasonably-sized distribution
