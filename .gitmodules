@@ -16,3 +16,9 @@
 [submodule "submodules/llvm-pretty"]
 	path = submodules/llvm-pretty
 	url = https://github.com/elliottt/llvm-pretty
+[submodule "submodules/asl-translator"]
+	path = submodules/asl-translator
+	url = git@github.com:GaloisInc/asl-translator.git
+[submodule "submodules/arm-asl-parser"]
+	path = submodules/arm-asl-parser
+	url = git@github.com:GaloisInc/arm-asl-parser.git
