@@ -12,13 +12,23 @@ module Data.Type.List (
   ReverseAcc,
   reverse,
   reverseAcc,
+  reverseAccReverse,
+  reverseReverse,
   Map,
   mapFromMapped,
   ToContext,
   ToContextFwd,
+  FromContext,
+  FromContextFwd,
   SameShape,
   toAssignment,
   toAssignmentFwd,
+  fromAssignment,
+  fromAssignmentFwd,
+  toFromCtx,
+  toFromCtxFwd,
+  fromToCtx,
+  fromToCtxFwd,
   Function,
   Arguments(..),
   applyFunction
@@ -29,6 +39,7 @@ import Prelude hiding (reverse)
 import           Data.Kind
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
+import           Data.Parameterized.Classes
 import           Data.Proxy ( Proxy(..) )
 
 data TyFun :: k1 -> k2 -> Type
@@ -46,6 +57,16 @@ reverseAcc (x SL.:< xs) ys = reverseAcc xs (x SL.:< ys)
 
 reverse :: SL.List f xs -> SL.List f (Reverse xs)
 reverse xs = reverseAcc xs SL.Nil
+
+reverseAccReverse :: forall f xs ys
+                   . SL.List f xs
+                  -> SL.List f ys
+                  -> ReverseAcc xs ys :~: Reverse (ReverseAcc ys xs)
+reverseAccReverse _ SL.Nil = Refl
+reverseAccReverse xs (y SL.:< ys) | Refl <- reverseAccReverse (y SL.:< xs) ys = Refl
+
+reverseReverse :: SL.List f l -> Reverse (Reverse l) :~: l
+reverseReverse xs | Refl <- reverseAccReverse SL.Nil xs = Refl
 
 type family Map (f :: TyFun k1 k2 -> Type) (xs :: [k1]) :: [k2] where
   Map f '[] = '[]
@@ -79,6 +100,41 @@ toAssignment (a SL.:< rest) = toAssignment rest `Ctx.extend` a
 
 toAssignmentFwd :: SL.List f lst -> Ctx.Assignment f (ToContextFwd lst)
 toAssignmentFwd lst = toAssignment (reverse lst)
+
+type family FromContext (ctx :: Ctx.Ctx k) :: [k] where
+  FromContext Ctx.EmptyCtx = '[]
+  FromContext (ctx Ctx.::> k) = k ': FromContext ctx
+
+type FromContextFwd ctx = Reverse (FromContext ctx)
+
+fromAssignment :: Ctx.Assignment f ctx -> SL.List f (FromContext ctx)
+fromAssignment asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty -> SL.Nil
+  Ctx.AssignExtend asn' a -> a SL.:< fromAssignment asn'
+
+fromAssignmentFwd :: Ctx.Assignment f ctx -> SL.List f (FromContextFwd ctx)
+fromAssignmentFwd asn = reverse $ fromAssignment asn
+
+toFromCtx :: Ctx.Assignment f x -> ToContext (FromContext x) :~: x
+toFromCtx asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty -> Refl
+  Ctx.AssignExtend asn' _ | Refl <- toFromCtx asn' -> Refl
+
+toFromCtxFwd :: Ctx.Assignment f x -> ToContextFwd (FromContextFwd x) :~: x
+toFromCtxFwd asn
+  | Refl <- toFromCtx asn
+  , Refl <- reverseReverse (fromAssignment asn)
+  = Refl
+
+fromToCtx :: SL.List f x -> FromContext (ToContext x) :~: x
+fromToCtx SL.Nil = Refl
+fromToCtx (_ SL.:< xs) | Refl <- fromToCtx xs = Refl
+
+fromToCtxFwd :: SL.List f x -> FromContextFwd (ToContextFwd x) :~: x
+fromToCtxFwd l
+  | Refl <- fromToCtx (reverse l)
+  , Refl <- reverseReverse l
+  = Refl
 
 -- | A function taking arguments with the given type parameters. For a known
 -- argument list, this evaluates to a plain Haskell function type:
