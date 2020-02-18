@@ -78,6 +78,7 @@ library
                        SemMC.Worklist
                        Data.Parameterized.Seq
                        Data.Parameterized.Unfold
+                       Data.Parameterized.TyMap
                        Data.Type.List
   other-modules:       SemMC.Architecture.Internal
                        SemMC.DSL.Internal

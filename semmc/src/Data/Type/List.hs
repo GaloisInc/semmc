@@ -16,6 +16,7 @@ module Data.Type.List (
   reverseReverse,
   Map,
   mapFromMapped,
+  applyMapList,
   ToContext,
   ToContextFwd,
   FromContext,
@@ -36,14 +37,13 @@ module Data.Type.List (
 
 import Prelude hiding (reverse)
 
+import           Data.Parameterized.TyMap
 import           Data.Kind
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Classes
 import           Data.Proxy ( Proxy(..) )
 
-data TyFun :: k1 -> k2 -> Type
-type family Apply (f :: TyFun k1 k2 -> Type) (x :: k1) :: k2
 type family ReverseAcc xs acc where
   ReverseAcc '[] acc = acc
   ReverseAcc (x ': xs) acc = ReverseAcc xs (x ': acc)
@@ -67,10 +67,6 @@ reverseAccReverse xs (y SL.:< ys) | Refl <- reverseAccReverse (y SL.:< xs) ys = 
 
 reverseReverse :: SL.List f l -> Reverse (Reverse l) :~: l
 reverseReverse xs | Refl <- reverseAccReverse SL.Nil xs = Refl
-
-type family Map (f :: TyFun k1 k2 -> Type) (xs :: [k1]) :: [k2] where
-  Map f '[] = '[]
-  Map f (x ': xs) = Apply f x ': Map f xs
 
 -- Apply a function to each element of an 'SL.List' whose shape is an
 -- application of 'Map'. Tricky because doing case analysis on such a list does
