@@ -76,7 +76,7 @@ printFormula :: (ShowF (A.Location arch))
              -> T.Text
 printFormula = printTokens' mempty . sexprConvert
 
-printFunctionFormula :: FunctionFormula (S.ExprBuilder t st fs) '(tps, tp)
+printFunctionFormula :: FunctionFormula (S.ExprBuilder t st fs) tps
                      -> T.Text
 printFunctionFormula = printTokens' mempty . sexprConvertFunction
 
@@ -115,7 +115,7 @@ sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
        , SE.L [SE.A (AIdent "defs"),     convertDefs opVars litVars defs]
        ]
 
-sexprConvertFunction :: FunctionFormula (S.ExprBuilder t st fs) '(tps, tp)
+sexprConvertFunction :: FunctionFormula (S.ExprBuilder t st fs) tps
                      -> SExp
 sexprConvertFunction (FunctionFormula { ffName = name
                                       , ffArgTypes = argTypes
