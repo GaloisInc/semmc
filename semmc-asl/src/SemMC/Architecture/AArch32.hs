@@ -20,6 +20,7 @@ module SemMC.Architecture.AArch32
     , ARMOperand(..)
     , machineStateToBS
     , machineStateFromBS
+    , shapeReprType
     , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
     where

@@ -22,6 +22,7 @@ library
                        SemMC.Architecture.ARM.Location
                        SemMC.Architecture.ARM.Combined
                        SemMC.Architecture.ARM.UF
+                       SemMC.Architecture.ARM.ASL
   build-depends:       base >=4.10 && < 5,
                        asl-translator,
                        binary,
@@ -29,11 +30,13 @@ library
                        containers,
                        dismantle-arm-xml,
                        dismantle-tablegen,
+                       mtl,
                        parameterized-utils,
                        what4,
                        what4-serialize,
                        vector-sized,
                        template-haskell,
+                       text,
                        megaparsec,
                        semmc
   hs-source-dirs:      src
@@ -49,11 +52,13 @@ executable semmc-asl-genarm
                  asl-translator,
                  bytestring,
                  crucible,
+                 containers,
                  directory,
                  what4-serialize,
                  dismantle-arm-xml,
                  dismantle-tablegen,
                  filepath,
+                 mtl,
                  parameterized-utils,
                  optparse-applicative,
                  semmc-asl,

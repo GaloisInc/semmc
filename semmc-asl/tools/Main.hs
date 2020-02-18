@@ -1,41 +1,96 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Main where
 
+import Prelude hiding (reverse)
+
+import           Control.Applicative ( Const(..) )
 import           Control.Exception
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
+
+import           Control.Monad.Identity
+import           Control.Monad ( liftM, forM )
+
+import           Data.Kind
+import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
+import qualified Data.Parameterized.SymbolRepr
+import qualified Data.Parameterized.TraversableFC as FC
+import           Data.Parameterized.Pair
 import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
+import           Data.Parameterized.SymbolRepr ( Symbol )
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Some
 import           Data.Proxy
+import qualified Data.Map as Map
+import qualified Data.Text as T
+import qualified Data.Set as Set
 import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
 import qualified Options.Applicative as O
 import qualified Options.Applicative.Help as OH
+
+
+import qualified Dismantle.ARM.T32 as T32
+import qualified Dismantle.ARM.A32 as A32
+import qualified Dismantle.ARM.ASL as ASL
+
+import qualified Language.ASL.Globals as ASL
+
+import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Location as L
+import qualified SemMC.BoundVar as BV
 import           SemMC.Architecture
-import qualified SemMC.Architecture.AArch32 as ARMSem
+import           SemMC.Architecture.AArch32 ( AArch32 )
+import qualified SemMC.Architecture.AArch32 as ARM
+import qualified SemMC.Architecture.ARM.Location as ARM
+import           SemMC.Architecture.ARM.Combined ( ARMOperandRepr )
+import qualified SemMC.Architecture.ARM.Combined as ARM
+import qualified SemMC.Architecture.ARM.ASL as ASL
 import qualified SemMC.DSL as DSL
 import qualified SemMC.Formula.Formula as SF
+import qualified SemMC.Formula.Printer as SF
 import qualified SemMC.Formula.Env as SE
 import qualified SemMC.Formula.Load as FL
-import qualified SemMC.Util as U
+
+
+
+import qualified Data.Type.List as TL
+import qualified Data.Parameterized.TyMap as TM
+
 import qualified System.Directory as D
 import           System.Exit
 import           System.FilePath ( (<.>), (</>) )
-import qualified What4.Interface as CRU
 
+import qualified What4.Serialize.Parser as WP
+
+import qualified What4.Interface as WI
+import qualified What4.Expr.Builder as WB
+import qualified What4.Utils.Log as Log
+import           What4.Utils.Util ( SomeSome(..) )
+import qualified SemMC.Util as U
 
 data Options = Options { oRootDir :: FilePath
+                       , oSrcFile :: FilePath
                        , oNoCheck :: Bool
                        }
 
@@ -44,6 +99,8 @@ optionsParser = Options
                 <$> O.strArgument ( O.metavar "ROOTDIR"
                                   <> O.help "Root directory under which output files will be \
                                             \ generated (\"data/sem\" is recommended).")
+                <*> O.strArgument ( O.metavar "FILE"
+                                  <> O.help "Input formulas file from asl-translator.")
                 <*> O.switch ( O.long "nocheck"
                              <> O.short 'n'
                              <> O.help "Disable checking of semantics formula before writing")
@@ -54,56 +111,84 @@ main = O.execParser optParser >>= mainWithOptions
   where
     optParser = (O.info (optionsParser O.<**> O.helper)
                  ( O.fullDesc
-                 <> O.header "semmc-arm-genbase - Print out manually-written formulas"
+                 <> O.header "semmc-asl-genbase - Print out translated formulas"
                  )) { O.infoProgDesc = OH.vsepChunks
-                      [ OH.paragraph
-                        "Generates the base and manual formula set files for ARM.\
-                        \ The semmc tool will learn semantics for many instructions,\
-                        \ but it needs to start with a base set, and there are some\
-                        \ that it cannot learn and which must be specified manually."
-                      , OH.paragraph
-                        "This tool is used to generate those base and manual formulas,\
-                        \ as written in the DSL specifications in the\
-                        \ SemMC.Architecture.ARM.BaseSemantics module."
+                      [
                       ]
                     }
 
+mkFormulaEnv :: forall sym
+              . WI.IsSymExprBuilder sym
+             => sym
+             -> [(T.Text, SomeSome (WI.SymFn sym))]
+             -> IO (SE.FormulaEnv sym AArch32)
+mkFormulaEnv sym funs = do
+  env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
+  let reshaped = Map.fromList $ map reshape funs
+  return $ env { SE.envFunctions = (SE.envFunctions env) `Map.union` reshaped }
+  where
+    reshape :: (T.Text, SomeSome (WI.SymFn sym))
+            -> (String, (SE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
+    reshape (nm, SomeSome symFn) = (T.unpack nm, (SE.SomeSome symFn, Some (WI.fnReturnType symFn)))
+
+mkEncoding :: (sym ~ WB.ExprBuilder t st fs)
+           => sym
+           -> WP.SymFnEnv sym
+           -> ARM.ARMOpcode ARM.ARMOperand sh
+           -> ASL.Encoding
+           -> IO (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32))
+mkEncoding sym symfns opcode enc = do
+  formula <- ASL.encodingToFormula sym symfns opcode enc
+  return $ (ASL.encName enc, Pair opcode formula)
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
   sym <- S.newSimpleBackend S.FloatIEEERepr ng
-  env <- FL.formulaEnv (Proxy @ARMSem.AArch32) sym
+  lcfg <- Log.mkLogCfg "main"
+  symfns <- Log.withLogCfg lcfg $
+    WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (oSrcFile opts) >>= \case
+      Left err -> fail err
+      Right symfns -> return symfns
+  a32pfs <- forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
+    mkEncoding sym symfns (ARM.A32Opcode a32opcode) enc
+  t32pfs <- forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
+    mkEncoding sym symfns (ARM.T32Opcode t32opcode) enc
+  let instrKeys = Set.fromList $ map (T.pack . ASL.encName) $ (Map.elems T32.aslEncodingMap ++ Map.elems A32.aslEncodingMap)
+  let funs = Map.assocs $ Map.withoutKeys symfns instrKeys
+  let lib = ASL.symFnsToLibrary sym funs
+  env <- mkFormulaEnv sym funs
   let odir = oRootDir opts
       genFunsTo d l = do
         ans@(s, e, _lib) <- genFunDefs sym env d (not $ oNoCheck opts) l
         putStrLn $ "Wrote " <> (show s) <> " function files to " <> d <>
                        (if 0 == e then "" else " (" <> show e <> " errors!)")
         return ans
-      genTo d lib (s,e) (t,l) = do
+      genTo d lib (s,e) l = do
         (s', e') <- genOpDefs sym env lib d (not $ oNoCheck opts) l
-        putStrLn $ "Wrote " <> (show s') <> " " <> t <> " semantics files to " <> d <>
+        putStrLn $ "Wrote " <> (show s') <> " " <> " semantics files to " <> d <>
                        (if 0 == e' then "" else " (" <> show e' <> " errors!)")
         return (s+s', e+e')
   D.createDirectoryIfMissing True odir
-  (s0,e0,lib) <- genFunsTo odir (error "") -- B.fundefs
-  (s,e) <- error "" -- F.foldlM (genTo odir lib) (s0,e0) B.semdefs
-  putStrLn $ "Finished writing " <> show (s :: String) <> " files with " <> show e <> " errors."
+  let fundefs = map (\(Pair (SF.FunctionRef nm _ _) def) -> (nm, Some def)) $ MapF.toList lib
+  (s0,e0,lib) <- genFunsTo odir fundefs
+  (s,e) <- F.foldlM (genTo odir lib) (s0,e0) (a32pfs ++ t32pfs)
+  putStrLn $ "Finished writing " <> show s <> " files with " <> show e <> " errors."
   if e > 0 then exitFailure else exitSuccess
 
 
 genFunDefs :: ( CRUB.IsSymInterface sym
-              , ShowF (CRU.SymExpr sym) )
-           => sym -> SE.FormulaEnv sym (ARMSem.AArch32)
-           -> FilePath -> Bool -> [(String, DSL.FunctionDefinition)]
+              , ShowF (WI.SymExpr sym) )
+           => sym -> SE.FormulaEnv sym (ARM.AArch32)
+           -> FilePath -> Bool -> [(String, Some (SF.FunctionFormula sym))]
            -> IO (Int, Int, SF.Library sym)
 genFunDefs sym env d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
     where writeFunDef (s,e,lib) (funName, def) =
-              let fundef  = DSL.printFunctionDefinition def
+              let fundef  = error "print function formula not implemented"
                   fundefB = encodeUtf8 fundef
                   writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
               in if chk
-                 then checkFunction (Proxy @ARMSem.AArch32) sym env fundefB funName >>= \case
+                 then checkFunction (Proxy @ARM.AArch32) sym env fundefB funName >>= \case
                          Right lib' -> writeIt >> return (s+1, e, lib' `MapF.union` lib)
                          Left err -> do writeIt
                                         putStrLn $ "Error for function " <> funName <> ": " <> err
@@ -112,33 +197,27 @@ genFunDefs sym env d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
                          return (s+1, e, lib)
 
 
-genOpDefs :: ( CRUB.IsSymInterface sym
-             , ShowF (CRU.SymExpr sym) )
-          => sym -> SE.FormulaEnv sym ARMSem.AArch32 -> SF.Library sym
-          -> FilePath -> Bool -> [(String, DSL.Definition)] -> IO (Int, Int)
-genOpDefs sym env lib d chk l = F.foldlM writeDef (0, 0) l
-    where writeDef (s,e) (opName, def) =
-              let semdef  = DSL.printDefinition def
+genOpDefs :: ( sym ~ WB.ExprBuilder t st fs
+             , CRUB.IsSymInterface sym
+             , ShowF (WI.SymExpr sym) )
+          => sym -> SE.FormulaEnv sym ARM.AArch32 -> SF.Library sym
+          -> FilePath -> Bool -> (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32)) -> IO (Int, Int)
+genOpDefs sym env lib d chk l = writeDef (0, 0) l
+    where writeDef (s,e) (opName, Pair opcode formula) =
+              let semdef  = SF.printParameterizedFormula (typeRepr opcode) formula
                   semdefB = encodeUtf8 semdef
-                  opcode = F.find ((==) opName . show) opcodes
                   writeIt = TIO.writeFile (d </> opName <.> "sem") $ semdef <> "\n"
-              in case opcode of
-                   Nothing -> do putStrLn $ "ERR: ignoring unknown DSL defined opcode \"" <>
-                                          opName <> "\" (-> " <> d <> ")"
-                                 return (s, e+1)
-                   Just op -> if chk
-                              then checkFormula (Proxy @ARMSem.AArch32) sym env lib semdefB op >>= \case
-                                     Nothing -> writeIt >> return (s+1, e)
-                                     Just err -> do writeIt
-                                                    putStrLn $ "Error for " <> opName <> ": " <> err
-                                                    return (s+1, e+1)
-
-                              else do writeIt
-                                      return (s+1, e)
-          opcodes = [] -- allA32Opcodes ++ allT32Opcodes
+              in if chk then
+                checkFormula (Proxy @ARM.AArch32) sym env lib semdefB (Some opcode) >>= \case
+                  Nothing -> writeIt >> return (s+1, e)
+                  Just err -> do writeIt
+                                 putStrLn $ "Error for " <> opName <> ": " <> err
+                                 return (s+1, e+1)
+                 else do writeIt
+                         return (s+1, e)
 
 checkFunction :: ( CRUB.IsSymInterface sym
-                 , ShowF (CRU.SymExpr sym)
+                 , ShowF (WI.SymExpr sym)
                  , Architecture arch )
               => Proxy arch
               -> sym
@@ -153,7 +232,7 @@ checkFunction arch sym env sem name =
                  \(e :: SomeException) -> return $ Left $ show e
 
 loadFunction :: ( CRUB.IsSymInterface sym
-                , ShowF (CRU.SymExpr sym)
+                , ShowF (WI.SymExpr sym)
                 , Architecture arch
                 , U.HasLogCfg )
              => Proxy arch
@@ -165,15 +244,15 @@ loadFunction arch sym env pair = FL.loadLibrary arch sym env [pair]
 
 checkFormula :: ( Architecture arch
                 , CRUB.IsSymInterface sym
-                , ShowF (CRU.SymExpr sym)
-                , HasRepr (ARMSem.ARMOpcode ARMSem.ARMOperand) (SL.List (OperandTypeRepr arch))
+                , ShowF (WI.SymExpr sym)
+                , HasRepr (ARM.ARMOpcode ARM.ARMOperand) (SL.List (OperandTypeRepr arch))
                 ) =>
                 Proxy arch
              -> sym
              -> SE.FormulaEnv sym arch
              -> SF.Library sym
              -> BS.ByteString
-             -> Some (ARMSem.ARMOpcode ARMSem.ARMOperand)
+             -> Some (ARM.ARMOpcode ARM.ARMOperand)
              -> IO (Maybe String)
 checkFormula arch sym env lib sem op =
   -- If the semantics are bad, loadFormula will throw an exception
@@ -184,15 +263,15 @@ checkFormula arch sym env lib sem op =
 
 
 loadFormula :: ( CRUB.IsSymInterface sym
-               , ShowF (CRU.SymExpr sym)
+               , ShowF (WI.SymExpr sym)
                , Architecture arch
-               , HasRepr (ARMSem.ARMOpcode ARMSem.ARMOperand) (SL.List (OperandTypeRepr arch))
+               , HasRepr (ARM.ARMOpcode ARM.ARMOperand) (SL.List (OperandTypeRepr arch))
                , U.HasLogCfg
                ) =>
                Proxy arch
             -> sym
             -> SE.FormulaEnv sym arch
             -> SF.Library sym
-            -> (Some (ARMSem.ARMOpcode ARMSem.ARMOperand), BS.ByteString)
-            -> IO (MapF.MapF (ARMSem.ARMOpcode ARMSem.ARMOperand) (SF.ParameterizedFormula sym arch))
+            -> (Some (ARM.ARMOpcode ARM.ARMOperand), BS.ByteString)
+            -> IO (MapF.MapF (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym arch))
 loadFormula _ sym env lib a = FL.loadFormulas sym env lib [a]
