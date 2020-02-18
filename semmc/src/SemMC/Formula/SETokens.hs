@@ -11,8 +11,9 @@
 
 module SemMC.Formula.SETokens
     ( FAtom(..)
-    , string, ident, quoted, int, bitvec
-    , string', ident', quoted', int', bitvec'
+    , string, ident, quoted, int, nat, bitvec
+    , string', ident', quoted', int', nat', bitvec'
+    , bool, bool'
     , fromFoldable, fromFoldable'
     , printAtom, printTokens, printTokens'
     , parseLL
@@ -39,9 +40,11 @@ data FAtom = AIdent String
            | AQuoted String
            | AString String
            | AInt Integer
+           | ANat Natural
            | ABV Int Integer
+           | ABool Bool
            | ANamed String Int FAtom
-           deriving (Show, Eq)
+           deriving (Show, Eq, Ord)
 
 
 string :: String -> SC.SExpr FAtom
@@ -67,11 +70,23 @@ int = SE.fromRich . int'
 int' :: Integer -> SE.RichSExpr FAtom
 int' = SE.A . AInt
 
+-- | Lift a natural.
+nat :: Natural -> SC.SExpr FAtom
+nat = SE.fromRich . nat'
+nat' :: Natural -> SE.RichSExpr FAtom
+nat' = SE.A . ANat
+
 -- | Lift a bitvector.
 bitvec :: Natural -> Integer -> SC.SExpr FAtom
 bitvec w v = SE.fromRich $ bitvec' w v
 bitvec' :: Natural -> Integer -> SE.RichSExpr FAtom
 bitvec' w v = SE.A $ ABV (fromEnum w) v
+
+-- | Lift a boolean.
+bool :: Bool -> SC.SExpr FAtom
+bool = SE.fromRich . bool'
+bool' :: Bool -> SE.RichSExpr FAtom
+bool' = SE.A . ABool
 
 
 -- * Miscellaneous operations on the S-Expressions
@@ -95,30 +110,8 @@ printTokens' comments = printTokens comments . SE.fromRich
 
 printTokens :: Seq.Seq String -> SC.SExpr FAtom -> T.Text
 printTokens comments sexpr =
-  let oguide = nativeGuide AIdent nameFor
-      guide = oguide { weighting = weighter (weighting oguide)
-                     , allowRecursion = True
-                     , minExprSize = 10
-                     -- , maxLetBinds = min 8 . (`div` 2)
-                     , maxLetBinds = id
-                     }
-      nameFor n e = case nameOf 0 e of
-                      Nothing -> AIdent n
-                      Just n' -> AIdent n'
-      nameOf d (SC.SAtom (ANamed n' d' _)) = if d == d' then Just n' else Nothing
-      nameOf d (SC.SCons l _) = nameOf (d+1) l
-      nameOf _ _ = Nothing
-      weighter _ expr cnt = case nameOf 0 expr of
-                              Just _ -> 1000000 -- always bind this!
-                              Nothing -> let bl = case expr of
-                                                    (SC.SCons (SC.SAtom _) _) -> 500 -- higher baseline
-                                                    _ -> 0
-                                             h = F.length expr
-                                             w = bl + h + (2 * cnt)
-                                         in if w > 600 then w else 0
-      outputFmt = SC.setIndentAmount 1 $ SC.unconstrainedPrint printAtom
-  in formatComment comments <> (SC.encodeOne outputFmt $
-                                discoverLetBindings guide sexpr)
+  let outputFmt = SC.setIndentAmount 1 $ SC.unconstrainedPrint printAtom
+  in formatComment comments <> (SC.encodeOne outputFmt sexpr)
 
 
 formatComment :: Seq.Seq String -> T.Text
@@ -136,7 +129,9 @@ printAtom a =
     AQuoted s -> T.pack ('\'' : s)
     AString s -> T.pack (show s)
     AInt i -> T.pack (show i)
+    ANat n -> T.pack (show n++"u")
     ABV w val -> formatBV w val
+    ABool b -> if b then "#true" else "#false"
     ANamed _ _ e -> printAtom e
 
 
@@ -155,8 +150,8 @@ formatBV w val = T.pack (prefix ++ printf fmt val)
 
 parseIdent :: Parser String
 parseIdent = (:) <$> first <*> P.many rest
-  where first = P.letter P.<|> P.oneOf "+-=<>_"
-        rest = P.letter P.<|> P.digit P.<|> P.oneOf "+-=<>_"
+  where first = P.letter P.<|> P.oneOf "+-=<>_."
+        rest = P.letter P.<|> P.digit P.<|> P.oneOf "+-=<>_."
 
 parseString :: Parser String
 parseString = do
@@ -179,10 +174,15 @@ parseBV = P.char '#' >> ((P.char 'b' >> parseBin) P.<|> (P.char 'x' >> parseHex)
 
 parseAtom :: Parser FAtom
 parseAtom
-  =   AIdent      <$> parseIdent
+  =     ANat . read <$> P.try (P.many1 P.digit <* P.char 'u')
+  P.<|> AInt . read <$> P.many1 P.digit
+  P.<|> AInt . (*(-1)) . read <$> (P.char '-' >> P.many1 P.digit)
+  P.<|> AIdent      <$> parseIdent
   P.<|> AQuoted     <$> (P.char '\'' >> parseIdent)
   P.<|> AString     <$> parseString
-  P.<|> AInt . read <$> P.many1 P.digit
+  P.<|> ABool       <$> P.try (P.try (P.string "#false" *> return False)
+                               P.<|>
+                               (P.string "#true" *> return True))
   P.<|> uncurry ABV <$> parseBV
    -- n.b. an ANamed is an internal marker and not expressed or
    -- recoverable in the streamed text version
