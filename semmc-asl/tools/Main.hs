@@ -91,6 +91,8 @@ import qualified What4.Utils.Log as Log
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified SemMC.Util as U
 
+import Debug.Trace
+
 data Options = Options { oRootDir :: FilePath
                        , oSrcFile :: FilePath
                        , oNoCheck :: Bool
@@ -119,13 +121,13 @@ main = O.execParser optParser >>= mainWithOptions
                       ]
                     }
 
-mkFormulaEnv :: forall sym
+addFormulaEnv :: forall sym
               . WI.IsSymExprBuilder sym
              => sym
+             -> SE.FormulaEnv sym AArch32
              -> [(T.Text, SomeSome (WI.SymFn sym))]
              -> IO (SE.FormulaEnv sym AArch32)
-mkFormulaEnv sym funs = do
-  env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
+addFormulaEnv sym env funs = do
   let reshaped = Map.fromList $ map reshape funs
   return $ env { SE.envFunctions = (SE.envFunctions env) `Map.union` reshaped }
   where
@@ -143,6 +145,9 @@ dropUFPrefix nm = case List.stripPrefix "uf." nm of
   Just nm' -> nm'
   Nothing -> nm
 
+sanitizedName :: String -> String
+sanitizedName name = map (\c -> case c of ' ' -> '_'; '.' -> '_'; _ -> c) name
+
 mkEncoding :: (sym ~ WB.ExprBuilder t st fs)
            => sym
            -> WP.SymFnEnv sym
@@ -154,24 +159,62 @@ mkEncoding sym symfns opcode enc = do
     Just formula -> return $ Just $ (ASL.encName enc, Pair opcode formula)
     Nothing -> return Nothing
 
+-- clagged from SemMC.Formula.Load, except we avoid prefixing function symbols with "uf"
+-- in order to emit the correct names during printing
+formulaEnv :: forall sym arch
+            . (A.Architecture arch, WI.IsSymExprBuilder sym)
+           => Proxy arch
+           -> sym
+           -> IO (SE.FormulaEnv sym arch)
+formulaEnv proxy sym = do
+  undefinedBit <- WI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
+  ufs <- Map.fromList <$> mapM toUF (A.uninterpretedFunctions proxy)
+  return SE.FormulaEnv { SE.envFunctions = ufs
+                       , SE.envUndefinedBit = undefinedBit
+                       }
+  where
+    toUF :: A.UninterpFn arch
+         -> IO (String, (SE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
+    toUF (A.MkUninterpFn name args ret _) = do
+      uf <- SE.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol name) args ret
+      return (("uf." ++ sanitizedName name), (uf, Some ret))
+
+
+readSymFns :: forall sym
+            . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+           => Options
+           -> sym
+           -> SE.FormulaEnv sym AArch32
+           -> IO (Map.Map T.Text (SomeSome (WI.SymFn sym)))
+readSymFns opts sym env = do
+  let pcfg = (WP.defaultParserConfig sym) {WP.pSymFnEnv = getParserEnv env}
+  lcfg <- Log.mkLogCfg "main"
+  Log.withLogCfg lcfg $
+    WP.readSymFnEnvFromFile pcfg (oSrcFile opts) >>= \case
+      Left err -> fail err
+      Right symfns -> return symfns
+  where
+    getParserEnv :: SE.FormulaEnv sym AArch32 -> Map.Map T.Text (SomeSome (WI.SymFn sym))
+    getParserEnv (SE.FormulaEnv env _) = Map.fromList $ map reshape $ Map.assocs env
+
+    reshape :: (String, (SE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr)) -> (T.Text, (SomeSome (WI.SymFn sym)))
+    reshape (nm, (SE.SomeSome symfn, _)) = (T.pack $ nm, SomeSome symfn)
+
+
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
   sym <- S.newSimpleBackend S.FloatIEEERepr ng
-  lcfg <- Log.mkLogCfg "main"
+  initenv <- formulaEnv (Proxy @ARM.AArch32) sym
   putStrLn $ "Parsing " ++ oSrcFile opts
-  symfns <- Log.withLogCfg lcfg $
-    WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (oSrcFile opts) >>= \case
-      Left err -> fail err
-      Right symfns -> return symfns
+  symfns <- readSymFns opts sym initenv
   a32pfs <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
     mkEncoding sym symfns (ARM.A32Opcode a32opcode) enc
   t32pfs <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
     mkEncoding sym symfns (ARM.T32Opcode t32opcode) enc
-  -- let instrKeys = Set.fromList $ map (T.pack . ASL.encName) $ (Map.elems T32.aslEncodingMap ++ Map.elems A32.aslEncodingMap)
   let funs = Map.assocs symfns
-  let lib = ASL.symFnsToLibrary sym funs
-  env <- mkFormulaEnv sym funs
+  let lib' = ASL.symFnsToLibrary sym funs
+  env <- addFormulaEnv sym initenv funs
   let odir = oRootDir opts
       genFunsTo d l = do
         ans@(s, e, _lib) <- genFunDefs sym env d (not $ oNoCheck opts) l
@@ -184,7 +227,7 @@ mainWithOptions opts = do
                        (if 0 == e' then "" else " (" <> show e' <> " errors!)")
         return (s+s', e+e')
   D.createDirectoryIfMissing True odir
-  let fundefs = map (\(Pair (SF.FunctionRef nm _ _) def) -> (dropUFPrefix nm, Some def)) $ MapF.toList lib
+  let fundefs = map (\(Pair (SF.FunctionRef nm _ _) def) -> (dropUFPrefix nm, Some def)) $ MapF.toList lib'
   (s0,e0,lib) <- genFunsTo odir fundefs
   (s,e) <- F.foldlM (genTo odir lib) (s0,e0) (a32pfs ++ t32pfs)
   putStrLn $ "Finished writing " <> show s <> " files with " <> show e <> " errors."
