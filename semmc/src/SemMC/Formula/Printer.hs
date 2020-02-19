@@ -434,6 +434,9 @@ convertAppExpr' paramLookup = go . S.appExprApp
           s1 <- goE e1
           s2 <- goE e2
           return $ SE.L [ident' "intmod", s1, s2]
+        go (S.IntAbs e1) = do
+          s1 <- goE e1
+          return $ SE.L [ident' "intabs", s1]
         go (S.IntegerToBV e wRepr)  = do
           s <- goE e
           return $ SE.L [ident' "integerToBV"

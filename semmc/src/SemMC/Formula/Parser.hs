@@ -410,6 +410,7 @@ lookupOp = \case
   "intmod" -> Just $ Op2 knownRepr $ S.intMod
   "intdiv" -> Just $ Op2 knownRepr $ S.intDiv
   "intle"  -> Just $ Op2 knownRepr $ S.intLe
+  "intabs" -> Just $ Op1 knownRepr $ S.intAbs
   -- -- -- Bitvector ops -- -- --
   "bvand" -> Just $ BVOp2 S.bvAndBits
   "bvor" -> Just $ BVOp2 S.bvOrBits
