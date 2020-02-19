@@ -19,6 +19,12 @@ module SemMC.Architecture.ARM.UF
     )
     where
 
+import           Data.Parameterized.WithRepr
+import qualified Data.Parameterized.TraversableFC as FC
+import           Data.Parameterized.Some
+import           Control.Applicative ( Const(..) )
+
+import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Context
 import GHC.TypeLits
 import qualified SemMC.Architecture as A
@@ -34,16 +40,34 @@ uninterpretedFunctions :: forall proxy arm. (KnownNat (A.RegWidth arm), 1 <= A.R
                          proxy arm
                        -> [A.UninterpFn arm]
 uninterpretedFunctions _ =
-  [ -- is_r15
-    -- A.mkUninterpFn @(SingleCtx (BaseIdxType arm))
-    --                @BaseBoolType @arm
-    --                "arm.is_r15"
-    --                (\_ -> [])
-
+  [ A.mkUninterpFn @(UFArgs)
+                   @(UFRet BaseBoolType)
+                   ("UNDEFINED_boolean_0")
+                   (\_ -> [])
+  , A.mkUninterpFn @(UFArgs)
+                   @(UFRet BaseIntegerType)
+                   ("UNDEFINED_integer_0")
+                   (\_ -> [])  
   ]
+  ++ (mkUndefBVUF  <$> ([1..32] ++ [40,48,52,64,128,160,256]))
   ++ (mkWriteMemUF <$> [8,16,32,64])
   ++ (mkReadMemUF <$> [8,16,32,64])
 
+-- Standard signatures for "UNDEFINED" functions
+type UFArgs = EmptyCtx ::> (BaseStructType (EmptyCtx ::> BaseBoolType))
+type UFRet t =
+  BaseStructType (EmptyCtx ::> (BaseStructType (EmptyCtx ::> BaseBoolType)) ::> (BaseStructType (EmptyCtx ::> t)))
+
+mkUndefBVUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
+            => Integer
+            -> A.UninterpFn arm
+mkUndefBVUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
+                      , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
+  = A.mkUninterpFn @(UFArgs)
+                   @(UFRet (BaseBVType n))
+                   ("UNDEFINED_bitvector_0N_" ++ show n)
+                   (\_ -> [])
+mkUndefBVUF n | otherwise = error $ "Cannot construct UNDEFINED_bitvector_0N_" ++ show n
 
 mkReadMemUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
             => Integer

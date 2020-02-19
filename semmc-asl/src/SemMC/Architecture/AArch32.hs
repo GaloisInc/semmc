@@ -181,7 +181,7 @@ instance (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
 
   isIP loc = Some loc == Some locPC
 
-  readLocation = P.parseMaybe parseLocation
+  readLocation = readLoc
 
   locationType = locRepr
 
@@ -192,12 +192,14 @@ instance (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
 
   registerizationLocations = []
 
+readLoc :: String -> Maybe (Some (Location arm))
+readLoc str = do
+  Some gr <- ASL.lookupGlobalRef str
+  return $ Some $ Location gr
 
 reprToDefault :: sym -> S.BaseTypeRepr tp -> IO (S.SymExpr sym tp)
 reprToDefault sym repr = error "reprToDefault"
 
-parseLocation :: Parser (Some (Location arm))
-parseLocation = error "parseLocation"
 
   -- do
   -- c <- P.lookAhead (P.anySingle)

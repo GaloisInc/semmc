@@ -21,6 +21,8 @@ module SemMC.Architecture.ARM.Location
     )
     where
 
+import qualified Data.Text as T
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
@@ -57,16 +59,17 @@ locRepr :: Location arm tp -> WI.BaseTypeRepr tp
 locRepr (Location gr) = ASL.globalRefRepr gr
 
 instance Show (Location arm tp) where
-  show loc = case loc of
-    _ | Just Refl <- testEquality locPC loc -> "PC"
-    _ | Just Refl <- testEquality locMem loc -> "Mem"
-    Location gr | Just Refl <- ASL.testGlobalEq @"_Rbv" gr -> "R"
-    Location gr -> show $ ASL.globalRefSymbol gr
+  show (Location gr) = T.unpack $ SR.symbolRepr $ ASL.globalRefSymbol gr
 
 instance ShowF (Location arm) 
 
 instance TestEquality (Location arm) where
-  testEquality (Location gr1) (Location gr2) = testEquality (ASL.globalRefRepr gr1) (ASL.globalRefRepr gr2)
+  testEquality (Location gr1) (Location gr2) = do
+    Refl <- testEquality gr1 gr2
+    return Refl
 
 instance OrdF (Location arm) where
-  compareF (Location gr1) (Location gr2) = compareF (ASL.globalRefRepr gr1) (ASL.globalRefRepr gr2)
+  compareF (Location gr1) (Location gr2) = case compareF gr1 gr2 of
+    LTF -> LTF
+    GTF -> GTF
+    EQF -> EQF

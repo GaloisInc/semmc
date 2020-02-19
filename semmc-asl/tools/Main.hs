@@ -24,6 +24,7 @@ import qualified Data.Foldable as F
 
 import           Control.Monad.Identity
 import           Control.Monad ( liftM, forM )
+import           Data.Maybe ( catMaybes )
 
 import           Data.Kind
 import qualified Data.Parameterized.Context as Ctx
@@ -40,6 +41,7 @@ import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Some
 import           Data.Proxy
 import qualified Data.Map as Map
+import qualified Data.List as List
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import           Data.Text.Encoding ( encodeUtf8 )
@@ -129,33 +131,45 @@ mkFormulaEnv sym funs = do
   where
     reshape :: (T.Text, SomeSome (WI.SymFn sym))
             -> (String, (SE.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
-    reshape (nm, SomeSome symFn) = (T.unpack nm, (SE.SomeSome symFn, Some (WI.fnReturnType symFn)))
+    reshape (nm, SomeSome symFn) = (swapUFPrefix nm, (SE.SomeSome symFn, Some (WI.fnReturnType symFn)))
+
+swapUFPrefix :: T.Text -> String
+swapUFPrefix nm = case T.stripPrefix "uf." nm of
+  Just nm' -> "df." ++ T.unpack nm'
+  Nothing -> "df." ++ T.unpack nm
+
+dropUFPrefix :: String -> String
+dropUFPrefix nm = case List.stripPrefix "uf." nm of
+  Just nm' -> nm'
+  Nothing -> nm
 
 mkEncoding :: (sym ~ WB.ExprBuilder t st fs)
            => sym
            -> WP.SymFnEnv sym
            -> ARM.ARMOpcode ARM.ARMOperand sh
            -> ASL.Encoding
-           -> IO (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32))
+           -> IO (Maybe (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32)))
 mkEncoding sym symfns opcode enc = do
-  formula <- ASL.encodingToFormula sym symfns opcode enc
-  return $ (ASL.encName enc, Pair opcode formula)
+  ASL.encodingToFormula sym symfns opcode enc >>= \case
+    Just formula -> return $ Just $ (ASL.encName enc, Pair opcode formula)
+    Nothing -> return Nothing
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
   sym <- S.newSimpleBackend S.FloatIEEERepr ng
   lcfg <- Log.mkLogCfg "main"
+  putStrLn $ "Parsing " ++ oSrcFile opts
   symfns <- Log.withLogCfg lcfg $
     WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (oSrcFile opts) >>= \case
       Left err -> fail err
       Right symfns -> return symfns
-  a32pfs <- forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
+  a32pfs <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
     mkEncoding sym symfns (ARM.A32Opcode a32opcode) enc
-  t32pfs <- forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
+  t32pfs <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
     mkEncoding sym symfns (ARM.T32Opcode t32opcode) enc
-  let instrKeys = Set.fromList $ map (T.pack . ASL.encName) $ (Map.elems T32.aslEncodingMap ++ Map.elems A32.aslEncodingMap)
-  let funs = Map.assocs $ Map.withoutKeys symfns instrKeys
+  -- let instrKeys = Set.fromList $ map (T.pack . ASL.encName) $ (Map.elems T32.aslEncodingMap ++ Map.elems A32.aslEncodingMap)
+  let funs = Map.assocs symfns
   let lib = ASL.symFnsToLibrary sym funs
   env <- mkFormulaEnv sym funs
   let odir = oRootDir opts
@@ -170,21 +184,22 @@ mainWithOptions opts = do
                        (if 0 == e' then "" else " (" <> show e' <> " errors!)")
         return (s+s', e+e')
   D.createDirectoryIfMissing True odir
-  let fundefs = map (\(Pair (SF.FunctionRef nm _ _) def) -> (nm, Some def)) $ MapF.toList lib
+  let fundefs = map (\(Pair (SF.FunctionRef nm _ _) def) -> (dropUFPrefix nm, Some def)) $ MapF.toList lib
   (s0,e0,lib) <- genFunsTo odir fundefs
   (s,e) <- F.foldlM (genTo odir lib) (s0,e0) (a32pfs ++ t32pfs)
   putStrLn $ "Finished writing " <> show s <> " files with " <> show e <> " errors."
   if e > 0 then exitFailure else exitSuccess
 
 
-genFunDefs :: ( CRUB.IsSymInterface sym
+genFunDefs :: ( sym ~ WB.ExprBuilder t st fs
+              , CRUB.IsSymInterface sym
               , ShowF (WI.SymExpr sym) )
            => sym -> SE.FormulaEnv sym (ARM.AArch32)
            -> FilePath -> Bool -> [(String, Some (SF.FunctionFormula sym))]
            -> IO (Int, Int, SF.Library sym)
 genFunDefs sym env d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
-    where writeFunDef (s,e,lib) (funName, def) =
-              let fundef  = error "print function formula not implemented"
+    where writeFunDef (s,e,lib) (funName, Some def) =
+              let fundef  = SF.printFunctionFormula def
                   fundefB = encodeUtf8 fundef
                   writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
               in if chk
