@@ -183,17 +183,20 @@ loadLibrary _ sym env contents = do
   -- dependency order and adding to the environment as we go. For now, for
   -- predictability's sake, we load everything in the initial environment.
 --  env <- formulaEnv proxy sym
-  MapF.fromList <$> mapM parseFunctionBS contents
+  snd <$> F.foldlM parseFunctionBS (env, MapF.empty) contents
   where
-    parseFunctionBS :: (String, BS.ByteString)
-                    -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
-    parseFunctionBS (name, bs) = do
+    parseFunctionBS :: (FE.FormulaEnv sym arch, F.Library sym)
+                    -> (String, BS.ByteString)
+                    -> IO (FE.FormulaEnv sym arch, F.Library sym)
+    parseFunctionBS (env', lib) (name, bs) = do
       U.logIO U.Info $ "reading formula for defined function " ++ show name
-      ef <- FP.readDefinedFunction sym env (T.decodeUtf8 bs)
+      ef <- FP.readDefinedFunction sym env' (T.decodeUtf8 bs)
       case ef of
-        Right (Some ff) ->
-          return $ Pair.Pair (F.functionRef ff) ff
+        Right (Some ff) -> do
+          let lib' = MapF.insert (F.functionRef ff) ff lib
+          return (FE.addLibrary env' lib', lib')
         Left e -> putStrLn "Trying to load library" >> E.throwIO (FormulaParseError name e)
+
 
 loadLibraryFromFiles :: forall sym arch
                       . ( CRU.IsExprBuilder sym
