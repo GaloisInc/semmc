@@ -77,6 +77,7 @@ import           SemMC.Architecture.ARM.Combined ( ARMOperandRepr )
 import qualified SemMC.Architecture.ARM.Combined as ARM
 
 import qualified Language.ASL.Globals as ASL
+import qualified Language.ASL.Formulas as ASL
 
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as WB
@@ -300,23 +301,9 @@ formulaEnv proxy sym = do
       uf <- SF.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol name) args ret
       return (("uf." ++ sanitizedName name), (uf, Some ret))
 
-readSymFns :: forall sym
-            . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
-           => sym
-           -> FilePath
-           -> SF.FormulaEnv sym AArch32
-           -> IO [(T.Text, (SomeSome (WI.SymFn sym)))]
-readSymFns sym fp env = do
-  let pcfg = (WP.defaultParserConfig sym) {WP.pSymFnEnv = getParserEnv env}
-  lcfg <- Log.mkLogCfg "main"
-  Log.withLogCfg lcfg $
-    WP.readSymFnListFromFile pcfg fp >>= \case
-      Left err -> fail err
-      Right symfns -> return symfns
+getParserEnv :: forall sym. SF.FormulaEnv sym AArch32 -> Map.Map T.Text (SomeSome (WI.SymFn sym))
+getParserEnv (SF.FormulaEnv env _) = Map.fromList $ map reshape $ Map.assocs env
   where
-    getParserEnv :: SF.FormulaEnv sym AArch32 -> Map.Map T.Text (SomeSome (WI.SymFn sym))
-    getParserEnv (SF.FormulaEnv env _) = Map.fromList $ map reshape $ Map.assocs env
-
     reshape :: (String, (SF.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr)) -> (T.Text, (SomeSome (WI.SymFn sym)))
     reshape (nm, (SF.SomeSome symfn, _)) = (T.pack $ nm, SomeSome symfn)
 
@@ -358,12 +345,12 @@ data ASLSemantics = ASLSemantics
   , funSemantics :: [(String, BS.ByteString)]
   }
 
-loadSemantics :: FilePath -> IO ASLSemantics
-loadSemantics fp = do
+loadSemantics :: IO ASLSemantics
+loadSemantics = do
   Some ng <- PN.newIONonceGenerator
   sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
   initenv <- formulaEnv (Proxy @ARM.AArch32) sym
-  funs <- readSymFns sym fp initenv
+  funs <- ASL.getFormulas sym (getParserEnv initenv)
   symfnEnv <- return $ Map.fromList funs
   a32pfs <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
     fmap (\pf -> Pair a32opcode pf) <$> encodingToFormula sym symfnEnv (ARM.A32Opcode a32opcode) enc
@@ -384,10 +371,9 @@ loadSemantics fp = do
   return $ ASLSemantics a32Bytes t32Bytes defBytes
 
 
-attachSemantics :: FilePath -> TH.ExpQ
-attachSemantics fp = do
-  TH.qAddDependentFile fp
-  ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics fp
+attachSemantics :: TH.ExpQ
+attachSemantics = do
+  ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics
   [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
                   $(TH.listE (map toOpcodePair t32sem))
                   $(TH.listE (map toFunctionPair funsem)) |]

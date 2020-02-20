@@ -17,9 +17,10 @@ build-type:          Simple
 extra-source-files:  CHANGELOG.md, README.md
 
 library
-  exposed-modules:     SemMC.Architecture.ARM.Opcodes
+  exposed-modules:     SemMC.Architecture.AArch32
+                       SemMC.Architecture.ARM.Opcodes
                        SemMC.Architecture.ARM.Combined
-                       SemMC.Architecture.AArch32
+                       SemMC.Architecture.ARM.MachineState
                        SemMC.Architecture.ARM.Location
 
   other-modules:       SemMC.Architecture.ARM.Opcodes.InternalA32

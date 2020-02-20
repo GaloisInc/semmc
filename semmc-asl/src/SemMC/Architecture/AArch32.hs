@@ -14,22 +14,15 @@
 
 module SemMC.Architecture.AArch32
     ( AArch32
-    , MachineState(..)
-    , Instruction
     , ARMOpcode(..)
     , ARMOperand(..)
-    , machineStateToBS
-    , machineStateFromBS
     , shapeReprType
     , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
     where
 
 import           Control.Monad ( replicateM )
-import qualified Data.Binary.Get as G
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Lazy as LB
+
 import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as PL
@@ -50,7 +43,7 @@ import qualified Text.Megaparsec.Char.Lexer as P
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as AL
-import qualified SemMC.Concrete.Execution as CE
+
 import qualified SemMC.Formula as F
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
@@ -70,25 +63,7 @@ import           SemMC.Architecture.ARM.Location
 
 data AArch32  -- arch type
 
-
--- ----------------------------------------------------------------------
-
-data MachineState -- machinestate
-
 type Parser = P.Parsec String String
-
-type Instruction = LB.ByteString
-
-machineStateToBS :: MachineState -> B.ByteString
-machineStateToBS ms = error ""
-
-machineStateFromBS :: B.ByteString -> Maybe MachineState
-machineStateFromBS bs = error ""
-
-getMachineState :: G.Get MachineState
-getMachineState =  error ""
-
--- ----------------------------------------------------------------------
 
 type instance A.Opcode   AArch32 = ARMOpcode
 type instance A.Operand  AArch32 = ARMOperand
@@ -197,41 +172,10 @@ readLoc str = do
   Some gr <- ASL.lookupGlobalRef str
   return $ Some $ Location gr
 
-reprToDefault :: sym -> S.BaseTypeRepr tp -> IO (S.SymExpr sym tp)
-reprToDefault sym repr = error "reprToDefault"
-
-
-  -- do
-  -- c <- P.lookAhead (P.anySingle)
-  -- case c of
-  --   'C' -> Some LocCPSR <$ P.string "CPSR"
-  --   'M' -> Some LocMem <$ P.string "Mem"
-  --   'P' -> Some LocPC <$ P.string "PC"
-  --   'R' -> do
-  --     parsePrefixedRegister (Some . LocGPR) 'R'
-  --   _ -> do
-  --     P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
-
-parsePrefixedRegister :: (Word32 -> b) -> Char -> Parser b
-parsePrefixedRegister f c = error ""
-
- -- do
- --  _ <- P.char c
- --  n <- P.decimal
- --  case n >= 0 && n <= (numGPR-1) of
- --    True -> return (f n)
- --    False -> P.failure (Just $ P.Tokens $ fromList $ show n)
- --                      (Set.fromList $ [ P.Label $ fromList $ "Register number 0-" <> show (numGPR-1) ])
-
--- ----------------------------------------------------------------------
-
--- ShowF (A.Operand ARM)
---       ShowF (A.Opcode ARM (A.Operand ARM))
---             OrdF (A.Opcode ARM (A.Operand ARM))
---                  (Data.EnumF.EnumF (A.Opcode ARM (A.Operand ARM)))
+reprToDefault :: S.IsExprBuilder sym => sym -> S.BaseTypeRepr tp -> IO (S.SymExpr sym tp)
+reprToDefault sym repr = S.baseDefaultValue sym repr
 
 type instance A.RegWidth AArch32 = 32
-
 
 instance A.Architecture AArch32 where
     data TaggedExpr AArch32 sym s = TaggedExpr (A.AllocatedOperand AArch32 sym s)
@@ -370,144 +314,3 @@ shapeReprType orep =
             T32.QuasiMask14Repr -> knownRepr
             T32.QuasiMask15Repr -> knownRepr
             T32.QuasiMask16Repr -> knownRepr
-
-
--- ----------------------------------------------------------------------
-
--- data Signed = Signed | Unsigned deriving (Eq, Show)
-
-
--- type instance A.OperandComponents AArch32 sym = AOC.OperandComponents AArch32 sym
-
--- instance T.TemplatableOperand AArch32 where
---   opTemplates sr =
---       case sr of
---         (A32OperandRepr a) -> a32template a
---         (T32OperandRepr a) -> t32template a
-
--- a32template :: ARMDis.OperandRepr s -> [T.TemplatedOperand AArch32 s]
--- a32template a32sr =
---     case a32sr of
---       ARMDis.Addrmode_imm12Repr ->
---           mkTemplate <$> [0..numGPR-1]
---               where mkTemplate gprNum = T.TemplatedOperand Nothing
---                                         (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
---                                             :: T.TemplatedOperand AArch32 "Addrmode_imm12"
---                         where mkTemplate' :: forall sym
---                                            . (S.IsSymExprBuilder sym)
---                                           => sym
---                                           -> (forall tp . Location AArch32 tp -> IO (S.SymExpr sym tp))
---                                           -> IO (A.AllocatedOperand AArch32 sym "Addrmode_imm12",
---                                                  T.RecoverOperandFn sym (A.Operand AArch32 "Addrmode_imm12"))
---                               mkTemplate' sym locLookup = do
---                                 let gprN = ARMOperands.gpr $ fromIntegral gprNum
---                                 let loc = LocGPR gprNum
---                                 base <- locLookup loc
---                                 offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
---                                 addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
---                                 let recover :: (forall tp . S.SymExpr sym tp -> IO (WE.GroundValue tp)) -> IO (A.Operand AArch32 "Addrmode_imm12")
---                                     recover evalFn = do
---                                       offsetVal <- fromInteger <$> evalFn offset
---                                       addflagVal <- fromInteger <$> evalFn addflag
---                                       return $ A32Operand $ ARMDis.Addrmode_imm12 $
---                                              ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
---                                 return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
---                                        , T.RecoverOperandFn recover
---                                        )
---       ARMDis.Addrmode_imm12_preRepr ->
---           mkTemplate <$> [0..numGPR-1]
---             where mkTemplate gprNum = T.TemplatedOperand Nothing
---                                       (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
---                                           :: T.TemplatedOperand AArch32 "Addrmode_imm12_pre"
---                     where mkTemplate' :: forall sym
---                                        . (S.IsSymExprBuilder sym)
---                                       => sym
---                                       -> (forall tp . Location AArch32 tp -> IO (S.SymExpr sym tp))
---                                       -> IO (A.AllocatedOperand AArch32 sym "Addrmode_imm12_pre",
---                                              T.RecoverOperandFn sym (A.Operand AArch32 "Addrmode_imm12_pre"))
---                           mkTemplate' sym locLookup = do
---                             let gprN = ARMOperands.gpr $ fromIntegral gprNum
---                             let loc = LocGPR gprNum
---                             base <- locLookup loc
---                             offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
---                             addflag :: S.SymExpr sym (BaseBVType 1)
---                                     <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
---                             let recover :: (forall tp . S.SymExpr sym tp -> IO (WE.GroundValue tp)) -> IO (A.Operand AArch32 "Addrmode_imm12_pre")
---                                 recover evalFn = do
---                                   offsetVal <- fromInteger <$> evalFn offset
---                                   addflagVal <- fromInteger <$> evalFn addflag
---                                   return $ A32Operand $ ARMDis.Addrmode_imm12_pre $
---                                          ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
---                             return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
---                                    , T.RecoverOperandFn recover
---                                    )
---       ARMDis.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
---       ARMDis.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
---       ARMDis.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
---       ARMDis.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
---       ARMDis.GPRRepr -> concreteTemplatedOperand (A32Operand . ARMDis.GPR . ARMOperands.gpr . fromIntegral) LocGPR <$> [0..numGPR-1]
---       ARMDis.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
---       ARMDis.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred"
---                           (A32Operand . ARMDis.Pred . ARMDis.mkPred . fromInteger)]
---       ARMDis.Shift_so_reg_immRepr -> error "opTemplate Shift_so_reg_immRepr TBD"
---       ARMDis.So_reg_immRepr -> error "opTemplate So_reg_immRepr TBD"
---       -- ARMDis.So_reg_regRepr ->
---       --     mkTemplate <$> [0..numGPR-1]
---       --       where mkTemplate gprNum = T.TemplatedOperand Nothing
---       --                                 (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
---       --                                     :: T.TemplatedOperand ARM "So_reg_reg"
---       --               where mkTemplate' :: T.TemplatedOperandFn ARM "So_reg_reg"
---       --                     mkTemplate' sym locLookup = do
---       --                       let gprN = ARMOperands.gpr gprNum
---       --                       base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARMDis.GPR $ gprN)
---       --                       offset <- S.freshConstant sym (U.makeSymbol "So_reg_reg_shift") knownRepr
---       --                       expr <- S.bvAdd sym offset offset -- KWQ!
---       --                       let recover evalFn = do
---       --                             offsetVal <- fromInteger <$> evalFn offset
---       --                             return $ ARMDis.So_reg_reg $ ARMOperands.SoRegReg gprN gprN offsetVal
---       --                       return (expr, T.RecoverOperandFn recover)
---       ARMDis.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
-
--- t32template :: ThumbDis.OperandRepr s -> [T.TemplatedOperand AArch32 s]
--- t32template t32sr =
---     case t32sr of
---       _ -> error "opTemplate T32 ?? TBD"
-
-
-
--- concreteTemplatedOperand :: forall arch s a.
---                             (A.Architecture arch)
---                          => (a -> A.Operand arch s)
---                          -> (a -> A.Location arch (A.OperandType arch s))
---                          -> a
---                          -> T.TemplatedOperand arch s
--- concreteTemplatedOperand op loc x =
---   T.TemplatedOperand { T.templOpLocation = Just (loc x)
---                      , T.templUsedLocations = Set.singleton (Some (loc x))
---                      , T.templOpFn = mkTemplate'
---                      }
---   where mkTemplate' :: T.TemplatedOperandFn arch s
---         mkTemplate' sym locLookup = do
---           ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
---           return (ao, T.RecoverOperandFn $ const (return (op x)))
-
-
--- symbolicTemplatedOperand :: forall arch s (bits :: Nat)
---                           . (A.OperandType arch s ~ BaseBVType bits,
---                              KnownNat bits,
---                              1 <= bits)
---                          => Proxy bits
---                          -> Signed
---                          -> String
---                          -> (Integer -> A.Operand arch s)
---                          -> T.TemplatedOperand arch s
--- symbolicTemplatedOperand Proxy _signed name constr =
---   T.TemplatedOperand { T.templOpLocation = Nothing
---                      , T.templUsedLocations = Set.empty
---                      , T.templOpFn = mkTemplate'
---                      }
---   where mkTemplate' :: T.TemplatedOperandFn arch s
---         mkTemplate' sym _ = do
---           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
---           let recover evalFn = constr <$> evalFn v
---           return (A.ValueOperand v, T.RecoverOperandFn recover)

@@ -29,7 +29,7 @@ import           SemMC.Architecture.ARM.Opcodes.InternalT32 ( t32Opcodes, t32Opc
 import qualified SemMC.Architecture.ARM.ASL as ASL
 
 allASLSemantics :: ASL.ASLSemantics
-allASLSemantics = $(ASL.attachSemantics "data/formulas.what4")
+allASLSemantics = $(ASL.attachSemantics)
 
 allDefinedFunctions :: [(String, BS.ByteString)]
 allDefinedFunctions = ASL.funSemantics allASLSemantics
