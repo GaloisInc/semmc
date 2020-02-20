@@ -21,7 +21,7 @@ import qualified Lang.Crucible.Backend.Simple as S
 import qualified SemMC.Architecture.AArch32 as ARM
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics
-                                                , a32DefinedFunctions, t32DefinedFunctions )
+                                                , allDefinedFunctions )
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Formula.Env as FE
@@ -61,7 +61,7 @@ logVarEventConsumer logOut logPred =
 
 
 tests :: TestTree
-tests = withResource (mkLibrary a32DefinedFunctions) (\_ -> return ()) $ \sl -> do
+tests = withResource (mkLibrary allDefinedFunctions) (\_ -> return ()) $ \sl -> do
           testGroup "Read Formulas"
             [ testCase "warmup test" $ 1 + 1 @?= (2::Int)
             , testA32Formulas sl

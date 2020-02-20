@@ -16,15 +16,25 @@ maintainer:          dmatichuk@galois.com
 build-type:          Simple
 extra-source-files:  CHANGELOG.md, README.md
 
-common semmc-asl-shared
-  default-language:    Haskell2010
+library
+  exposed-modules:     SemMC.Architecture.ARM.Opcodes
+                       SemMC.Architecture.ARM.Combined
+                       SemMC.Architecture.AArch32
+                       SemMC.Architecture.ARM.Location
+
+  other-modules:       SemMC.Architecture.ARM.Opcodes.InternalA32
+                       SemMC.Architecture.ARM.Opcodes.InternalT32
+                       SemMC.Architecture.ARM.UF
+                       SemMC.Architecture.ARM.ASL
 
   build-depends:       base >=4.10.0.0 && < 5,
                        asl-translator,
                        binary,
                        bytestring,
                        containers,
+                       crucible,
                        parameterized-utils,
+                       filepath,
                        dismantle-arm-xml,
                        dismantle-tablegen,
                        megaparsec,
@@ -37,53 +47,8 @@ common semmc-asl-shared
                        what4-serialize
 
   hs-source-dirs:      src
-                     
-library semmc-asl-lib
-  import:              semmc-asl-shared
-  exposed-modules:     SemMC.Architecture.AArch32
-                       SemMC.Architecture.ARM.Location
-                       SemMC.Architecture.ARM.Combined
-                       SemMC.Architecture.ARM.UF
-                       SemMC.Architecture.ARM.ASL          
-
-library
-  import:              semmc-asl-shared
-  exposed-modules:     SemMC.Architecture.ARM.Opcodes
-                       SemMC.Architecture.ARM.Combined
-                       SemMC.Architecture.AArch32
-                       SemMC.Architecture.ARM.Location
- 
-  other-modules:       SemMC.Architecture.ARM.Opcodes.InternalA32
-                       SemMC.Architecture.ARM.Opcodes.InternalT32
-                       SemMC.Architecture.ARM.UF
-                       SemMC.Architecture.ARM.ASL
-
-  build-depends:       semmc-asl-lib,
-                       filepath
-
-executable semmc-asl-genarm
-  default-language: Haskell2010
-  ghc-options: -Wall
-  hs-source-dirs: tools
-  main-is: Main.hs
-  build-depends: base >=4.10 && < 5,
-                 asl-translator,
-                 bytestring,
-                 crucible,
-                 containers,
-                 directory,
-                 what4-serialize,
-                 dismantle-arm-xml,
-                 dismantle-tablegen,
-                 filepath,
-                 mtl,
-                 parameterized-utils,
-                 optparse-applicative,
-                 semmc-asl-lib,
-                 semmc,
-                 text,
-                 what4
-
+  default-language:    Haskell2010
+  ghc-options:         -Wall
 
 executable semmc-asl-test
   default-language: Haskell2010

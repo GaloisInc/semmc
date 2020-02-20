@@ -11,17 +11,22 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- | Converting the output of the asl translator into semmc formulas
 
 module SemMC.Architecture.ARM.ASL
   ( encodingToFormula
-  , symFnToFormula
+  , symFnToFunFormula
+  , ASLSemantics(..)
+  , loadSemantics
+  , attachSemantics
   ) where
 
 import           Data.Kind
 import           Data.Maybe ( catMaybes )
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -30,6 +35,12 @@ import           Control.Monad.Identity
 import qualified Control.Monad.Except as ME
 import           Control.Monad ( liftM, forM )
 import           Data.Proxy
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Unsafe as UBS
+import qualified System.IO.Unsafe as IO
+
+import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH.Syntax as TH
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Type.List as TL
@@ -40,14 +51,20 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
 import           Data.Parameterized.Pair
 import           Data.Parameterized.HasRepr
+import           Data.Parameterized.Lift ( LiftF(..) )
 
+import qualified Lang.Crucible.Backend.Simple as CB
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula.Formula as SF
+import qualified SemMC.Formula.Env as SF
+import qualified SemMC.Formula.Printer as SF
+import qualified SemMC.Util as U
 
 import qualified Dismantle.ARM.T32 as T32
 import qualified Dismantle.ARM.A32 as A32
@@ -64,6 +81,8 @@ import qualified Language.ASL.Globals as ASL
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as WB
 import           What4.Utils.Util ( SomeSome(..) )
+import qualified What4.Utils.Log as Log
+import qualified What4.Serialize.Parser as WP
 
 data OperandTypeWrapper (arch :: Type) :: TL.TyFun Symbol WI.BaseType -> Type
 type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
@@ -187,7 +206,7 @@ encodingToFormula :: forall sym sh
 encodingToFormula sym symFnEnv opcode enc = case Map.lookup (T.pack $ (ASL.encName enc)) symFnEnv of
   Just (SomeSome symFn) -> do
     case testOpcodeSig sym opcode symFn of
-      Right Refl -> Just <$> mkFormula sym opcode symFn
+      Right Refl -> Just <$> symFnToParamFormula sym opcode symFn
       Left err -> do error $ "testOpcodeSig: " ++ ASL.encName enc ++ "\n" ++ err
   Nothing -> do
     putStrLn $ "Missing function definition for: " ++ ASL.encName enc
@@ -198,13 +217,13 @@ encodingToFormula sym symFnEnv opcode enc = case Map.lookup (T.pack $ (ASL.encNa
     -- mkFormula sym opcode symFn
 
 
-mkFormula :: forall sym sh
-           . WI.IsSymExprBuilder sym
-          => sym
-          -> ARM.ARMOpcode ARM.ARMOperand sh
-          -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.GlobalsCtx)
-          -> IO (SF.ParameterizedFormula sym AArch32 sh)
-mkFormula sym opcode symFn = do
+symFnToParamFormula :: forall sym sh
+                     . WI.IsSymExprBuilder sym
+                    => sym
+                    -> ARM.ARMOpcode ARM.ARMOperand sh
+                    -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.GlobalsCtx)
+                    -> IO (SF.ParameterizedFormula sym AArch32 sh)
+symFnToParamFormula sym opcode symFn = do
   opvars <- mkOperandVars sym opcode
   gbvars <- mkGlobalVars sym
   gbstruct <- getGlobalStruct sym gbvars
@@ -234,13 +253,13 @@ dropUFPrefix nm = case List.stripPrefix "uf." nm of
   Just nm' -> nm'
   Nothing -> nm
 
-symFnToFormula :: forall sym args ret
+symFnToFunFormula :: forall sym args ret
                  . SymFnsHaveBVs sym
                 => sym
                 -> T.Text
                 -> WI.SymFn sym args ret
                 -> Maybe (String, SF.FunctionFormula sym '(TL.FromContextFwd args, ret))
-symFnToFormula sym name symFn = case mkArgLists symFn of
+symFnToFunFormula sym name symFn = case mkArgLists symFn of
     Just (argtps, argvars) | Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn) ->
       Just $ (dropUFPrefix $ T.unpack name, SF.FunctionFormula
         { SF.ffName = dropUFPrefix $ T.unpack name
@@ -258,3 +277,117 @@ symFnToFormula sym name symFn = case mkArgLists symFn of
     mkArgLists symFn = case fnBoundVars sym symFn of
       Just vars -> Just $ (TL.fromAssignmentFwd (WI.fnArgTypes symFn), TL.fromAssignmentFwd vars)
       _ -> Nothing
+
+sanitizedName :: String -> String
+sanitizedName name = map (\c -> case c of ' ' -> '_'; '.' -> '_'; _ -> c) name
+
+
+formulaEnv :: forall sym arch
+            . (A.Architecture arch, WI.IsSymExprBuilder sym)
+           => Proxy arch
+           -> sym
+           -> IO (SF.FormulaEnv sym arch)
+formulaEnv proxy sym = do
+  undefinedBit <- WI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
+  ufs <- Map.fromList <$> mapM toUF (A.uninterpretedFunctions proxy)
+  return SF.FormulaEnv { SF.envFunctions = ufs
+                       , SF.envUndefinedBit = undefinedBit
+                       }
+  where
+    toUF :: A.UninterpFn arch
+         -> IO (String, (SF.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
+    toUF (A.MkUninterpFn name args ret _) = do
+      uf <- SF.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol name) args ret
+      return (("uf." ++ sanitizedName name), (uf, Some ret))
+
+readSymFns :: forall sym
+            . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+           => sym
+           -> FilePath
+           -> SF.FormulaEnv sym AArch32
+           -> IO [(T.Text, (SomeSome (WI.SymFn sym)))]
+readSymFns sym fp env = do
+  let pcfg = (WP.defaultParserConfig sym) {WP.pSymFnEnv = getParserEnv env}
+  lcfg <- Log.mkLogCfg "main"
+  Log.withLogCfg lcfg $
+    WP.readSymFnListFromFile pcfg fp >>= \case
+      Left err -> fail err
+      Right symfns -> return symfns
+  where
+    getParserEnv :: SF.FormulaEnv sym AArch32 -> Map.Map T.Text (SomeSome (WI.SymFn sym))
+    getParserEnv (SF.FormulaEnv env _) = Map.fromList $ map reshape $ Map.assocs env
+
+    reshape :: (String, (SF.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr)) -> (T.Text, (SomeSome (WI.SymFn sym)))
+    reshape (nm, (SF.SomeSome symfn, _)) = (T.pack $ nm, SomeSome symfn)
+
+toOpcodePair :: (LiftF a) => (Some a, BS.ByteString) -> TH.ExpQ
+toOpcodePair (Some o, bs) = TH.tupE [ [| Some $(liftF o) |], embedByteString bs ]
+
+toFunctionPair :: (String, BS.ByteString) -> TH.ExpQ
+toFunctionPair (name, bs) = TH.tupE [ [| $(TH.litE (TH.StringL name)) |], embedByteString bs ]
+
+embedByteString :: BS.ByteString -> TH.ExpQ
+embedByteString bs =
+  [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(TH.litE (TH.StringPrimL (BS.unpack bs)))) |]
+  where
+    len = BS.length bs
+
+mkEncoding :: (sym ~ WB.ExprBuilder t st fs)
+           => sym
+           -> WP.SymFnEnv sym
+           -> ARM.ARMOpcode ARM.ARMOperand sh
+           -> ASL.Encoding
+           -> IO (Maybe (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32)))
+mkEncoding sym symfns opcode enc = do
+  encodingToFormula sym symfns opcode enc >>= \case
+    Just formula -> return $ Just $ (ASL.encName enc, Pair opcode formula)
+    Nothing -> return Nothing
+
+mkFormula :: forall sym t st fs
+           . (sym ~ WB.ExprBuilder t st fs)
+          => sym
+          -> (T.Text, SomeSome (WI.SymFn sym))
+          -> Maybe (String, Some (SF.FunctionFormula sym))
+mkFormula sym (nm, SomeSome symFn) = do
+  (nm', formula) <- symFnToFunFormula sym nm symFn
+  return (nm', Some formula)
+
+data ASLSemantics = ASLSemantics
+  { a32Semantics :: [(Some (A32.Opcode A32.Operand), BS.ByteString)]
+  , t32Semantics :: [(Some (T32.Opcode T32.Operand), BS.ByteString)]
+  , funSemantics :: [(String, BS.ByteString)]
+  }
+
+loadSemantics :: FilePath -> IO ASLSemantics
+loadSemantics fp = do
+  Some ng <- PN.newIONonceGenerator
+  sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
+  initenv <- formulaEnv (Proxy @ARM.AArch32) sym
+  funs <- readSymFns sym fp initenv
+  symfnEnv <- return $ Map.fromList funs
+  a32pfs <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
+    fmap (\pf -> Pair a32opcode pf) <$> encodingToFormula sym symfnEnv (ARM.A32Opcode a32opcode) enc
+  t32pfs <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
+    fmap (\pf -> Pair t32opcode pf) <$> encodingToFormula sym symfnEnv (ARM.T32Opcode t32opcode) enc
+
+  a32Bytes <- forM a32pfs $ \(Pair opcode pformula) -> do
+    let bs = T.encodeUtf8 $ SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) pformula
+    return (Some opcode, bs)
+  t32Bytes <- forM t32pfs $ \(Pair opcode pformula) -> do
+    let bs = T.encodeUtf8 $ SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) pformula
+    return (Some opcode, bs)
+  let fformulas = catMaybes $ map (mkFormula sym) funs
+  defBytes <- forM fformulas $ \(nm, Some fformula) -> do
+    let bs = T.encodeUtf8 $ SF.printFunctionFormula fformula
+    return (nm, bs)
+
+  return $ ASLSemantics a32Bytes t32Bytes defBytes
+
+
+attachSemantics :: FilePath -> TH.ExpQ
+attachSemantics fp = do
+  TH.qAddDependentFile fp
+  ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics fp
+  [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
+                  $(TH.listE (map toOpcodePair t32sem))
+                  $(TH.listE (map toFunctionPair funsem)) |]
