@@ -16,17 +16,18 @@
 
 module SemMC.Architecture.ARM.ASL
   ( encodingToFormula
-  , symFnsToLibrary
+  , symFnToFormula
   ) where
 
 import           Data.Kind
 import           Data.Maybe ( catMaybes )
 import qualified Data.Text as T
+import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Control.Applicative ( Const(..) )
 import           Control.Monad.Identity
-import qualified Control.Monad.Error as ME
+import qualified Control.Monad.Except as ME
 import           Control.Monad ( liftM, forM )
 import           Data.Proxy
 
@@ -228,31 +229,27 @@ mkFormula sym opcode symFn = do
       expr <- WI.structField sym struct (ASL.globalRefIndex gr)
       return $ Const $ Pair (SF.LiteralParameter (ARM.Location gr)) expr      
 
-symFnsToLibrary :: forall sym
+dropUFPrefix :: String -> String
+dropUFPrefix nm = case List.stripPrefix "uf." nm of
+  Just nm' -> nm'
+  Nothing -> nm
+
+symFnToFormula :: forall sym args ret
                  . SymFnsHaveBVs sym
                 => sym
-                -> [(T.Text, SomeSome (WI.SymFn sym))]
-                -> SF.Library sym
-symFnsToLibrary sym funs = runIdentity $ do
-  liftM (MapF.fromList . catMaybes) $ forM funs $ \(nm, SomeSome symFn) -> case mkArgLists symFn of
-    Just (argtps, argvars) -> do
-      Refl <- return $ TL.toFromCtxFwd (WI.fnArgTypes symFn)
-      let rettp = WI.fnReturnType symFn
-
-      let ref = SF.FunctionRef
-                  { SF.frName = T.unpack nm
-                  , SF.frArgTypes = argtps
-                  , SF.frRetType = rettp
-                  }
-
-      return $ Just $ Pair ref $ SF.FunctionFormula
-        { SF.ffName = T.unpack nm
+                -> T.Text
+                -> WI.SymFn sym args ret
+                -> Maybe (String, SF.FunctionFormula sym '(TL.FromContextFwd args, ret))
+symFnToFormula sym name symFn = case mkArgLists symFn of
+    Just (argtps, argvars) | Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn) ->
+      Just $ (dropUFPrefix $ T.unpack name, SF.FunctionFormula
+        { SF.ffName = dropUFPrefix $ T.unpack name
         , SF.ffArgTypes = argtps
         , SF.ffArgVars = argvars
-        , SF.ffRetType = rettp
+        , SF.ffRetType = WI.fnReturnType symFn
         , SF.ffDef = symFn
-        }
-    Nothing -> return Nothing
+        })
+    Nothing -> Nothing
   where
     mkArgLists :: WI.SymFn sym args ret
                -> Maybe ( SL.List WI.BaseTypeRepr (TL.FromContextFwd args)

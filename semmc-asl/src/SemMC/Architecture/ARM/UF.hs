@@ -23,11 +23,14 @@ import           Data.Parameterized.WithRepr
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Some
 import           Control.Applicative ( Const(..) )
+import qualified Data.Text as T
 
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Context
 import GHC.TypeLits
 import qualified SemMC.Architecture as A
+import qualified Language.ASL.Globals as G
+
 import What4.BaseTypes
 import Data.Proxy
 
@@ -52,6 +55,7 @@ uninterpretedFunctions _ =
   ++ (mkUndefBVUF  <$> ([1..32] ++ [40,48,52,64,128,160,256]))
   ++ (mkWriteMemUF <$> [8,16,32,64])
   ++ (mkReadMemUF <$> [8,16,32,64])
+  ++ FC.toListFC mkGlobalUF G.untrackedGlobals
 
 -- Standard signatures for "UNDEFINED" functions
 type UFArgs = EmptyCtx ::> (BaseStructType (EmptyCtx ::> BaseBoolType))
@@ -69,6 +73,16 @@ mkUndefBVUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                    (\_ -> [])
 mkUndefBVUF n | otherwise = error $ "Cannot construct UNDEFINED_bitvector_0N_" ++ show n
 
+mkGlobalUF :: G.Global tp -> A.UninterpFn arm
+mkGlobalUF gb =
+  let
+    name = "INIT_GLOBAL_" ++ (T.unpack $ G.gbName gb)
+  in case G.gbType gb of
+    BaseBVRepr (nr :: NatRepr n) -> withKnownNat nr $ A.mkUninterpFn @(EmptyCtx) @(BaseBVType n) name (\_ -> [])
+    BaseIntegerRepr -> A.mkUninterpFn @EmptyCtx @BaseIntegerType name (\_ -> [])
+    BaseBoolRepr -> A.mkUninterpFn @EmptyCtx @BaseBoolType name (\_ -> [])
+    x -> error $ "Unexpected globals type: " ++ show x
+
 mkReadMemUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
             => Integer
             -> A.UninterpFn arm
@@ -76,7 +90,7 @@ mkReadMemUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                       , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
   = A.mkUninterpFn @(EmptyCtx ::> BaseMemType arm ::> BaseIdxType arm)
                    @(BaseBVType n)
-                   ("read_mem." ++ show n)
+                   ("read_mem_" ++ show n)
                    (\(_ :> _ :> idx) -> [A.ReadData idx])
 mkReadMemUF n | otherwise = error $ "Cannot construct read_mem." ++ show n
 
@@ -87,6 +101,6 @@ mkWriteMemUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
   = A.mkUninterpFn @(EmptyCtx ::> BaseMemType arm ::> BaseIdxType arm ::> BaseBVType n)
                    @(BaseMemType arm)
-                   ("write_mem." ++ show n)
+                   ("write_mem_" ++ show n)
                    $ \(_ :> _ :> idx :> val) -> [A.WriteData idx val]
 mkWriteMemUF n | otherwise = error $ "Cannot construct write_mem." ++ show n
