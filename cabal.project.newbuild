@@ -4,6 +4,7 @@ packages:
   semmc-ppc/
   semmc-x86_64/
   semmc-arm/
+  semmc-asl/
   semmc-toy/
   semmc-coverage/
   submodules/dismantle/dismantle-tablegen/
@@ -13,8 +14,11 @@ packages:
   submodules/dismantle/dismantle-ppc/
 
 optional-packages:
+  submodules/arm-asl-parser
+  submodules/asl-translator
   submodules/crucible/crucible
   submodules/crucible/what4
+  submodules/crucible/what4-serialize
   submodules/crucible/crucible-llvm
   submodules/llvm-pretty
   submodules/parameterized-utils

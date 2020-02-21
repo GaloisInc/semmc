@@ -45,11 +45,11 @@ uninterpretedFunctions :: forall proxy arm. (KnownNat (A.RegWidth arm), 1 <= A.R
 uninterpretedFunctions _ =
   [ A.mkUninterpFn @(UFArgs)
                    @(UFRet BaseBoolType)
-                   ("UNDEFINED_boolean_0")
+                   ("UNDEFINED_boolean")
                    (\_ -> [])
   , A.mkUninterpFn @(UFArgs)
                    @(UFRet BaseIntegerType)
-                   ("UNDEFINED_integer_0")
+                   ("UNDEFINED_integer")
                    (\_ -> [])  
   ]
   ++ (mkUndefBVUF  <$> ([1..32] ++ [40,48,52,64,128,160,256]))
@@ -58,9 +58,8 @@ uninterpretedFunctions _ =
   ++ FC.toListFC mkGlobalUF G.untrackedGlobals
 
 -- Standard signatures for "UNDEFINED" functions
-type UFArgs = EmptyCtx ::> (BaseStructType (EmptyCtx ::> BaseBoolType))
-type UFRet t =
-  BaseStructType (EmptyCtx ::> (BaseStructType (EmptyCtx ::> BaseBoolType)) ::> (BaseStructType (EmptyCtx ::> t)))
+type UFArgs = EmptyCtx
+type UFRet t = t
 
 mkUndefBVUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
             => Integer
@@ -69,7 +68,7 @@ mkUndefBVUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                       , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
   = A.mkUninterpFn @(UFArgs)
                    @(UFRet (BaseBVType n))
-                   ("UNDEFINED_bitvector_0N_" ++ show n)
+                   ("UNDEFINED_bitvector_" ++ show n)
                    (\_ -> [])
 mkUndefBVUF n | otherwise = error $ "Cannot construct UNDEFINED_bitvector_0N_" ++ show n
 
