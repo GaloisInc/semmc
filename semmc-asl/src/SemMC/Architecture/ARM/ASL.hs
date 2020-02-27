@@ -83,7 +83,6 @@ import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as WB
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Utils.Log as Log
-import qualified What4.Serialize.Parser as WP
 
 data OperandTypeWrapper (arch :: Type) :: TL.TyFun Symbol WI.BaseType -> Type
 type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
@@ -321,7 +320,7 @@ embedByteString bs =
 
 mkEncoding :: (sym ~ WB.ExprBuilder t st fs)
            => sym
-           -> WP.SymFnEnv sym
+           -> ASL.NamedSymFnEnv sym
            -> ARM.ARMOpcode ARM.ARMOperand sh
            -> ASL.Encoding
            -> IO (Maybe (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32)))
