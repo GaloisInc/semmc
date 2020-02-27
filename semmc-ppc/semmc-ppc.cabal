@@ -89,8 +89,9 @@ library
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,
-                 semmc
---                 semmc-ppc
+                 semmc,
+                 semmc-synthesis,
+                 semmc-learning
 
 executable semmc-ppc-test
   default-language: Haskell2010
@@ -118,6 +119,7 @@ executable semmc-ppc-iorels
                  directory,
                  async,
                  semmc,
+                 semmc-learning,
                  semmc-ppc,
                  parameterized-utils,
                  dismantle-tablegen,
@@ -136,6 +138,7 @@ executable semmc-ppc-stratify
                  parameterized-utils,
                  crucible,
                  semmc,
+                 semmc-learning,
                  semmc-ppc,
                  dismantle-tablegen,
                  dismantle-ppc,
@@ -148,6 +151,7 @@ executable semmc-ppc-synthdemo
   main-is: SynthDemo.hs
   build-depends:   base
                  , semmc
+                 , semmc-synthesis
                  , semmc-ppc
                  , bytestring
                  , utf8-string

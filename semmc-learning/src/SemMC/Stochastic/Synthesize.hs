@@ -25,6 +25,7 @@ module SemMC.Stochastic.Synthesize
   , SynthInstruction(..)
   , SynthOpcode(..)
   , Pseudo(..)
+  , ArchitectureWithPseudo(..)
     -- * Exports for testing
   , TargetData(..)
   , R.checkIfRvwpOptimizationApplies
@@ -68,10 +69,11 @@ import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo
                  ( Pseudo
-                 , SynthOpcode
+                 , SynthOpcode(..)
                  , SynthInstruction(..)
                  , synthArbitraryOperands
                  , synthInsnToActual
+                 , ArchitectureWithPseudo(..)
                  )
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.RvwpOptimization as R

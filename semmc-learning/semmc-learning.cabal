@@ -19,24 +19,25 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:     SemMC.Stochastic.Synthesize
-  other-modules:       SemMC.Stochastic.Constraints
-                       SemMC.Stochastic.CandidateProgram
-                       SemMC.Stochastic.Extract
-                       SemMC.Stochastic.Classify
                        SemMC.Stochastic.RvwpOptimization
-                       SemMC.Stochastic.Monad
-                       SemMC.Stochastic.Strata
-                       SemMC.Stochastic.Generalize
-                       SemMC.Stochastic.Initialize
-                       SemMC.Stochastic.Pseudo
                        SemMC.Stochastic.IORelation
-                       SemMC.Stochastic.Statistics
-                       SemMC.Stochastic.Instantiate
+                       -- TODO: Push these into hidden modules
                        SemMC.Stochastic.IORelation.Shared
                        SemMC.Stochastic.IORelation.Explicit
                        SemMC.Stochastic.IORelation.Parser
                        SemMC.Stochastic.IORelation.Types
                        SemMC.Stochastic.IORelation.Implicit
+                       SemMC.Stochastic.Strata
+                       SemMC.Stochastic.CandidateProgram
+                       SemMC.Stochastic.Monad
+                       SemMC.Stochastic.Pseudo
+  other-modules:       SemMC.Stochastic.Constraints
+                       SemMC.Stochastic.Extract
+                       SemMC.Stochastic.Classify
+                       SemMC.Stochastic.Generalize
+                       SemMC.Stochastic.Initialize
+                       SemMC.Stochastic.Statistics
+                       SemMC.Stochastic.Instantiate
   -- other-modules:
   build-depends:       base >= 4.9 && < 5,
                        mtl,
