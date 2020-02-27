@@ -27,6 +27,7 @@ import           Data.Kind
 import           Data.Maybe ( catMaybes )
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -37,6 +38,7 @@ import           Control.Monad ( liftM, forM )
 import           Data.Proxy
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
+import qualified System.IO as IO
 import qualified System.IO.Unsafe as IO
 
 import qualified Language.Haskell.TH as TH
@@ -261,7 +263,7 @@ symFnToFunFormula :: forall sym args ret
                 -> Maybe (String, SF.FunctionFormula sym '(TL.FromContextFwd args, ret))
 symFnToFunFormula sym name symFn = case mkArgLists symFn of
     Just (argtps, argvars) | Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn) ->
-      Just $ (dropUFPrefix $ T.unpack name, SF.FunctionFormula
+      Just $ ((dropUFPrefix $ T.unpack name), SF.FunctionFormula
         { SF.ffName = dropUFPrefix $ T.unpack name
         , SF.ffArgTypes = argtps
         , SF.ffArgVars = argvars
@@ -345,7 +347,7 @@ data ASLSemantics = ASLSemantics
   }
 
 loadSemantics :: IO ASLSemantics
-loadSemantics = do
+loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   Some ng <- PN.newIONonceGenerator
   sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
   initenv <- formulaEnv (Proxy @ARM.AArch32) sym
@@ -356,15 +358,27 @@ loadSemantics = do
   t32pfs <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
     fmap (\pf -> Pair t32opcode pf) <$> encodingToFormula sym symfnEnv (ARM.T32Opcode t32opcode) enc
 
+  T.hPutStrLn handle "A32 Instructions"
   a32Bytes <- forM a32pfs $ \(Pair opcode pformula) -> do
-    let bs = T.encodeUtf8 $ SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) pformula
+    let
+      t = SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) pformula
+      bs = T.encodeUtf8 $ t
+    T.hPutStrLn handle t
     return (Some opcode, bs)
+  T.hPutStrLn handle "T32 Instructions"
   t32Bytes <- forM t32pfs $ \(Pair opcode pformula) -> do
-    let bs = T.encodeUtf8 $ SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) pformula
+    let
+      t = SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) pformula
+      bs = T.encodeUtf8 $ t
+    T.hPutStrLn handle t
     return (Some opcode, bs)
   let fformulas = catMaybes $ map (mkFormula sym) funs
+  T.hPutStrLn handle "Function Library"
   defBytes <- forM fformulas $ \(nm, Some fformula) -> do
-    let bs = T.encodeUtf8 $ SF.printFunctionFormula fformula
+    let
+      t = SF.printFunctionFormula fformula
+      bs = T.encodeUtf8 $ t
+    T.hPutStrLn handle t
     return (nm, bs)
 
   return $ ASLSemantics a32Bytes t32Bytes defBytes
