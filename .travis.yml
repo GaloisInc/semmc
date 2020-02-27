@@ -27,10 +27,9 @@ install:
   - git submodule update --init
   - ln -s cabal.project.newbuild cabal.project
   - cabal v2-configure
-  - ./submodules/dismantle/scripts/minify-asl.sh
 
 script:
-  - cabal v2-build semmc-asl
+  - ./scripts/tests.sh
 
 notifications:
   email: false
