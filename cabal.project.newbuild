@@ -13,7 +13,7 @@ packages:
 
 optional-packages:
   submodules/crucible/crucible
-  submodules/crucible/what4
+  submodules/what4/what4
   submodules/crucible/crucible-llvm
   submodules/llvm-pretty
   submodules/parameterized-utils
