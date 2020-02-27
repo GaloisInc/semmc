@@ -21,6 +21,10 @@
 module SemMC.Stochastic.Synthesize
   ( -- * API
     synthesize
+  , CP.CandidateProgram(..)
+  , SynthInstruction(..)
+  , SynthOpcode(..)
+  , Pseudo(..)
     -- * Exports for testing
   , TargetData(..)
   , R.checkIfRvwpOptimizationApplies

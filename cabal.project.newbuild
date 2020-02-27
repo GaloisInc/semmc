@@ -6,6 +6,8 @@ packages:
   semmc-arm/
   semmc-toy/
   semmc-coverage/
+  semmc-synthesis/
+  semmc-learning/
   submodules/dismantle/dismantle-tablegen/
   submodules/dismantle/dismantle-arm/
   submodules/dismantle/dismantle-thumb/
