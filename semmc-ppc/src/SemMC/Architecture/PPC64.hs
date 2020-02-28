@@ -50,7 +50,7 @@ import qualified SemMC.Architecture.PPC64.ConcreteState as PPCS
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
-import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
+import           SemMC.Stochastic.Synthesize ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Stochastic.RvwpOptimization as R
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U

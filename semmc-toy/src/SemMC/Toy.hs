@@ -63,7 +63,7 @@ import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Stochastic.IORelation as I
-import qualified SemMC.Stochastic.Pseudo as P
+import qualified SemMC.Stochastic.Synthesize as P
 import qualified SemMC.Stochastic.RvwpOptimization as R
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), RecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )

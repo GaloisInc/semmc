@@ -63,6 +63,7 @@ library
                      , parameterized-utils
                      , pretty
                      , semmc
+                     , semmc-synthesis
                      , template-haskell
                      , text
                      , vector-sized >= 0.5
