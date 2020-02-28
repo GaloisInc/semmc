@@ -37,6 +37,7 @@ import qualified What4.Protocol.Online as WPO
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
@@ -83,9 +84,9 @@ data Config arch =
 data SynEnv t solver fs arch =
   SynEnv { seFormulas :: STM.TVar (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
          -- ^ All of the known formulas (base set + learned set) for real opcodes
-         , sePseudoFormulas :: MapF.MapF ((P.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch)
+         , sePseudoFormulas :: MapF.MapF ((AP.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch)
          -- ^ Formulas for all pseudo opcodes
-         , seKnownCongruentOps :: STM.TVar (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (P.SynthOpcode arch)))
+         , seKnownCongruentOps :: STM.TVar (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (AP.SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (A.Opcode arch (A.Operand arch))))
          -- ^ Work items
@@ -113,13 +114,13 @@ data SynEnv t solver fs arch =
 withInitialState :: forall arch a
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
-                    HR.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
+                    HR.HasRepr (AP.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
                  => Config arch
                  -> [Some ((A.Opcode arch) (A.Operand arch))]
                  -- ^ All possible opcodes. These are used to guess
                  -- the names of opcode semantics files to attempt to
                  -- read from disk.
-                 -> [Some ((P.Pseudo arch) (A.Operand arch))]
+                 -> [Some ((AP.Pseudo arch) (A.Operand arch))]
                  -- ^ All pseudo opcodes
                  -> [Some ((A.Opcode arch) (A.Operand arch))]
                  -- ^ The opcodes we want to learn formulas for (could
@@ -156,7 +157,7 @@ loadInitialStateExplicit :: forall arch t solver fs
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
                      WPO.OnlineSolver t solver,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
-                    HR.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
+                    HR.HasRepr (AP.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
                  => Config arch
                  -> Sym t solver fs
                  -> IO (V.ConcreteState arch)
@@ -167,7 +168,7 @@ loadInitialStateExplicit :: forall arch t solver fs
                  -- ^ All possible opcodes. These are used to guess
                  -- the names of opcode semantics files to attempt to
                  -- read from disk.
-                 -> [Some ((P.Pseudo arch) (A.Operand arch))]
+                 -> [Some ((AP.Pseudo arch) (A.Operand arch))]
                  -- ^ All pseudo opcodes
                  -> [Some ((A.Opcode arch) (A.Operand arch))]
                  -- ^ The opcodes we want to learn formulas for (could
@@ -185,8 +186,8 @@ loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcod
   let initialFormulas = MapF.union baseSet learnedSet
   pseudoSet <- F.loadFormulasFromFiles sym env F.emptyLibrary (mkFormulaFilename (pseudoSetDir cfg)) pseudoOpcodes
   L.logIO L.Info "Finished loading pseudo ops"
-  let congruentOps' = MapF.foldrWithKey (addCongruentOp (Proxy @arch). P.RealOpcode) MapF.empty initialFormulas
-      congruentOps = MapF.foldrWithKey (addCongruentOp (Proxy @arch) . P.PseudoOpcode) congruentOps' pseudoSet
+  let congruentOps' = MapF.foldrWithKey (addCongruentOp (Proxy @arch). AP.RealOpcode) MapF.empty initialFormulas
+      congruentOps = MapF.foldrWithKey (addCongruentOp (Proxy @arch) . AP.PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas
   congruentRef <- STM.newTVarIO congruentOps
   let worklist = makeWorklist targetOpcodes initialFormulas

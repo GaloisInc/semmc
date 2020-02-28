@@ -12,6 +12,7 @@ import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as CS
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.RvwpOptimization as R
 
@@ -22,11 +23,11 @@ type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
                  , P.ShowF (A.Opcode arch (A.Operand arch))
                  , D.ArbitraryOperand (A.Operand arch)
                  , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
-                 , D.ArbitraryOperands (P.Pseudo arch) (A.Operand arch)
+                 , D.ArbitraryOperands (AP.Pseudo arch) (A.Operand arch)
                  , E.EnumF (A.Opcode arch (A.Operand arch))
                  , H.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch)
-                 , H.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch)
+                 , H.HasRepr (AP.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch)
                  , CS.ConcreteArchitecture arch
-                 , P.ArchitectureWithPseudo arch
-                 , R.RvwpOptimization arch
+                 , AP.ArchitectureWithPseudo arch
+                 , AP.RvwpOptimization arch
                  )

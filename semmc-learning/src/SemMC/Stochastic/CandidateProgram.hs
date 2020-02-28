@@ -27,20 +27,15 @@ import qualified Dismantle.Instruction as D
 
 import qualified Data.Parameterized.Seq as SeqF
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Formula as F
 import           SemMC.Symbolic ( Sym )
 
 import           SemMC.Stochastic.Monad
-import           SemMC.Stochastic.Pseudo
-                 ( ArchitectureWithPseudo(..)
-                 , Pseudo
-                 , SynthOpcode(..)
-                 , SynthInstruction(..)
-                 )
 import qualified SemMC.Util as U
 
 data CandidateProgram t solver fs arch =
-  CandidateProgram { cpInstructions :: [SynthInstruction arch]
+  CandidateProgram { cpInstructions :: [AP.SynthInstruction arch]
                    , cpFormula :: F.Formula (Sym t solver fs) arch
                    }
 
@@ -50,19 +45,19 @@ deriving instance (SynC arch) => Show (CandidateProgram t solver fs arch)
 instructionFormula :: forall arch t solver fs .
                       (SynC arch)
                    => Sym t solver fs
-                   -> SynthInstruction arch
+                   -> AP.SynthInstruction arch
                    -> Syn t solver fs arch (F.Formula (Sym t solver fs) arch)
 instructionFormula sym i = do
   case i of
-    SynthInstruction sop operands -> do
+    AP.SynthInstruction sop operands -> do
       case sop of
-        RealOpcode op -> realInstructionFormula Nothing op operands
-        PseudoOpcode op -> pseudoInstructionFormula op operands
+        AP.RealOpcode op -> realInstructionFormula Nothing op operands
+        AP.PseudoOpcode op -> pseudoInstructionFormula op operands
   where
     -- The @mop :: Maybe PseudoOpcode@ is used to improve the error
     -- message in the case where the real opcode arose from the
     -- assembly of a pseudo opcode.
-    realInstructionFormula :: Maybe (Pseudo arch (A.Operand arch) sh')
+    realInstructionFormula :: Maybe (AP.Pseudo arch (A.Operand arch) sh')
                            -> A.Opcode arch (A.Operand arch) sh
                            -> SL.List (A.Operand arch) sh
                            -> Syn t solver fs arch (F.Formula (Sym t solver fs) arch)
@@ -72,7 +67,7 @@ instructionFormula sym i = do
       (_, f) <- liftIO $ F.instantiateFormula sym pf operands
       return f
 
-    pseudoInstructionFormula :: Pseudo arch (A.Operand arch) sh
+    pseudoInstructionFormula :: AP.Pseudo arch (A.Operand arch) sh
                              -> SL.List (A.Operand arch) sh
                              -> Syn t solver fs arch (F.Formula (Sym t solver fs) arch)
     pseudoInstructionFormula op operands = do
@@ -96,7 +91,7 @@ instructionFormula sym i = do
         -- Compute the formula for the pseudo op from the formulas for the
         -- underlying real ops.
         Nothing -> do
-          let realInstrs = assemblePseudo (Proxy @arch) op operands
+          let realInstrs = AP.assemblePseudo (Proxy @arch) op operands
           fs <- forM realInstrs $ \ (D.Instruction o os) ->
             realInstructionFormula (Just op) o os
           liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula fs
@@ -112,16 +107,16 @@ instructionFormula sym i = do
 -- | Convert a program into a formula
 programFormula :: (SynC arch)
                => Sym t solver fs
-               -> [SynthInstruction arch]
+               -> [AP.SynthInstruction arch]
                -> Syn t solver fs arch (F.Formula (Sym t solver fs) arch)
 programFormula sym insns = do
   fs <- mapM (instructionFormula sym) insns
   liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula fs
 
 lookupCongruentOpcodes :: (HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
-                           HasRepr (Pseudo arch (A.Operand arch)) (A.ShapeRepr arch),
+                           HasRepr (AP.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch),
                            MapF.OrdF (A.OperandTypeRepr arch))
-                       => SynthOpcode arch sh
-                       -> Syn t solver fs arch (Seq.Seq (SynthOpcode arch sh))
+                       => AP.SynthOpcode arch sh
+                       -> Syn t solver fs arch (Seq.Seq (AP.SynthOpcode arch sh))
 lookupCongruentOpcodes op = maybe Seq.empty SeqF.unSeqF . MapF.lookup (typeRepr op) <$> askKnownCongruentOps
 

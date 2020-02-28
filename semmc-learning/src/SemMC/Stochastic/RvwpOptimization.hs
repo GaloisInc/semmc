@@ -9,6 +9,7 @@ module SemMC.Stochastic.RvwpOptimization where
 
 import           Text.Printf
 
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Util as U
@@ -16,28 +17,15 @@ import qualified SemMC.Util as U
 ----------------------------------------------------------------
 -- * Generic part of arch-specific interface to rvwp optimization
 
-class RvwpOptimization arch where
-  -- | The @rvwpMov dst src@ returns an instruction sequence that
-  -- moves @src@ to @dst@, if available. This allows us to fix a
-  -- candidate with a single right value in the wrong place.
-  rvwpMov :: V.View arch n -> V.View arch n -> Maybe [P.SynthInstruction arch]
-  -- If we add support for fixing multiple rvs in the wps, then we'll
-  -- want to have
-  {-
-  rvwpSwap :: V.View arch n -> V.View arch n -> Maybe [SynthInstruction arch]
-  -}
-  -- that does an in place swap, e.g. via xor if the underlying arch
-  -- doesn't support it directly.
-
 -- | Attempt to fix right values in the wrong places by moving them to
 -- the right place.
 --
 -- Assumes that the rvwp optimization applies; the input semantic
 -- views are assumed to be the output of
 -- 'checkIfRvwpOptimizationApplies'.
-fixRvwps :: (U.HasLogCfg, U.HasCallStack, RvwpOptimization arch)
+fixRvwps :: (U.HasLogCfg, U.HasCallStack, AP.RvwpOptimization arch)
          => [V.SemanticView arch]
-         -> Maybe [P.SynthInstruction arch]
+         -> Maybe [AP.SynthInstruction arch]
 fixRvwps outMasks = case outMasks of
   [] -> error "fixRvwps: numRvwps == 0 so there's nothing to fix."
   [mask] -> do
@@ -45,7 +33,7 @@ fixRvwps outMasks = case outMasks of
       V.SemanticView{..} -> do
         let dst = semvView
         let src = head semvCongruentViews
-        rvwpMov dst src
+        AP.rvwpMov dst src
   -- Only implementing the simpler case of a single rv in the wp to
   -- start. The general case is more complicated to implement, and
   -- probably requires a swap instruction instead of 'rvwpMov' (if we

@@ -21,13 +21,13 @@ library
   exposed-modules:     SemMC.Stochastic.Synthesize
                        SemMC.Stochastic.RvwpOptimization
                        SemMC.Stochastic.IORelation
+                       SemMC.Stochastic.Strata
                        -- TODO: Push these into hidden modules
                        SemMC.Stochastic.IORelation.Shared
                        SemMC.Stochastic.IORelation.Explicit
                        SemMC.Stochastic.IORelation.Parser
                        SemMC.Stochastic.IORelation.Types
                        SemMC.Stochastic.IORelation.Implicit
-                       SemMC.Stochastic.Strata
                        SemMC.Stochastic.CandidateProgram
                        SemMC.Stochastic.Monad
                        SemMC.Stochastic.Pseudo
