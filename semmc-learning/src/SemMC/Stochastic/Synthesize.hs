@@ -22,10 +22,6 @@ module SemMC.Stochastic.Synthesize
   ( -- * API
     synthesize
   , CP.CandidateProgram(..)
-  , SynthInstruction(..)
-  , SynthOpcode(..)
-  , Pseudo(..)
-  , ArchitectureWithPseudo(..)
     -- * Exports for testing
   , TargetData(..)
   , R.checkIfRvwpOptimizationApplies
@@ -62,18 +58,15 @@ import qualified Dismantle.Instruction as D
 
 import           SemMC.Architecture ( Instruction, Opcode, Operand, ShapeRepr, OperandTypeRepr )
 import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo
-                 ( Pseudo
-                 , SynthOpcode(..)
-                 , SynthInstruction(..)
-                 , synthArbitraryOperands
+                 ( synthArbitraryOperands
                  , synthInsnToActual
-                 , ArchitectureWithPseudo(..)
                  )
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.RvwpOptimization as R
@@ -336,7 +329,7 @@ weighCandidate td@TargetData{..} candidate = do
       return (weight, Just combinedDeltas)
 
 -- | Render candidate indented, with one instruction per line.
-prettyCandidate :: Show (SynthInstruction arch)
+prettyCandidate :: Show (AP.SynthInstruction arch)
                 => Candidate arch -> String
 prettyCandidate = unlines . map (("    "++) . show) . catMaybes . F.toList
 
@@ -520,7 +513,7 @@ wrongPlacePenalty = 3 -- STOKE Figure 10.
 --
 -- We use 'Nothing' to represent no-ops, which we need because the
 -- candidate program has fixed length during its evolution.
-type Candidate arch = S.Seq (Maybe (SynthInstruction arch))
+type Candidate arch = S.Seq (Maybe (AP.SynthInstruction arch))
 
 candidateInstructions :: (SynC arch) => Candidate arch -> [Instruction arch]
 candidateInstructions = concatMap synthInsnToActual . catMaybes . F.toList
@@ -552,11 +545,11 @@ perturb candidate = do
 -- | Replace the opcode of the given instruction with a random one of the same
 -- shape.
 randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch),
-                    HasRepr (Pseudo arch (Operand arch)) (ShapeRepr arch),
+                    HasRepr (AP.Pseudo arch (Operand arch)) (ShapeRepr arch),
                     OrdF (OperandTypeRepr arch))
-                => SynthInstruction arch
-                -> Syn t solver fs arch (SynthInstruction arch)
-randomizeOpcode (SynthInstruction oldOpcode operands) = do
+                => AP.SynthInstruction arch
+                -> Syn t solver fs arch (AP.SynthInstruction arch)
+randomizeOpcode (AP.SynthInstruction oldOpcode operands) = do
   gen <- askGen
   congruent <- CP.lookupCongruentOpcodes oldOpcode
   case S.length congruent of
@@ -564,7 +557,7 @@ randomizeOpcode (SynthInstruction oldOpcode operands) = do
     len -> do
       ix <- liftIO $ D.uniformR (0, len - 1) gen
       let !newOpcode = congruent `S.index` ix
-      return (SynthInstruction newOpcode operands)
+      return (AP.SynthInstruction newOpcode operands)
 
 -- | Randomly replace one operand of an instruction.
 --
@@ -572,12 +565,12 @@ randomizeOpcode (SynthInstruction oldOpcode operands) = do
 -- one there more generic.
 randomizeOperand :: (D.ArbitraryOperand (Operand arch))
                  => D.Gen
-                 -> SynthInstruction arch
-                 -> IO (SynthInstruction arch)
-randomizeOperand gen (SynthInstruction op os) = do
+                 -> AP.SynthInstruction arch
+                 -> IO (AP.SynthInstruction arch)
+randomizeOperand gen (AP.SynthInstruction op os) = do
   updateAt <- D.uniformR (0 :: Int, fromIntegral (FC.lengthFC os - 1)) gen
   os' <- SL.itraverse (f' (toInteger updateAt) gen) os
-  return (SynthInstruction op os')
+  return (AP.SynthInstruction op os')
   where
     f' target g ix o
       | SL.indexValue ix == target = D.arbitraryOperand g o
@@ -585,13 +578,13 @@ randomizeOperand gen (SynthInstruction op os) = do
 
 -- | Generate a random instruction
 randomInstruction :: (D.ArbitraryOperands (Opcode arch) (Operand arch),
-                      D.ArbitraryOperands (Pseudo arch) (Operand arch))
+                      D.ArbitraryOperands (AP.Pseudo arch) (Operand arch))
                   => D.Gen
-                  -> NES.Set (Some (SynthOpcode arch))
-                  -> IO (SynthInstruction arch)
+                  -> NES.Set (Some (AP.SynthOpcode arch))
+                  -> IO (AP.SynthInstruction arch)
 randomInstruction gen baseSet = do
   Some opcode <- D.choose baseSet gen
-  SynthInstruction opcode <$> synthArbitraryOperands gen opcode
+  AP.SynthInstruction opcode <$> synthArbitraryOperands gen opcode
 
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.

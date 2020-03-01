@@ -84,14 +84,11 @@ import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Util as U
 import qualified SemMC.Worklist as WL
 
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Concrete.Execution as CE
 import           SemMC.Stochastic.Constraints ( SynC )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import           SemMC.Stochastic.Initialize ( Config(..), SynEnv(..), mkFormulaFilename )
-import           SemMC.Stochastic.Pseudo
-                 ( Pseudo
-                 , SynthOpcode(..)
-                 )
 import qualified SemMC.Stochastic.Statistics as S
 
 -- | Thread-local environment
@@ -195,7 +192,7 @@ recordLearnedFormula op f = do
   learnedDir <- R.asks (learnedSetDir . seConfig . seGlobalEnv)
 
   let opShape = typeRepr op
-      newOps = SeqF.singleton (RealOpcode op)
+      newOps = SeqF.singleton (AP.RealOpcode op)
   liftIO $ T.writeFile (mkFormulaFilename learnedDir op) (F.printParameterizedFormula opShape f)
   liftIO $ STM.atomically $ do
     STM.modifyTVar' formulasRef (MapF.insert op f)
@@ -262,14 +259,14 @@ addTestCase tc = do
 askFormulas :: Syn t solver fs arch (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
 askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
-askPseudoFormulas :: Syn t solver fs arch (MapF.MapF (Pseudo arch (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
+askPseudoFormulas :: Syn t solver fs arch (MapF.MapF (AP.Pseudo arch (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
 askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
 
 -- | Get the number of requested parallel synthesis operations
 askParallelSynth :: Syn t solver fs arch Int
 askParallelSynth = R.asks (parallelSynth . seConfig . seGlobalEnv)
 
-askKnownCongruentOps :: Syn t solver fs arch (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (SynthOpcode arch)))
+askKnownCongruentOps :: Syn t solver fs arch (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (AP.SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
@@ -282,14 +279,14 @@ askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . 
 -- with the STRATA paper. We probably want to change one of these
 -- naming conventions to make them distinct.
 askBaseSet :: (P.OrdF (A.Opcode arch (A.Operand arch)),
-               P.OrdF (Pseudo arch (A.Operand arch)))
-           => Syn t solver fs arch (NES.Set (Some (SynthOpcode arch)))
+               P.OrdF (AP.Pseudo arch (A.Operand arch)))
+           => Syn t solver fs arch (NES.Set (Some (AP.SynthOpcode arch)))
 askBaseSet = do
   -- Since we don't update the base set during a round, it would make
   -- sense to cache this for constant lookup, instead of doing this
   -- O(n) lookup every time!
-  realOps <- map (mapSome RealOpcode) . MapF.keys <$> askFormulas
-  pseudoOps <- map (mapSome PseudoOpcode) . MapF.keys <$> askPseudoFormulas
+  realOps <- map (mapSome AP.RealOpcode) . MapF.keys <$> askFormulas
+  pseudoOps <- map (mapSome AP.PseudoOpcode) . MapF.keys <$> askPseudoFormulas
   let allOps = realOps ++ pseudoOps
   case allOps of
     [] -> L.error "askBaseSet: empty base set!"

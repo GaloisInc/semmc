@@ -51,6 +51,7 @@ import qualified Dismantle.Instruction as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.Location as L
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
@@ -381,7 +382,7 @@ consistentWithTarget testIndex testResults cx (testNum, tc) =
 -- We have to expand the 'SynthInstruction's to real instructions before we
 -- construct the test case.  We accumulate the test cases and maintain a mapping
 -- between test numbers and concrete test nonces.
-makeAndIndexTest :: (P.ArchitectureWithPseudo arch)
+makeAndIndexTest :: (AP.ArchitectureWithPseudo arch)
                  => V.ConcreteState arch
                  -> (Int, CP.CandidateProgram t solver fs arch)
                  -> ([CE.TestCase (V.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
@@ -535,7 +536,7 @@ mergeClasses = F.foldr mappend Seq.empty
 --
 -- We pass in the environment so that we can access the IORelation for the
 -- current target instruction
-testEquivalence :: (P.ArchitectureWithPseudo arch, AC.ConcreteArchitecture arch, WPO.OnlineSolver t solver)
+testEquivalence :: (AP.ArchitectureWithPseudo arch, AC.ConcreteArchitecture arch, WPO.OnlineSolver t solver)
                 => ClassifyEnv arch sh
                 -> CP.CandidateProgram t solver fs arch
                 -> CP.CandidateProgram t solver fs arch

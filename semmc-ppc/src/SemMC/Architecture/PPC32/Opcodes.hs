@@ -17,7 +17,7 @@ import           System.FilePath ( (<.>) )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.PPC as PPC
 import qualified Dismantle.Tablegen.TH.Capture as DT
-import qualified SemMC.Stochastic.Pseudo as P
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.TH as STH
 
 import           SemMC.Architecture.PPC32 ( PPC, PseudoOpcode )
@@ -46,5 +46,5 @@ allSemantics = $(STH.attachSemantics (\(Some x) -> show x <.> "sem") allOpcodes 
 
 -- | Pseudo-opcodes used for learning; these are not part of 'allOpcodes'
 -- because they are not real opcodes
-pseudoOpcodes :: [Some (P.Pseudo PPC PPC.Operand)]
+pseudoOpcodes :: [Some (AP.Pseudo PPC PPC.Operand)]
 pseudoOpcodes = $(DT.captureDictionaries (const True) ''PseudoOpcode)

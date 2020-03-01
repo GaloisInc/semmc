@@ -60,11 +60,10 @@ import           What4.Expr.GroundEval
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Stochastic.IORelation as I
-import qualified SemMC.Stochastic.Synthesize as P
-import qualified SemMC.Stochastic.RvwpOptimization as R
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), RecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )
 
@@ -546,27 +545,27 @@ instance D.ArbitraryOperands PseudoOpcode Operand where
   arbitraryOperands gen op = case op of
     MovRr -> D.arbitraryShapedList gen
 
-type instance P.Pseudo Toy = PseudoOpcode
+type instance AP.Pseudo Toy = PseudoOpcode
 
-instance P.ArchitectureWithPseudo Toy where
+instance AP.ArchitectureWithPseudo Toy where
   assemblePseudo _proxy opcode oplist = case opcode of
     MovRr -> case oplist of
       (dst SL.:< src SL.:< SL.Nil) ->
         [ D.Instruction MovRi (dst SL.:< I32 0 SL.:< SL.Nil)
         , D.Instruction AddRr (dst SL.:< src SL.:< SL.Nil) ]
 
-allPseudoOpcodes :: [Some ((P.Pseudo Toy) Operand)]
+allPseudoOpcodes :: [Some ((AP.Pseudo Toy) Operand)]
 allPseudoOpcodes = [ Some MovRr ]
 
 ----------------------------------------------------------------
 -- Rvwp optimization support
 
-instance R.RvwpOptimization Toy where
+instance AP.RvwpOptimization Toy where
   rvwpMov (V.View dstSlice (RegLoc dst)) (V.View srcSlice (RegLoc src)) = do
     guard $ dst /= src
     when (not (isTrivialR32Slice dstSlice) || not (isTrivialR32Slice srcSlice)) $
       error "Toy.rvwpMov: needs to be updated for new cases that aren't handled."
-    return [ P.SynthInstruction (P.PseudoOpcode MovRr) (R32 dst SL.:< R32 src SL.:< SL.Nil) ]
+    return [ AP.SynthInstruction (AP.PseudoOpcode MovRr) (R32 dst SL.:< R32 src SL.:< SL.Nil) ]
     where
       -- | Returns true iff the slice is the whole 32 bit register.
       isTrivialR32Slice :: V.Slice m n -> Bool
