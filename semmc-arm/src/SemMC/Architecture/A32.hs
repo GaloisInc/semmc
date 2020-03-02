@@ -62,7 +62,7 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Eval as FE
-import qualified SemMC.Synthesis.Template as T
+import qualified SemMC.Template as T
 import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
