@@ -114,6 +114,7 @@ newtype Syn t solver fs arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t solver 
             Applicative,
             Monad,
             MonadIO,
+            U.MonadUnliftIO,
             R.MonadReader (LocalSynEnv t solver fs arch))
 
 instance MC.MonadThrow (Syn t solver fs arch) where
@@ -121,12 +122,6 @@ instance MC.MonadThrow (Syn t solver fs arch) where
 
 instance U.MonadHasLogCfg (Syn t solver fs arch) where
   getLogCfgM = logConfig <$> askConfig
-
--- | The 'Syn' monad can run its actions in 'IO'.
-instance U.MonadUnliftIO (Syn t solver fs arch) where
-  askUnliftIO = do
-    localSynEnv <- R.ask
-    return $ U.UnliftIO (runSyn localSynEnv)
 
 -- | This is the exception that is thrown if the synthesis times out waiting for
 -- a result from the remote test runner.
