@@ -191,6 +191,7 @@ test-suite semmc-ppc-tests
   hs-source-dirs: tests
   build-depends: semmc-ppc,
                  semmc,
+                 semmc-synthesis,
                  dismantle-tablegen,
                  dismantle-ppc,
                  base,
