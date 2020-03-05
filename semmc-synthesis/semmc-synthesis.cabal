@@ -16,6 +16,7 @@ extra-source-files:  CHANGELOG.md
 library
   exposed-modules: SemMC.Synthesis
                    SemMC.Synthesis.Template
+                   SemMC.Synthesis.Testing
   other-modules:   SemMC.Synthesis.Cegis
                    SemMC.Synthesis.Cegis.Types
                    SemMC.Synthesis.Cegis.EvalFormula
@@ -25,7 +26,6 @@ library
                    SemMC.Synthesis.Cegis.Tests
                    SemMC.Synthesis.Core
                    SemMC.Synthesis.DivideAndConquer
-                   SemMC.Synthesis.Testing
   -- other-extensions:
   build-depends:       base >=4.11 && <5,
                        text,
