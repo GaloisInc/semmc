@@ -1,15 +1,21 @@
 ;; Bit Permute Doubleword (X-form)
-(let
- ((var1
-  (defs
-   ((rA
+((operands
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
+ (in
+  (op.rS op.rB loc.IP))
+ (defs
+  ((op.rA
+   (with
+    ()
     (concat
      #x00000000000000
      (concat
       (ite
        (bvult
         ((_ extract 63 56)
-         rS)
+         op.rS)
         #x40)
        (ite
         (bveq
@@ -18,8 +24,8 @@
           (bvlshr
            ((_ zero_extend 56)
             ((_ extract 63 56)
-             rS))
-           rB)))
+             op.rS))
+           op.rB)))
         #b1
         #b0)
        #b0)
@@ -27,7 +33,7 @@
        (ite
         (bvult
          ((_ extract 55 48)
-          rS)
+          op.rS)
          #x40)
         (ite
          (bveq
@@ -36,8 +42,8 @@
            (bvlshr
             ((_ zero_extend 56)
              ((_ extract 55 48)
-              rS))
-            rB)))
+              op.rS))
+            op.rB)))
          #b1
          #b0)
         #b0)
@@ -45,7 +51,7 @@
         (ite
          (bvult
           ((_ extract 47 40)
-           rS)
+           op.rS)
           #x40)
          (ite
           (bveq
@@ -54,8 +60,8 @@
             (bvlshr
              ((_ zero_extend 56)
               ((_ extract 47 40)
-               rS))
-             rB)))
+               op.rS))
+             op.rB)))
           #b1
           #b0)
          #b0)
@@ -63,7 +69,7 @@
          (ite
           (bvult
            ((_ extract 39 32)
-            rS)
+            op.rS)
            #x40)
           (ite
            (bveq
@@ -72,8 +78,8 @@
              (bvlshr
               ((_ zero_extend 56)
                ((_ extract 39 32)
-                rS))
-              rB)))
+                op.rS))
+              op.rB)))
            #b1
            #b0)
           #b0)
@@ -81,7 +87,7 @@
           (ite
            (bvult
             ((_ extract 31 24)
-             rS)
+             op.rS)
             #x40)
            (ite
             (bveq
@@ -90,8 +96,8 @@
               (bvlshr
                ((_ zero_extend 56)
                 ((_ extract 31 24)
-                 rS))
-               rB)))
+                 op.rS))
+               op.rB)))
             #b1
             #b0)
            #b0)
@@ -99,7 +105,7 @@
            (ite
             (bvult
              ((_ extract 23 16)
-              rS)
+              op.rS)
              #x40)
             (ite
              (bveq
@@ -108,8 +114,8 @@
                (bvlshr
                 ((_ zero_extend 56)
                  ((_ extract 23 16)
-                  rS))
-                rB)))
+                  op.rS))
+                op.rB)))
              #b1
              #b0)
             #b0)
@@ -117,7 +123,7 @@
             (ite
              (bvult
               ((_ extract 15 8)
-               rS)
+               op.rS)
               #x40)
              (ite
               (bveq
@@ -126,15 +132,15 @@
                 (bvlshr
                  ((_ zero_extend 56)
                   ((_ extract 15 8)
-                   rS))
-                 rB)))
+                   op.rS))
+                 op.rB)))
               #b1
               #b0)
              #b0)
             (ite
              (bvult
               ((_ extract 7 0)
-               rS)
+               op.rS)
               #x40)
              (ite
               (bveq
@@ -143,17 +149,12 @@
                 (bvlshr
                  ((_ zero_extend 56)
                   ((_ extract 7 0)
-                   rS))
-                 rB)))
+                   op.rS))
+                 op.rB)))
               #b1
               #b0)
-             #b0))))))))))
-    ('IP
-     (bvadd 'IP #x0000000000000004))))))
- ((operands
-  ((rA . 'Gprc)
-   (rB . 'Gprc)
-   (rS . 'Gprc)))
-  (in
-   (rS rB 'IP))
-  (var1)))
+             #b0)))))))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

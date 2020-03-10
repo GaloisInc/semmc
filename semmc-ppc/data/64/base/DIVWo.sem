@@ -1,41 +1,48 @@
 ;; Divide Word (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA rB 'IP))
+  (loc.XER loc.CR op.rA op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvsdiv
+       ((_ sign_extend 32)
+        ((_ extract 31 0)
+         op.rA))
+       ((_ sign_extend 32)
+        ((_ extract 31 0)
+         op.rB)))
+      #x0000000000000000)
+     (bvsgt
+      (bvsdiv
+       ((_ sign_extend 32)
+        ((_ extract 31 0)
+         op.rA))
+       ((_ sign_extend 32)
+        ((_ extract 31 0)
+         op.rB)))
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
      (bvsdiv
       ((_ sign_extend 32)
        ((_ extract 31 0)
-        rA))
+        op.rA))
       ((_ sign_extend 32)
        ((_ extract 31 0)
-        rB)))
-     #x0000000000000000)
-    (bvsgt
-     (bvsdiv
-      ((_ sign_extend 32)
-       ((_ extract 31 0)
-        rA))
-      ((_ sign_extend 32)
-       ((_ extract 31 0)
-        rB)))
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    (bvsdiv
-     ((_ sign_extend 32)
-      ((_ extract 31 0)
-       rA))
-     ((_ sign_extend 32)
-      ((_ extract 31 0)
-       rB))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+        op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

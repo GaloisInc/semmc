@@ -1,33 +1,38 @@
 ;; Rotate Left Word Immediate then AND with Mask (M-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (me . 'U5imm)
-  (mb . 'U5imm)
-  (sh . 'U5imm)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (me U5imm)
+  (mb U5imm)
+  (sh U5imm)
+  (rS Gprc)))
  (in
-  (rS me mb sh 'IP))
+  (op.rS op.me op.mb op.sh loc.IP))
  (defs
-  ((rA
-   ((_ zero_extend 32)
-    (bvand
-     (bvor
-      (bvshl
-       ((_ extract 31 0)
-        rS)
-       ((_ zero_extend 27)
-        sh))
-      (bvlshr
-       ((_ extract 31 0)
-        rS)
-       (bvsub
-        #x00000020
+  ((op.rA
+   (with
+    ()
+    ((_ zero_extend 32)
+     (bvand
+      (bvor
+       (bvshl
+        ((_ extract 31 0)
+         op.rS)
         ((_ zero_extend 27)
-         sh))))
-     ((_ call "df.mask_32")
-      ((_ zero_extend 27)
-       mb)
-      ((_ zero_extend 27)
-       me)))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+         op.sh))
+       (bvlshr
+        ((_ extract 31 0)
+         op.rS)
+        (bvsub
+         #x00000020
+         ((_ zero_extend 27)
+          op.sh))))
+      (call
+       df.mask_32
+       ((_ zero_extend 27)
+        op.mb)
+       ((_ zero_extend 27)
+        op.me))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

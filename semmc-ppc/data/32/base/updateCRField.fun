@@ -1,32 +1,34 @@
 ((function updateCRField)
  (arguments
   ((cr
-   ('bv 32))
+   (BV 32))
    (fldNum
-    ('bv 3))
+    (BV 3))
    (newFldVal
-    ('bv 4))))
+    (BV 4))))
  (return
-  ('bv 32))
+  (BV 32))
  (body
-  (bvor
-   (bvand
-    cr
-    (bvnot
-     (bvshl
-      #x0000000f
-      (bvmul
-       (bvsub
-        #x00000007
-        ((_ zero_extend 29)
-         fldNum))
-       #x00000004))))
-   (bvshl
-    ((_ zero_extend 28)
-     newFldVal)
-    (bvmul
-     (bvsub
-      #x00000007
-      ((_ zero_extend 29)
-       fldNum))
-     #x00000004)))))
+  (with
+   ()
+   (bvor
+    (bvand
+     op.cr
+     (bvnot
+      (bvshl
+       #x0000000f
+       (bvmul
+        (bvsub
+         #x00000007
+         ((_ zero_extend 29)
+          op.fldNum))
+        #x00000004))))
+    (bvshl
+     ((_ zero_extend 28)
+      op.newFldVal)
+     (bvmul
+      (bvsub
+       #x00000007
+       ((_ zero_extend 29)
+        op.fldNum))
+      #x00000004))))))

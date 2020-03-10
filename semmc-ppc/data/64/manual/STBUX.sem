@@ -1,26 +1,28 @@
 ;; Store Byte with Update Indexed (X-form)
 ((operands
- ((memref . 'Memrr)
-  (rS . 'Gprc)))
+ ((memref Memrr)
+  (rS Gprc)))
  (in
-  ('Mem memref rS 'IP))
+  (loc.Mem op.memref op.rS loc.IP))
  (defs
-  ((((_ call "uf.ppc.memrr_base")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memrr_base")
-     memref)
-    ((_ call "uf.ppc.memrr_offset")
-     memref)))
-   ('Mem
-    ((_ call "uf.write_mem.8")
-     'Mem
-     (bvadd
-      ((_ call "uf.ppc.memrr_base")
-       memref)
-      ((_ call "uf.ppc.memrr_offset")
-       memref))
-     ((_ extract 7 0)
-      rS)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  (((call uf.ppc.memrr_base op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memrr_base op.memref)
+     (call uf.ppc.memrr_offset op.memref))))
+   (loc.Mem
+    (with
+     ()
+     (call
+      uf.write_mem.8
+      loc.Mem
+      (bvadd
+       (call uf.ppc.memrr_base op.memref)
+       (call uf.ppc.memrr_offset op.memref))
+      ((_ extract 7 0)
+       op.rS))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

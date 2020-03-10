@@ -2,20 +2,23 @@
 ;; We hand wrote this formula because it is one of the few that
 ;; have special treatment of r0
 ((operands
- ((rT . 'Gprc)
-  (si . 'S16imm)
-  (rA . 'Gprc_nor0)))
+ ((rT Gprc)
+  (si S16imm)
+  (rA Gprc_nor0)))
  (in
-  (si rA 'IP))
+  (op.si op.rA loc.IP))
  (defs
-  ((rT
-   (bvadd
-    (ite
-     ((_ call "uf.ppc.is_r0")
-      rA)
-     #x0000000000000000
-     rA)
-    ((_ sign_extend 48)
-     si)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvadd
+     (ite
+      (call uf.ppc.is_r0 op.rA)
+      #x0000000000000000
+      op.rA)
+     ((_ sign_extend 48)
+      op.si))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

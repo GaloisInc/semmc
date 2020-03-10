@@ -8,8 +8,18 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | A DSL to help defining instruction semantics to populate the base set (and manual set)
+
+{--
+
+N.B., the s-expressions this DSL generates need to be
+compatible with those generated and parsed by
+SemMC.Formula.Printer and SemMC.Formula.Parser.
+
+--}
 
 module SemMC.DSL (
   -- * Definitions
@@ -156,12 +166,17 @@ module SemMC.DSL (
 import           GHC.Stack ( HasCallStack )
 
 import qualified Control.Monad.RWS.Strict as RWS
+import           Control.Monad.State.Strict (State)
+import qualified Control.Monad.State.Strict as MS
 import qualified Data.Foldable as F
 import qualified Data.Bits as B
-import qualified Data.Map as M
-import qualified Data.SCargot.Repr as SC
 import           Data.Semigroup hiding ( Arg )
 import qualified Data.Sequence as Seq
+import           Data.Map ( Map )
+import qualified Data.Map as Map
+import           Data.Map.Ordered ( OMap )
+import qualified Data.Map.Ordered as OMap
+import           Data.Text ( Text )
 import qualified Data.Text as T
 import           Text.Printf ( printf )
 
@@ -173,11 +188,39 @@ import           Data.Parameterized.TraversableFC ( fmapFC, foldMapFC
 import qualified Data.Type.List as DL
 
 import           SemMC.DSL.Internal
-import           SemMC.Formula.SETokens ( FAtom(..), fromFoldable', printTokens
-                                        , ident, int, quoted, string )
+
+import           What4.Serialize.Printer ( --serializeBaseType
+                                         --, printSExpr
+                                         --, SExpr
+                                         Atom(..)
+                                         )
+import qualified What4.Serialize.Printer as WSP
+
 import qualified What4.BaseTypes as CRU
 
 import           Prelude hiding ( concat )
+
+-- | A simple SExpr format that has Eq and Ord instances
+-- which are extremely useful (and missing from s-cargot in
+-- the case of Ord for whatever reason...).
+data SExpr =
+  A Atom
+  | L [SExpr]
+  deriving (Eq, Show, Ord)
+
+ident :: Text -> SExpr
+ident txt = A $ AId txt
+
+int :: Integer -> SExpr
+int n = A $ AInt n
+
+toWhat4SExpr :: SExpr -> WSP.SExpr
+toWhat4SExpr (A a) = WSP.A a
+toWhat4SExpr (L l) = WSP.L $ map toWhat4SExpr l
+
+toDslSExpr :: WSP.SExpr -> SExpr
+toDslSExpr (WSP.WFSAtom a) = A a
+toDslSExpr (WSP.WFSList l) = L $ map toDslSExpr l
 
 
 locationType :: Location tp -> ExprTypeRepr tp
@@ -200,8 +243,8 @@ exprType e =
     TheoryFunc t _ _ _ -> t
     UninterpretedFunc t _ _ -> t
     LibraryFunc (LibFuncDef { lfdRetType = t }) _ -> t
-    NamedSubExpr _ sube -> exprType sube
     PackedOperand s -> EPackedOperand s
+    NamedExpr _ e' -> exprType e'
 
 -- | Get the size of the bitvector produced by the given expression
 exprBVSize :: Expr 'TBV -> Int
@@ -215,7 +258,7 @@ exprBVSize e =
     TheoryFunc (EBV w) _ _ _ -> w
     UninterpretedFunc (EBV w) _ _ -> w
     LibraryFunc (LibFuncDef { lfdRetType = EBV w })  _ -> w
-    NamedSubExpr _ sube -> exprBVSize sube
+    NamedExpr _ e' -> exprBVSize e'
 
 
 -- | The definition of the Formula that semantically describes the
@@ -295,10 +338,10 @@ type SemM (t :: Phase) a = SemMD t () a
 -- | Tags used as phantom types to prevent nested opcode definitions
 data Phase = Top | Def
 
-data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
+data Definition = Definition (Seq.Seq String) SExpr
   deriving (Show)
 
-newtype FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
+newtype FunctionDefinition = FunctionDefinition SExpr
   deriving (Show)
 
 data Package = Package { pkgFormulas :: [(String, Definition)]
@@ -317,7 +360,7 @@ runSem act = snd $ evalSem act
 -- | Run a semantics-defining action and return the defined formulas and library
 -- functions, along with anything returned by the action itself.
 evalSem :: SemMD 'Top d a -> (a, Package)
-evalSem act = (a, Package defs (M.toList functions))
+evalSem act = (a, Package defs (Map.toList functions))
   where
     (a, ~TopState, formulas) = RWS.runRWS (unSem act) () TopState
     (defs, functions) = mkSExprs formulas
@@ -410,11 +453,11 @@ defLoc loc e
 modifyFormula :: (Formula d -> Formula d) -> SemMD 'Def d ()
 modifyFormula f = RWS.modify' $ \(DefState form) -> DefState (f form)
 
--- | Define a subphrase that is a natural candidate for a let binding
+--- | Define a subphrase that is a natural candidate for a let binding
 -- with the associated variable name.
 infix 1 =:
 (=:) :: String -> Expr tp -> Expr tp
-name =: expr = NamedSubExpr name expr
+name =: expr = NamedExpr name expr
 
 
 -- | Get the current architecture-specific data in the DSL computation
@@ -522,7 +565,7 @@ unpackLocUF operandName rtype ufname fromParam =
 -- | Create an expression of bitvector type that represents an undefined value
 -- of the given size
 undefinedBV :: (HasCallStack) => Int -> Expr 'TBV
-undefinedBV size = uf (EBV size) "undefined" [ Some (LitBV 32 (toInteger size)) ]
+undefinedBV size = uf (EBV size) ("undefinedBV."++(show size)) []
 
 bvadd :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvadd = binBVBuiltin "bvadd"
@@ -651,7 +694,7 @@ ite b t e =
     t1 = exprType t
     t2 = exprType e
     tc = exprType b
-    comparable = convertExpr . Some
+    comparable = convertExprWithBinders . Some
 
 -- | Construct a nested chain of ITEs that is equivalent to a case match with a
 -- fallthrough.
@@ -1187,7 +1230,7 @@ floatConvBuiltin s from_type to_type r expr
 -- ----------------------------------------------------------------------
 -- SExpression conversion
 
-mkSExprs :: Seq.Seq (Formula d) -> ([(String, Definition)], M.Map String FunctionDefinition)
+mkSExprs :: Seq.Seq (Formula d) -> ([(String, Definition)], Map String FunctionDefinition)
 mkSExprs formulas = (map toSExpr list, gatherFunSExprs list)
   where
     list = F.toList formulas
@@ -1195,100 +1238,193 @@ mkSExprs formulas = (map toSExpr list, gatherFunSExprs list)
 toSExpr :: (Formula d) -> (String, Definition)
 toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
 
-extractSExpr :: [Some Parameter] -> [Some Location] -> [(Some Location, Some Expr)] -> SC.SExpr FAtom
+extractSExpr :: [Some Parameter] -> [Some Location] -> [(Some Location, Some Expr)] -> SExpr
 extractSExpr operands inputs defs =
-  fromFoldable' [ SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons (convertOperands operands) SC.SNil)
-                , SC.SCons (SC.SAtom (AIdent "in")) (SC.SCons (convertInputs inputs) SC.SNil)
-                , SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons (convertDefs defs) SC.SNil)
-                ]
+  L [ L [A (AId "operands"), (convertOperands operands)] 
+    , L [A (AId "in"), (convertInputs inputs)] 
+    , L [A (AId "defs"), (convertDefs defs)]
+    ]
 
-convertExpr :: Some Expr -> SC.SExpr FAtom
-convertExpr (Some e) =
-  let samevals = [Some $ LitBV 1 0, Some $ LitBV 1 0] in
-  case e of
+-- | Convert an expression and wrap it with a `with` binding
+-- form.  we don't actually bind anything currently, but the
+-- other printer (SemMC.Formula.Printer) which we need to
+-- stay in sync with uses the `with` bindings to record any
+-- renaming done by the underlying `what-serialize`
+-- serializer.
+convertExprWithBinders :: Some Expr -> SExpr
+convertExprWithBinders e = L [ ident "with", L [], convertExprWithLet e ]
+
+
+-- | Environment to use while generating SExpressions,
+-- tracks assigned let-binding names and includes a
+-- counter to help with fresh name generation.
+type MemoEnv = (OMap Text SExpr, Int)
+
+type Memo a = State MemoEnv a
+
+runMemo :: Memo a -> (a, MemoEnv)
+runMemo action = MS.runState action (OMap.empty, 0)
+
+maybeLet :: [SExpr] -> SExpr -> SExpr
+maybeLet [] body = body
+maybeLet bindings body = L [ident "let", L bindings, body]
+
+convertExprWithLet :: Some Expr -> SExpr
+convertExprWithLet e = maybeLet bindings sexpr
+  where (sexpr, (letEnv, _)) = runMemo $ convertExpr e
+        bindings = map (\(name,rhs) -> L [ident name, rhs])
+                   $ reverse
+                   $ OMap.assocs letEnv
+
+-- | Assign a name to an s-expression, so the name is used
+-- in-place and bound to the s-expression in a let-binding
+-- form that wraps the whole overall s-expression. If the
+-- name is already in use to mean a _different_
+-- s-expression, then gensym a fresh name based on the given
+-- name.
+assignName ::
+  SExpr
+  -- ^ The serialized version of the expression being assigned a name.
+  -> Text
+  -- ^ The name to use.
+  -> Memo SExpr
+assignName serializedExpr name = do
+  (initLetEnv, cnt) <- MS.get
+  case OMap.lookup name initLetEnv of
+    Nothing -> do
+      let letEnv' = (name, serializedExpr) OMap.<| initLetEnv
+      MS.put (letEnv', cnt)
+      return $ ident name
+    Just sexpr
+      | serializedExpr == sexpr -> return $ ident name
+      | otherwise -> gensym
+      where
+        -- The base name is taken, so now we enter a monadic
+        -- loop which increments the counter `cnt` until
+        -- `name++(show cnt)` is a unique name essentially.
+        gensym :: Memo SExpr
+        gensym = do
+          (curLetEnv, curCnt) <- MS.get
+          -- if we looked it up and it already existed with
+          -- a non-equal s-expression, then resort to using
+          -- the counter.
+          let name' = T.pack $ (T.unpack name) ++ (show cnt)
+          case OMap.lookup name' curLetEnv of
+            Just sexpr'
+              | serializedExpr == sexpr' -> return $ ident name'
+              | otherwise -> do
+                  MS.put (curLetEnv, curCnt+1)
+                  gensym
+            Nothing -> do
+              let letEnv' = (name', serializedExpr) OMap.<| initLetEnv
+              MS.put (letEnv', cnt)
+              return $ ident name
+
+
+convertExpr :: Some Expr -> Memo SExpr
+convertExpr (Some initExpr) =
+  case initExpr of
     -- there is no atomic True or False value, so represent those as
     -- an expression, but use the base expression form without any
     -- possible re-evaluation to avoid recursion.
-    LitBool True -> convertExpr $ Some $ NamedSubExpr "true" $ Builtin EBool "bveq" samevals
-    LitBool False -> convertExpr $ Some $ NamedSubExpr "false" $ Builtin EBool "bvne" samevals
-    LitInt i -> int i
-    LitString s -> string s
-    LitBV w val -> SC.SAtom (ABV w val)
-    Loc loc -> convertLoc loc
-    Builtin _ name params ->
-      fromFoldable' (ident name : map convertExpr params)
-    TheoryFunc _ name conParams appParams ->
-      fromFoldable' (fromFoldable' (ident "_" : ident name : map convertExpr conParams) : map convertExpr appParams)
-    UninterpretedFunc _ name params ->
-      fromFoldable' (fromFoldable' [ident "_", ident "call", string ("uf." ++ name)] : map convertExpr params)
-    LibraryFunc (LibFuncDef { lfdName = name }) params ->
-      fromFoldable' (fromFoldable' [ident "_", ident "call", string ("df." ++ name)] : map convertExpr (toListFC Some params))
-    NamedSubExpr name expr ->
-        let tag d = \case
-                    SC.SNil -> SC.SNil  -- no tagging of nil elements
-                    SC.SAtom a -> SC.SAtom $ ANamed name d a
-                    SC.SCons l r -> SC.SCons (tag (d+1) l) r
-        in tag 0 $ convertExpr $ Some expr
+    LitBool b -> do
+      let x = A $ ABV 1 0
+      if b
+        then assignName (L [ident "bveq", x, x]) "true"
+        else assignName (L [ident "bveq", x, x]) "false"
+    LitInt i -> return $ int i
+    -- We serialize the string literal `"FOO"` as the s-expression identifier
+    -- `const.FOO`, so that when we're parsing the serialized s-expression
+    -- we can use a free-variable lookup to turn `const.FOO` into an
+    -- uninterpreted function (since we're interested more in it being a unique
+    -- constant value and not actually a term with meaning in the thoery of strings
+    -- that some SMT solvers support).
+    LitString s -> return $ ident $ T.pack $ "const."++s
+    LitBV w val -> return $ A $ ABV w val
+    Loc loc -> return $ convertLoc loc
+    Builtin _ name params -> do
+      params' <- mapM convertExpr params
+      return $ L (ident (T.pack name) : params')
+    TheoryFunc _ name conParams appParams -> do
+      params <- mapM convertExpr conParams
+      let rator =  L (ident "_" : ident (T.pack name) : params)
+      rands <- mapM convertExpr appParams
+      return $ L (rator:rands)
+    UninterpretedFunc _ name params -> do
+      let fnName = ident $ T.pack ("uf."++name)
+      rands <- mapM convertExpr params
+      return $ L (ident "call":fnName:rands)
+    LibraryFunc (LibFuncDef { lfdName = name }) params -> do
+      let fnName = ident $ T.pack ("df."++name)
+      rands <- mapM convertExpr (toListFC Some params)
+      return $  L (ident "call":fnName:rands)
     PackedOperand name -> error ("PackedOperand " <> name <>
                                  " not unpacked with unpackUF.. cannot serialize")
+    NamedExpr nm e' -> do
+      sexpr <- convertExpr $ Some e'
+      assignName sexpr (T.pack nm)
 
-convertLoc :: Location tp -> SC.SExpr FAtom
+
+convertLoc :: Location tp -> SExpr
 convertLoc loc =
   case loc of
-    ParamLoc p -> ident (pName p)
-    LiteralLoc ll -> quoted $ lName ll
-    MemoryLoc _ident -> quoted "Mem"
+    ParamLoc p -> ident $ T.concat ["op.", (T.pack $ pName p)]
+    LiteralLoc ll -> ident $ T.concat ["loc.", (T.pack $ lName ll)]
+    MemoryLoc _ident -> ident "loc.Mem"
     LocationFunc _ func loc' ->
-      fromFoldable' [fromFoldable' [ident "_", ident "call", string ("uf." ++ func)], convertLoc loc']
+      L [ident "call"
+        , ident (T.pack ("uf." ++ func))
+        , (convertLoc loc')
+        ]
 
-convertDefs :: [(Some Location, Some Expr)] -> SC.SExpr FAtom
-convertDefs = fromFoldable' . map convertDef
+convertDefs :: [(Some Location, Some Expr)] -> SExpr
+convertDefs = L . map convertDef
   where
-    convertDef (Some loc, e) = SC.SCons (convertLoc loc) (SC.SCons (convertExpr e) SC.SNil)
+    convertDef (Some loc, e) = L [convertLoc loc, convertExprWithBinders e]
 
-convertOperands :: [Some Parameter] -> SC.SExpr FAtom
-convertOperands = fromFoldable' . map paramToDecl
+convertOperands :: [Some Parameter] -> SExpr
+convertOperands = L . map paramToDecl
   where
-    paramToDecl (Some p) = SC.SCons (ident (pName p)) (quoted (pType p))
+    paramToDecl (Some p) = L [ident (T.pack (pName p)), ident $ T.pack $ (pType p)]
 
-convertInputs :: [Some Location] -> SC.SExpr FAtom
-convertInputs = fromFoldable' . map locToExpr
+convertInputs :: [Some Location] -> SExpr
+convertInputs = L . map locToExpr
   where
     locToExpr (Some l) = convertLoc l
 
 printDefinition :: Definition -> T.Text
-printDefinition (Definition mc sexpr) = printTokens mc sexpr
+printDefinition (Definition mc sexpr) = WSP.printSExpr mc $ toWhat4SExpr sexpr
 
 -- ----------------------------------------------------------------------
 -- SExpression conversion for library functions
 
-gatherFunSExprs :: [Formula d] -> M.Map String FunctionDefinition
-gatherFunSExprs = M.map (viewSome funToSExpr) . gatherFunctions
+gatherFunSExprs :: [Formula d] -> Map String FunctionDefinition
+gatherFunSExprs = Map.map (viewSome funToSExpr) . gatherFunctions
 
 funToSExpr :: LibraryFunctionDef sig -> FunctionDefinition
 funToSExpr lfd@(LibFuncDef {}) =
   FunctionDefinition $ extractFunSExpr (lfdName lfd) (lfdArgs lfd) (lfdRetType lfd) (lfdBody lfd)
 
 extractFunSExpr :: String -> SL.List Argument args -> ExprTypeRepr ret
-                -> Expr ret -> SC.SExpr FAtom
+                -> Expr ret -> SExpr
 extractFunSExpr name args retType body =
-  fromFoldable' [ fromFoldable' [ ident "function", ident name ]
-                , fromFoldable' [ ident "arguments", convertArguments args ]
-                , fromFoldable' [ ident "return", convertExprType retType ]
-                , fromFoldable' [ ident "body", convertExpr (Some body) ]
-                ]
+  L [ L [ ident "function", ident $ T.pack $ name ]
+    , L [ ident "arguments", convertArguments args ]
+    , L [ ident "return", convertExprType retType ]
+    , L [ ident "body", convertExprWithBinders (Some body) ]
+    ]
 
 -- Subtle difference between this and 'convertOperands': Here we output the
 -- *base* type rather than the architecture-specific symbol
-convertArguments :: SL.List Argument tps -> SC.SExpr FAtom
+convertArguments :: SL.List Argument tps -> SExpr
 convertArguments =
-  fromFoldable' . toListFC argToDecl
+  L . toListFC argToDecl
   where
     argToDecl (Arg name tp) =
-      fromFoldable' [ ident name, convertExprType tp ]
+      L [ ident $ T.pack $ name, convertExprType tp ]
 
-convertExprType :: ExprTypeRepr tp -> SC.SExpr FAtom
-convertExprType = viewSome convertBaseType . exprTypeToBaseType
+convertExprType :: ExprTypeRepr tp -> SExpr
+convertExprType tp = toDslSExpr $ viewSome WSP.serializeBaseType $ exprTypeToBaseType tp
 
 exprTypeToBaseType :: ExprTypeRepr tp -> Some CRU.BaseTypeRepr
 exprTypeToBaseType repr =
@@ -1304,62 +1440,39 @@ exprTypeToBaseType repr =
       CRU.BaseFloatRepr (CRU.knownRepr :: CRU.FloatPrecisionRepr CRU.Prec64)
     _ -> error $ "cannot convert to What4 type: " ++ show repr
 
--- This supports all base types, not just those that we convert from ExprTypes,
--- as a historical accident.
-convertBaseType :: CRU.BaseTypeRepr tp -> SC.SExpr FAtom
-convertBaseType repr =
-  case repr of
-    CRU.BaseBoolRepr -> quoted "bool"
-    CRU.BaseBVRepr n ->
-      fromFoldable' [ quoted "bv", int (fromIntegral (CRU.natValue n)) ]
-    CRU.BaseNatRepr -> quoted "nat"
-    CRU.BaseIntegerRepr -> quoted "int"
-    CRU.BaseRealRepr -> quoted "real"
-    CRU.BaseFloatRepr (CRU.FloatingPointPrecisionRepr eb sb) -> fromFoldable'
-      [ quoted "fp"
-      , int (fromIntegral (CRU.natValue eb))
-      , int (fromIntegral (CRU.natValue sb))
-      ]
-    CRU.BaseStringRepr _ -> quoted "string"
-    CRU.BaseComplexRepr -> quoted "complex"
-    CRU.BaseStructRepr reprs ->
-      fromFoldable' [ quoted "struct", fromFoldable' (toListFC convertBaseType reprs) ]
-    CRU.BaseArrayRepr ixs elt ->
-      fromFoldable' [ quoted "array", fromFoldable' (toListFC convertBaseType ixs),
-                      convertBaseType elt ]
 
 printFunctionDefinition :: FunctionDefinition -> T.Text
-printFunctionDefinition (FunctionDefinition sexpr) = printTokens Seq.empty sexpr
+printFunctionDefinition (FunctionDefinition sexpr) = WSP.printSExpr Seq.empty $ toWhat4SExpr sexpr
 
 -- ----------------------------------------------------------------------
 -- Gather all library functions from the given formulas
 
-gatherFunctions :: [Formula d] -> M.Map String (Some LibraryFunctionDef)
+gatherFunctions :: [Formula d] -> Map String (Some LibraryFunctionDef)
 gatherFunctions = F.foldMap doFormula
-  -- Note that the Monoid instance for M.Map is a left-biased union, so the first
+  -- Note that the Monoid instance for Map is a left-biased union, so the first
   -- definition will be used and the second thrown away
   where
     doFormula f = F.foldMap (doSomeExpr . snd) (fDefs f)
 
-    doSomeExpr :: Some Expr -> M.Map String (Some LibraryFunctionDef)
+    doSomeExpr :: Some Expr -> Map String (Some LibraryFunctionDef)
     doSomeExpr (Some expr) = doExpr expr
 
-    doExpr :: Expr tp -> M.Map String (Some LibraryFunctionDef)
+    doExpr :: Expr tp -> Map String (Some LibraryFunctionDef)
     doExpr expr = case expr of
       LibraryFunc def args ->
-        M.insertWith keepOld (lfdName def) (Some def) $ foldMapFC doExpr args
+        Map.insertWith keepOld (lfdName def) (Some def) $ foldMapFC doExpr args
       Builtin _ _ args ->
         foldMap doSomeExpr args
       TheoryFunc _ _ conParams appParams ->
         foldMap doSomeExpr (conParams ++ appParams)
       UninterpretedFunc _ _ params ->
         foldMap doSomeExpr params
-      NamedSubExpr _ e -> doExpr e
-      LitBool _ -> M.empty
-      LitBV _ _ -> M.empty
-      LitInt _ -> M.empty
-      LitString _ -> M.empty
-      Loc _ -> M.empty
-      PackedOperand _ -> M.empty
+      LitBool _ -> Map.empty
+      LitBV _ _ -> Map.empty
+      LitInt _ -> Map.empty
+      LitString _ -> Map.empty
+      Loc _ -> Map.empty
+      PackedOperand _ -> Map.empty
+      NamedExpr _ expr' -> doExpr expr'
 
     keepOld _new old = old

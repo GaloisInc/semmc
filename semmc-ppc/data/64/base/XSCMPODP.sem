@@ -1,13 +1,16 @@
 ;; VSX Scalar Compare Ordered Double-Precision (XX3-form)
 ((operands
- ((bf . 'Crrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((bf Crrc)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  (bf 'CR xB xA 'IP))
+  (op.bf loc.CR op.xB op.xA loc.IP))
  (defs
-  (('CR
-   ((_ call "uf.undefined")
-    #x00000020))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call uf.undefinedBV.32)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

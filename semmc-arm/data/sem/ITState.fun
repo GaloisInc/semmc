@@ -1,18 +1,20 @@
 ((function ITState)
  (arguments
   ((cpsr
-   ('bv 32))))
+   (BV 32))))
  (return
-  ('bv 4))
+  (BV 4))
  (body
-  (ite
-   (bveq
-    (concat
-     ((_ extract 21 20)
-      cpsr)
-     ((_ extract 6 5)
-      cpsr))
-    #x0)
-   #xe
-   ((_ extract 19 16)
-    cpsr))))
+  (with
+   ()
+   (ite
+    (bveq
+     (concat
+      ((_ extract 21 20)
+       op.cpsr)
+      ((_ extract 6 5)
+       op.cpsr))
+     #x0)
+    #xe
+    ((_ extract 19 16)
+     op.cpsr)))))

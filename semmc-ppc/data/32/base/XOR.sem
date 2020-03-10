@@ -1,12 +1,16 @@
 ;; XOR (X-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  (rS rB 'IP))
+  (op.rS op.rB loc.IP))
  (defs
-  ((rA
-   (bvxor rS rB))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rA
+   (with
+    ()
+    (bvxor op.rS op.rB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

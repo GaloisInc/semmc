@@ -1,13 +1,19 @@
 ;; Floating Compare Ordered (X-form)
-(let
- ((var1
-  (defs
-   (('FPSCR
+((operands
+ ((bf Crrc)
+  (frA Fprc)
+  (frB Fprc)))
+ (in
+  (loc.FPSCR loc.CR op.frB op.frA loc.IP))
+ (defs
+  ((loc.FPSCR
+   (with
+    ()
     (bvor
      (bvand
       (bvor
        (bvand
-        'FPSCR
+        loc.FPSCR
         (concat
          (concat #xffff #x0)
          #xfff))
@@ -17,54 +23,62 @@
          (concat
           (ite
            (flts
-            ((_ call "uf.fp.double_to_single")
+            (call
+             uf.fp.double_to_single
              (fp_binary_to_double
               ((_ extract 127 64)
-               frA)))
-            ((_ call "uf.fp.double_to_single")
+               op.frA)))
+            (call
+             uf.fp.double_to_single
              (fp_binary_to_double
               ((_ extract 127 64)
-               frB))))
+               op.frB))))
            #b1
            #b0)
           (concat
            (ite
             (flts
-             ((_ call "uf.fp.double_to_single")
+             (call
+              uf.fp.double_to_single
               (fp_binary_to_double
                ((_ extract 127 64)
-                frB)))
-             ((_ call "uf.fp.double_to_single")
+                op.frB)))
+             (call
+              uf.fp.double_to_single
               (fp_binary_to_double
                ((_ extract 127 64)
-                frA))))
+                op.frA))))
             #b1
             #b0)
            (concat
             (ite
              (feqs
-              ((_ call "uf.fp.double_to_single")
+              (call
+               uf.fp.double_to_single
                (fp_binary_to_double
                 ((_ extract 127 64)
-                 frA)))
-              ((_ call "uf.fp.double_to_single")
+                 op.frA)))
+              (call
+               uf.fp.double_to_single
                (fp_binary_to_double
                 ((_ extract 127 64)
-                 frB))))
+                 op.frB))))
              #b1
              #b0)
             (ite
              (orp
               (fnans
-               ((_ call "uf.fp.double_to_single")
+               (call
+                uf.fp.double_to_single
                 (fp_binary_to_double
                  ((_ extract 127 64)
-                  frA))))
+                  op.frA))))
               (fnans
-               ((_ call "uf.fp.double_to_single")
+               (call
+                uf.fp.double_to_single
                 (fp_binary_to_double
                  ((_ extract 127 64)
-                  frB)))))
+                  op.frB)))))
              #b1
              #b0)))))
         #x000))
@@ -77,81 +91,89 @@
        (ite
         (orp
          (fnans
-          ((_ call "uf.fp.double_to_single")
+          (call
+           uf.fp.double_to_single
            (fp_binary_to_double
             ((_ extract 127 64)
-             frA))))
+             op.frA))))
          (fnans
-          ((_ call "uf.fp.double_to_single")
+          (call
+           uf.fp.double_to_single
            (fp_binary_to_double
             ((_ extract 127 64)
-             frB)))))
+             op.frB)))))
         #b1
         #b0))
-      #b0000000000000000000)))
-    ('CR
-     ((_ call "df.updateCRField")
-      'CR
-      bf
+      #b0000000000000000000))))
+   (loc.CR
+    (with
+     ()
+     (call
+      df.updateCRField
+      loc.CR
+      op.bf
       (concat
        (ite
         (flts
-         ((_ call "uf.fp.double_to_single")
+         (call
+          uf.fp.double_to_single
           (fp_binary_to_double
            ((_ extract 127 64)
-            frA)))
-         ((_ call "uf.fp.double_to_single")
+            op.frA)))
+         (call
+          uf.fp.double_to_single
           (fp_binary_to_double
            ((_ extract 127 64)
-            frB))))
+            op.frB))))
         #b1
         #b0)
        (concat
         (ite
          (flts
-          ((_ call "uf.fp.double_to_single")
+          (call
+           uf.fp.double_to_single
            (fp_binary_to_double
             ((_ extract 127 64)
-             frB)))
-          ((_ call "uf.fp.double_to_single")
+             op.frB)))
+          (call
+           uf.fp.double_to_single
            (fp_binary_to_double
             ((_ extract 127 64)
-             frA))))
+             op.frA))))
          #b1
          #b0)
         (concat
          (ite
           (feqs
-           ((_ call "uf.fp.double_to_single")
+           (call
+            uf.fp.double_to_single
             (fp_binary_to_double
              ((_ extract 127 64)
-              frA)))
-           ((_ call "uf.fp.double_to_single")
+              op.frA)))
+           (call
+            uf.fp.double_to_single
             (fp_binary_to_double
              ((_ extract 127 64)
-              frB))))
+              op.frB))))
           #b1
           #b0)
          (ite
           (orp
            (fnans
-            ((_ call "uf.fp.double_to_single")
+            (call
+             uf.fp.double_to_single
              (fp_binary_to_double
               ((_ extract 127 64)
-               frA))))
+               op.frA))))
            (fnans
-            ((_ call "uf.fp.double_to_single")
+            (call
+             uf.fp.double_to_single
              (fp_binary_to_double
               ((_ extract 127 64)
-               frB)))))
+               op.frB)))))
           #b1
-          #b0))))))
-    ('IP
-     (bvadd 'IP #x0000000000000004))))))
- ((operands
-  ((bf . 'Crrc)
-   (frA . 'Fprc)
-   (frB . 'Fprc)))
-  (in
-   ('FPSCR 'CR frB frA 'IP))
-  (var1)))
+          #b0)))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

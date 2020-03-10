@@ -1,23 +1,26 @@
 ;; Store VSX Vector Word*4 Indexed (XX1-form)
 ((operands
- ((memref . 'Memrr)
-  (xS . 'Vsrc)))
+ ((memref Memrr)
+  (xS Vsrc)))
  (in
-  (memref 'Mem xS 'IP))
+  (op.memref loc.Mem op.xS loc.IP))
  (defs
-  (('Mem
-   ((_ call "uf.write_mem.128")
-    'Mem
-    (bvadd
-     ((_ call "uf.ppc.memrr_offset")
-      memref)
-     (ite
-      ((_ call "uf.ppc.is_r0")
-       ((_ call "uf.ppc.memrr_base")
-        memref))
-      #x00000000
-      ((_ call "uf.ppc.memrr_base")
-       memref)))
-    xS))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.Mem
+   (with
+    ()
+    (call
+     uf.write_mem.128
+     loc.Mem
+     (bvadd
+      (call uf.ppc.memrr_offset op.memref)
+      (ite
+       (call
+        uf.ppc.is_r0
+        (call uf.ppc.memrr_base op.memref))
+       #x00000000
+       (call uf.ppc.memrr_base op.memref)))
+     op.xS)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -2,36 +2,44 @@
 ;; Encoding A2
 ;; Used to call a subroutine (branch) and switch from InstrSet_A32 to InstrSet_T32
 ;; Writes to PC, not R15.
-(let
- ((newlr
-  (bvsub 'PC #x00000004))
-  (SetT32Mode
-   (bvand
-    #xfeffffff
-    (bvor #x00000020 'CPSR)))
-  (branchWritePC
-   (bvand
-    #xfffffffc
-    (bvadd
-     (imm32)
-     (bvand #xfffffffc 'PC))))
-  (imm32
-   ((_ sign_extend 6)
-    (concat
-     ((_ extract 31 8)
-      target)
-     (concat
-      ((_ extract 7 7)
-       target)
-      #b0)))))
- ((operands
-  ((target . 'Arm_blx_target)))
-  (in
-   ('R14 target 'CPSR 'PC))
-  (defs
-   (('PC
-    (branchWritePC))
-    ('CPSR
-     (SetT32Mode))
-    ('R14
-     (newlr))))))
+((operands
+ ((target Arm_blx_target)))
+ (in
+  (loc.R14 op.target loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((imm32
+      ((_ sign_extend 6)
+       (concat
+        ((_ extract 31 8)
+         op.target)
+        (concat
+         ((_ extract 7 7)
+          op.target)
+         #b0))))
+      (branchWritePC
+       (bvand
+        #xfffffffc
+        (bvadd
+         imm32
+         (bvand #xfffffffc loc.PC)))))
+     branchWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((SetT32Mode
+       (bvand
+        #xfeffffff
+        (bvor #x00000020 loc.CPSR))))
+      SetT32Mode)))
+   (loc.R14
+    (with
+     ()
+     (let
+      ((newlr
+       (bvsub loc.PC #x00000004)))
+      newlr))))))

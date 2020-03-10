@@ -1,24 +1,27 @@
 ;; Load Word and Zero (D-form)
 ((operands
- ((rT . 'Gprc)
-  (memref . 'Memri)))
+ ((rT Gprc)
+  (memref Memri)))
  (in
-  ('Mem memref 'IP))
+  (loc.Mem op.memref loc.IP))
  (defs
-  ((rT
-   ((_ zero_extend 32)
-    ((_ call "uf.read_mem.32")
-     'Mem
-     (bvadd
-      (ite
-       ((_ call "uf.ppc.is_r0")
-        ((_ call "uf.ppc.memri_reg")
-         memref))
-       #x0000000000000000
-       ((_ call "uf.ppc.memri_reg")
-        memref))
-      ((_ sign_extend 48)
-       ((_ call "uf.ppc.memri_offset")
-        memref))))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rT
+   (with
+    ()
+    ((_ zero_extend 32)
+     (call
+      uf.read_mem.32
+      loc.Mem
+      (bvadd
+       (ite
+        (call
+         uf.ppc.is_r0
+         (call uf.ppc.memri_reg op.memref))
+        #x0000000000000000
+        (call uf.ppc.memri_reg op.memref))
+       ((_ sign_extend 48)
+        (call uf.ppc.memri_offset op.memref)))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

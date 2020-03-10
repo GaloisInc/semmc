@@ -1,38 +1,45 @@
 ;; Multiply High Doubleword Unsigned (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA rB 'IP))
+  (loc.XER loc.CR op.rA op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      ((_ extract 127 64)
+       (bvmul
+        ((_ zero_extend 64)
+         op.rA)
+        ((_ zero_extend 64)
+         op.rB)))
+      #x0000000000000000)
+     (bvsgt
+      ((_ extract 127 64)
+       (bvmul
+        ((_ zero_extend 64)
+         op.rA)
+        ((_ zero_extend 64)
+         op.rB)))
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
      ((_ extract 127 64)
       (bvmul
        ((_ zero_extend 64)
-        rA)
+        op.rA)
        ((_ zero_extend 64)
-        rB)))
-     #x0000000000000000)
-    (bvsgt
-     ((_ extract 127 64)
-      (bvmul
-       ((_ zero_extend 64)
-        rA)
-       ((_ zero_extend 64)
-        rB)))
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    ((_ extract 127 64)
-     (bvmul
-      ((_ zero_extend 64)
-       rA)
-      ((_ zero_extend 64)
-       rB))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+        op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

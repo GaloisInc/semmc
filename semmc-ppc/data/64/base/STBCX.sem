@@ -1,33 +1,38 @@
 ;; Store Byte Conditional Indexed (X-form)
 ;; The manual lists this with a . since it always updates CR0
 ((operands
- ((memref . 'Memrr)
-  (rS . 'Gprc)))
+ ((memref Memrr)
+  (rS Gprc)))
  (in
-  ('XER 'CR 'Mem memref rS 'IP))
+  (loc.XER loc.CR loc.Mem op.memref op.rS loc.IP))
  (defs
-  (('CR
-   (bvor
-    'CR
-    ((_ zero_extend 28)
-     (concat
-      (concat #b00 #b1)
-      ((_ extract 31 31)
-       'XER)))))
-   ('Mem
-    ((_ call "uf.write_mem.8")
-     'Mem
-     (bvadd
-      (ite
-       ((_ call "uf.ppc.is_r0")
-        ((_ call "uf.ppc.memrr_base")
-         memref))
-       #x0000000000000000
-       ((_ call "uf.ppc.memrr_base")
-        memref))
-      ((_ call "uf.ppc.memrr_offset")
-       memref))
-     ((_ extract 7 0)
-      rS)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (bvor
+     loc.CR
+     ((_ zero_extend 28)
+      (concat
+       (concat #b00 #b1)
+       ((_ extract 31 31)
+        loc.XER))))))
+   (loc.Mem
+    (with
+     ()
+     (call
+      uf.write_mem.8
+      loc.Mem
+      (bvadd
+       (ite
+        (call
+         uf.ppc.is_r0
+         (call uf.ppc.memrr_base op.memref))
+        #x0000000000000000
+        (call uf.ppc.memrr_base op.memref))
+       (call uf.ppc.memrr_offset op.memref))
+      ((_ extract 7 0)
+       op.rS))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

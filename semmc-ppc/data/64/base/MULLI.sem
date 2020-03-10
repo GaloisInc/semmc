@@ -1,15 +1,19 @@
 ;; Multiply Low Immediate (D-form)
 ((operands
- ((rT . 'Gprc)
-  (si . 'S16imm)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (si S16imm)
+  (rA Gprc)))
  (in
-  (rA si 'IP))
+  (op.rA op.si loc.IP))
  (defs
-  ((rT
-   (bvmul
-    rA
-    ((_ sign_extend 48)
-     si)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvmul
+     op.rA
+     ((_ sign_extend 48)
+      op.si))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

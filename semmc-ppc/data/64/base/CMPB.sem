@@ -1,85 +1,86 @@
 ;; Compare Bytes (X-form)
-(let
- ((var1
-  (defs
-   ((rA
+((operands
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
+ (in
+  (op.rS op.rB loc.IP))
+ (defs
+  ((op.rA
+   (with
+    ()
     (concat
      (concat
       (ite
        (bveq
         ((_ extract 63 56)
-         rS)
+         op.rS)
         ((_ extract 63 56)
-         rB))
+         op.rB))
        #xff
        #x00)
       (concat
        (ite
         (bveq
          ((_ extract 55 48)
-          rS)
+          op.rS)
          ((_ extract 55 48)
-          rB))
+          op.rB))
         #xff
         #x00)
        (concat
         (ite
          (bveq
           ((_ extract 47 40)
-           rS)
+           op.rS)
           ((_ extract 47 40)
-           rB))
+           op.rB))
          #xff
          #x00)
         (ite
          (bveq
           ((_ extract 39 32)
-           rS)
+           op.rS)
           ((_ extract 39 32)
-           rB))
+           op.rB))
          #xff
          #x00))))
      (concat
       (ite
        (bveq
         ((_ extract 31 24)
-         rS)
+         op.rS)
         ((_ extract 31 24)
-         rB))
+         op.rB))
        #xff
        #x00)
       (concat
        (ite
         (bveq
          ((_ extract 23 16)
-          rS)
+          op.rS)
          ((_ extract 23 16)
-          rB))
+          op.rB))
         #xff
         #x00)
        (concat
         (ite
          (bveq
           ((_ extract 15 8)
-           rS)
+           op.rS)
           ((_ extract 15 8)
-           rB))
+           op.rB))
          #xff
          #x00)
         (ite
          (bveq
           ((_ extract 7 0)
-           rS)
+           op.rS)
           ((_ extract 7 0)
-           rB))
+           op.rB))
          #xff
-         #x00))))))
-    ('IP
-     (bvadd 'IP #x0000000000000004))))))
- ((operands
-  ((rA . 'Gprc)
-   (rB . 'Gprc)
-   (rS . 'Gprc)))
-  (in
-   (rS rB 'IP))
-  (var1)))
+         #x00)))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

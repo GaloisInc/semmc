@@ -1,51 +1,60 @@
 ;; Add Carrying (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR 'XER rA rB 'IP))
+  (loc.XER loc.CR loc.XER op.rA op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     ((_ extract 31 0)
-      (bvadd
-       ((_ zero_extend 1)
-        rA)
-       ((_ zero_extend 1)
-        rB)))
-     #x00000000)
-    (bvsgt
-     ((_ extract 31 0)
-      (bvadd
-       ((_ zero_extend 1)
-        rA)
-       ((_ zero_extend 1)
-        rB)))
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   ('XER
-    (concat
-     ((_ extract 31 30)
-      'XER)
-     (concat
-      ((_ extract 32 32)
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      ((_ extract 31 0)
        (bvadd
         ((_ zero_extend 1)
-         rA)
+         op.rA)
         ((_ zero_extend 1)
-         rB)))
-      ((_ extract 28 0)
-       'XER))))
-   (rT
-    ((_ extract 31 0)
-     (bvadd
-      ((_ zero_extend 1)
-       rA)
-      ((_ zero_extend 1)
-       rB))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+         op.rB)))
+      #x00000000)
+     (bvsgt
+      ((_ extract 31 0)
+       (bvadd
+        ((_ zero_extend 1)
+         op.rA)
+        ((_ zero_extend 1)
+         op.rB)))
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (loc.XER
+    (with
+     ()
+     (concat
+      ((_ extract 31 30)
+       loc.XER)
+      (concat
+       ((_ extract 32 32)
+        (bvadd
+         ((_ zero_extend 1)
+          op.rA)
+         ((_ zero_extend 1)
+          op.rB)))
+       ((_ extract 28 0)
+        loc.XER)))))
+   (op.rT
+    (with
+     ()
+     ((_ extract 31 0)
+      (bvadd
+       ((_ zero_extend 1)
+        op.rA)
+       ((_ zero_extend 1)
+        op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

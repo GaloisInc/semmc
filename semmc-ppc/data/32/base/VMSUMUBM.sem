@@ -1,27 +1,23 @@
 ;; Vector Multiply-Sum Unsigned Byte Modulo (VA-form)
 ((operands
- ((vrT . 'Vrrc)
-  (vrA . 'Vrrc)
-  (vrB . 'Vrrc)
-  (vrC . 'Vrrc)))
+ ((vrT Vrrc)
+  (vrA Vrrc)
+  (vrB Vrrc)
+  (vrC Vrrc)))
  (in
-  ('VSCR vrC vrB vrA 'IP))
+  (loc.VSCR op.vrC op.vrB op.vrA loc.IP))
  (defs
-  (('VSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec3")
-     "VMSUMUBM"
-     vrA
-     vrB
-     vrC
-     'VSCR)))
-   (vrT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec3")
-      "VMSUMUBM"
-      vrA
-      vrB
-      vrC
-      'VSCR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.VSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec3 const.VMSUMUBM op.vrA op.vrB op.vrC loc.VSCR))))
+   (op.vrT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec3 const.VMSUMUBM op.vrA op.vrB op.vrC loc.VSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

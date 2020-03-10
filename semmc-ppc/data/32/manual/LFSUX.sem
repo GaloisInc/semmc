@@ -1,29 +1,31 @@
 ;; Load Floating-Point Single with Update Indexed (X-form)
 ((operands
- ((frT . 'Fprc)
-  (memref . 'Memrr)))
+ ((frT Fprc)
+  (memref Memrr)))
  (in
-  ('Mem memref 'IP))
+  (loc.Mem op.memref loc.IP))
  (defs
-  ((((_ call "uf.ppc.memrr_base")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memrr_base")
-     memref)
-    ((_ call "uf.ppc.memrr_offset")
-     memref)))
-   (frT
-    (concat
-     (fp_double_to_binary
-      (fp_single_to_double
-       (fp_binary_to_single
-        ((_ call "uf.read_mem.32")
-         'Mem
-         (bvadd
-          ((_ call "uf.ppc.memrr_base")
-           memref)
-          ((_ call "uf.ppc.memrr_offset")
-           memref))))))
-     #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  (((call uf.ppc.memrr_base op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memrr_base op.memref)
+     (call uf.ppc.memrr_offset op.memref))))
+   (op.frT
+    (with
+     ()
+     (concat
+      (fp_double_to_binary
+       (fp_single_to_double
+        (fp_binary_to_single
+         (call
+          uf.read_mem.32
+          loc.Mem
+          (bvadd
+           (call uf.ppc.memrr_base op.memref)
+           (call uf.ppc.memrr_offset op.memref))))))
+      #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

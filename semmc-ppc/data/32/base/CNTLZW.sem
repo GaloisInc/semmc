@@ -1,12 +1,15 @@
 ;; Count Leading Zeros Word (X-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rS Gprc)))
  (in
-  (rS 'IP))
+  (op.rS loc.IP))
  (defs
-  ((rA
-   ((_ call "uf.clz.32")
-    rS))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rA
+   (with
+    ()
+    (call uf.clz.32 op.rS)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

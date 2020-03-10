@@ -1,28 +1,33 @@
 ;; Rotate Left Doubleword Immediate then Clear Left (MD-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (mb . 'U6imm)
-  (sh . 'U6imm)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (mb U6imm)
+  (sh U6imm)
+  (rS Gprc)))
  (in
-  (mb sh rS 'IP))
+  (op.mb op.sh op.rS loc.IP))
  (defs
-  ((rA
-   (bvand
-    (bvor
-     (bvshl
-      rS
-      ((_ zero_extend 58)
-       sh))
-     (bvlshr
-      rS
-      (bvsub
-       #x0000000000000040
+  ((op.rA
+   (with
+    ()
+    (bvand
+     (bvor
+      (bvshl
+       op.rS
        ((_ zero_extend 58)
-        sh))))
-    ((_ call "df.mask_64")
-     ((_ zero_extend 58)
-      mb)
-     #x000000000000003f)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+        op.sh))
+      (bvlshr
+       op.rS
+       (bvsub
+        #x0000000000000040
+        ((_ zero_extend 58)
+         op.sh))))
+     (call
+      df.mask_64
+      ((_ zero_extend 58)
+       op.mb)
+      #x000000000000003f))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

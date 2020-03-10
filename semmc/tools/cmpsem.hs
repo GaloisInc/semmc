@@ -9,8 +9,9 @@ import           Data.Semigroup
 import qualified Data.Text.IO as TIO
 import qualified Options.Applicative as O
 import qualified Options.Applicative.Help as OH
-import           SemMC.Formula.SETokens
 import           System.Exit
+
+import           What4.Serialize.Parser ( parseSExpr )
 
 import           Prelude
 
@@ -52,8 +53,8 @@ mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   atxt <- TIO.readFile (fileA opts)
   btxt <- TIO.readFile (fileB opts)
-  let same = do a <- parseLL atxt
-                b <- parseLL btxt
+  let same = do a <- parseSExpr atxt
+                b <- parseSExpr btxt
                 return $ a == b
       (msg, rval) = case same of
                       Right True -> ("semantically equivalent.", ExitSuccess)
