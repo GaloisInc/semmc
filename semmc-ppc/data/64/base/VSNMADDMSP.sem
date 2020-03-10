@@ -1,24 +1,22 @@
 ;; VSX Scalar Negative Multiply-Add Single-Precision (XX3-form)
 ((operands
- ((xT . 'Vsrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  ('FPSCR xB xA 'IP))
+  (loc.FPSCR op.xB op.xA loc.IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec2")
-     "VSNMADDMSP"
-     xA
-     xB
-     'FPSCR)))
-   (xT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec2")
-      "VSNMADDMSP"
-      xA
-      xB
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec2 const.VSNMADDMSP op.xA op.xB loc.FPSCR))))
+   (op.xT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec2 const.VSNMADDMSP op.xA op.xB loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

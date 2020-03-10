@@ -1,26 +1,28 @@
 ;; Load VSX Scalar as Integer Word and Zero Indexed (XX1-form)
 ((operands
- ((xT . 'Vsrc)
-  (memref . 'Memrr)))
+ ((xT Vsrc)
+  (memref Memrr)))
  (in
-  (memref 'Mem 'IP))
+  (op.memref loc.Mem loc.IP))
  (defs
-  ((xT
-   (concat
-    ((_ zero_extend 32)
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (bvadd
-       ((_ call "uf.ppc.memrr_offset")
-        memref)
-       (ite
-        ((_ call "uf.ppc.is_r0")
-         ((_ call "uf.ppc.memrr_base")
-          memref))
-        #x00000000
-        ((_ call "uf.ppc.memrr_base")
-         memref)))))
-    ((_ call "uf.undefined")
-     #x00000040)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.xT
+   (with
+    ()
+    (concat
+     ((_ zero_extend 32)
+      (call
+       uf.read_mem.32
+       loc.Mem
+       (bvadd
+        (call uf.ppc.memrr_offset op.memref)
+        (ite
+         (call
+          uf.ppc.is_r0
+          (call uf.ppc.memrr_base op.memref))
+         #x00000000
+         (call uf.ppc.memrr_base op.memref)))))
+     (call uf.undefinedBV.64))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

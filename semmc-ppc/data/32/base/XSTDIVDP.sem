@@ -1,13 +1,16 @@
 ;; VSX Scalar Test for Software Divide Double-Precision (XX3-form)
 ((operands
- ((bf . 'Crrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((bf Crrc)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  ('CR xB xA bf 'IP))
+  (loc.CR op.xB op.xA op.bf loc.IP))
  (defs
-  (('CR
-   ((_ call "uf.undefined")
-    #x00000020))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call uf.undefinedBV.32)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

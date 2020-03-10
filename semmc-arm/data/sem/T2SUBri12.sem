@@ -1,28 +1,34 @@
 ;; SUB immediate, T32, encoding T4 (F7.1.4, F7-2540)
-(let
- ((res_nzcv
-  ((_ call "df.addWithCarry")
-   rN
-   (bvnot
-    ((_ zero_extend 16)
-     imm))
-   #x00000001)))
- ((operands
-  ((rD . 'GPRnopc)
-   (imm . 'Imm0_4095)
-   (rN . 'GPR)))
-  (in
-   (imm rN 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000002))
-    ('CPSR 'CPSR)
-    (rD
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
-      ((_ extract 35 4)
-       (res_nzcv))
-      rD))))))
+((operands
+ ((rD GPRnopc)
+  (imm Imm0_4095)
+  (rN GPR)))
+ (in
+  (op.imm op.rN loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (bvadd loc.PC #x00000002)))
+   (loc.CPSR
+    (with () loc.CPSR))
+   (op.rD
+    (with
+     ()
+     (let
+      ((res_nzcv
+       (call
+        df.addWithCarry
+        op.rN
+        (bvnot
+         ((_ zero_extend 16)
+          op.imm))
+        #x00000001)))
+      (ite
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       ((_ extract 35 4)
+        res_nzcv)
+       op.rD)))))))

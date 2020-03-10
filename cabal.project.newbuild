@@ -8,6 +8,7 @@ packages:
   semmc-coverage/
   semmc-synthesis/
   semmc-learning/
+  submodules/what4-serialize
   submodules/dismantle/dismantle-tablegen/
   submodules/dismantle/dismantle-arm/
   submodules/dismantle/dismantle-thumb/

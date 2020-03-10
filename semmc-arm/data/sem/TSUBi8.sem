@@ -1,69 +1,84 @@
 ;; SUB immediate, T32, encoding T2 (F7.1.234, F7-2914)
-(let
- ((res_nzcv
-  ((_ call "df.addWithCarry")
-   rDn
-   (bvnot
-    ((_ zero_extend 24)
-     imm))
-   #x00000001)))
- ((operands
-  ((rDn . 'TGPR)
-   (imm . 'Imm0_255)))
-  (in
-   (imm rDn 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000002))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+((operands
+ ((rDn TGPR)
+  (imm Imm0_255)))
+ (in
+  (op.imm op.rDn loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (bvadd loc.PC #x00000002)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((res_nzcv
+       (call
+        df.addWithCarry
+        op.rDn
+        (bvnot
+         ((_ zero_extend 24)
+          op.imm))
+        #x00000001)))
       (ite
-       (andp
-        (notp
-         ((_ call "uf.arm.is_r15")
-          rDn))
-        (notp
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (andp
          (notp
-          (bvne
-           #x00
-           (concat
-            ((_ extract 19 16)
-             'CPSR)
+          (call uf.arm.is_r15 op.rDn))
+         (notp
+          (notp
+           (bvne
+            #x00
             (concat
-             ((_ extract 21 20)
-              'CPSR)
-             ((_ extract 6 5)
-              'CPSR)))))))
-       (concat
-        ((_ extract 3 0)
-         (res_nzcv))
-        ((_ extract 31 4)
-         'CPSR))
-       'CPSR)
-      'CPSR))
-    (rDn
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+             ((_ extract 19 16)
+              loc.CPSR)
+             (concat
+              ((_ extract 21 20)
+               loc.CPSR)
+              ((_ extract 6 5)
+               loc.CPSR)))))))
+        (concat
+         ((_ extract 3 0)
+          res_nzcv)
+         ((_ extract 31 4)
+          loc.CPSR))
+        loc.CPSR)
+       loc.CPSR))))
+   (op.rDn
+    (with
+     ()
+     (let
+      ((res_nzcv
+       (call
+        df.addWithCarry
+        op.rDn
+        (bvnot
+         ((_ zero_extend 24)
+          op.imm))
+        #x00000001)))
       (ite
-       (notp
-        (bvne
-         #x00
-         (concat
-          ((_ extract 19 16)
-           'CPSR)
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (notp
+         (bvne
+          #x00
           (concat
-           ((_ extract 21 20)
-            'CPSR)
-           ((_ extract 6 5)
-            'CPSR)))))
-       rDn
-       ((_ extract 35 4)
-        (res_nzcv)))
-      rDn))))))
+           ((_ extract 19 16)
+            loc.CPSR)
+           (concat
+            ((_ extract 21 20)
+             loc.CPSR)
+            ((_ extract 6 5)
+             loc.CPSR)))))
+        op.rDn
+        ((_ extract 35 4)
+         res_nzcv))
+       op.rDn)))))))

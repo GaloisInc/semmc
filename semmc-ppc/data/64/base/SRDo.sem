@@ -1,35 +1,42 @@
 ;; Shift Right Doubleword (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS rB 'IP))
+  (loc.XER loc.CR op.rS op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvlshr
+       op.rS
+       ((_ zero_extend 58)
+        ((_ extract 5 0)
+         op.rB)))
+      #x0000000000000000)
+     (bvsgt
+      (bvlshr
+       op.rS
+       ((_ zero_extend 58)
+        ((_ extract 5 0)
+         op.rB)))
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
      (bvlshr
-      rS
+      op.rS
       ((_ zero_extend 58)
        ((_ extract 5 0)
-        rB)))
-     #x0000000000000000)
-    (bvsgt
-     (bvlshr
-      rS
-      ((_ zero_extend 58)
-       ((_ extract 5 0)
-        rB)))
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    (bvlshr
-     rS
-     ((_ zero_extend 58)
-      ((_ extract 5 0)
-       rB))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+        op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

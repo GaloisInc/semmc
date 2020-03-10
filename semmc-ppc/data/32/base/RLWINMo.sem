@@ -1,73 +1,83 @@
 ;; Rotate Left Word Immediate then AND with Mask (M-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (me . 'U5imm)
-  (mb . 'U5imm)
-  (sh . 'U5imm)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (me U5imm)
+  (mb U5imm)
+  (sh U5imm)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS me mb sh 'IP))
+  (loc.XER loc.CR op.rS op.me op.mb op.sh loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvand
+       (bvor
+        (bvshl
+         op.rS
+         ((_ zero_extend 27)
+          op.sh))
+        (bvlshr
+         op.rS
+         (bvsub
+          #x00000020
+          ((_ zero_extend 27)
+           op.sh))))
+       (call
+        df.mask_32
+        ((_ zero_extend 27)
+         op.mb)
+        ((_ zero_extend 27)
+         op.me)))
+      #x00000000)
+     (bvsgt
+      (bvand
+       (bvor
+        (bvshl
+         op.rS
+         ((_ zero_extend 27)
+          op.sh))
+        (bvlshr
+         op.rS
+         (bvsub
+          #x00000020
+          ((_ zero_extend 27)
+           op.sh))))
+       (call
+        df.mask_32
+        ((_ zero_extend 27)
+         op.mb)
+        ((_ zero_extend 27)
+         op.me)))
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
      (bvand
       (bvor
        (bvshl
-        rS
+        op.rS
         ((_ zero_extend 27)
-         sh))
+         op.sh))
        (bvlshr
-        rS
+        op.rS
         (bvsub
          #x00000020
          ((_ zero_extend 27)
-          sh))))
-      ((_ call "df.mask_32")
+          op.sh))))
+      (call
+       df.mask_32
        ((_ zero_extend 27)
-        mb)
+        op.mb)
        ((_ zero_extend 27)
-        me)))
-     #x00000000)
-    (bvsgt
-     (bvand
-      (bvor
-       (bvshl
-        rS
-        ((_ zero_extend 27)
-         sh))
-       (bvlshr
-        rS
-        (bvsub
-         #x00000020
-         ((_ zero_extend 27)
-          sh))))
-      ((_ call "df.mask_32")
-       ((_ zero_extend 27)
-        mb)
-       ((_ zero_extend 27)
-        me)))
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    (bvand
-     (bvor
-      (bvshl
-       rS
-       ((_ zero_extend 27)
-        sh))
-      (bvlshr
-       rS
-       (bvsub
-        #x00000020
-        ((_ zero_extend 27)
-         sh))))
-     ((_ call "df.mask_32")
-      ((_ zero_extend 27)
-       mb)
-      ((_ zero_extend 27)
-       me))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+        op.me)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,18 +1,23 @@
 ;; Compare Logical (X-form)
 ;; Compare double word (where L=1)
 ((operands
- ((fld . 'Crrc)
-  (rA . 'Gprc)
-  (rB . 'Gprc)))
+ ((fld Crrc)
+  (rA Gprc)
+  (rB Gprc)))
  (in
-  ('XER 'CR rB rA 'IP))
+  (loc.XER loc.CR op.rB op.rA loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvult rB rA)
-    (bvugt rB rA)
-    fld
-    'XER
-    'CR))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvult op.rB op.rA)
+     (bvugt op.rB op.rA)
+     op.fld
+     loc.XER
+     loc.CR)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

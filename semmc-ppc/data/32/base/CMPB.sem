@@ -1,46 +1,50 @@
 ;; Compare Bytes (X-form)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  (rS rB 'IP))
+  (op.rS op.rB loc.IP))
  (defs
-  ((rA
-   (concat
-    (ite
-     (bveq
-      ((_ extract 31 24)
-       rS)
-      ((_ extract 31 24)
-       rB))
-     #xff
-     #x00)
+  ((op.rA
+   (with
+    ()
     (concat
      (ite
       (bveq
-       ((_ extract 23 16)
-        rS)
-       ((_ extract 23 16)
-        rB))
+       ((_ extract 31 24)
+        op.rS)
+       ((_ extract 31 24)
+        op.rB))
       #xff
       #x00)
      (concat
       (ite
        (bveq
-        ((_ extract 15 8)
-         rS)
-        ((_ extract 15 8)
-         rB))
+        ((_ extract 23 16)
+         op.rS)
+        ((_ extract 23 16)
+         op.rB))
        #xff
        #x00)
-      (ite
-       (bveq
-        ((_ extract 7 0)
-         rS)
-        ((_ extract 7 0)
-         rB))
-       #xff
-       #x00)))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+      (concat
+       (ite
+        (bveq
+         ((_ extract 15 8)
+          op.rS)
+         ((_ extract 15 8)
+          op.rB))
+        #xff
+        #x00)
+       (ite
+        (bveq
+         ((_ extract 7 0)
+          op.rS)
+         ((_ extract 7 0)
+          op.rB))
+        #xff
+        #x00))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

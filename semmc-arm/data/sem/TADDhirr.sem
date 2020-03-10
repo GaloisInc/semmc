@@ -1,44 +1,63 @@
 ;; ADD register, T32, Encoding T2 (F7.1.6, F7-2544)
-(let
- ((res_nzcv
-  ((_ call "df.addWithCarry")
-   rDN
-   ((_ extract 32 1)
-    ((_ call "df.shiftC")
-     rM
-     #b000
-     #x00000000
-     ((_ extract 2 2)
-      'CPSR)))
-   #x00000000))
-  (branchWritePC
-   (ite
-    ((_ call "uf.arm.is_r15")
-     rDN)
-    (bvand
-     #xfffffffd
-     ((_ extract 35 4)
-      (res_nzcv)))
-    (bvadd 'PC #x00000002))))
- ((operands
-  ((rDN . 'GPR)
-   (rM . 'GPR)))
-  (in
-   (rDN rM 'CPSR 'PC))
-  (defs
-   (('PC
-    (branchWritePC))
-    ('CPSR 'CPSR)
-    (rDN
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+((operands
+ ((rDN GPR)
+  (rM GPR)))
+ (in
+  (op.rDN op.rM loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((res_nzcv
+      (call
+       df.addWithCarry
+       op.rDN
+       ((_ extract 32 1)
+        (call
+         df.shiftC
+         op.rM
+         #b000
+         #x00000000
+         ((_ extract 2 2)
+          loc.CPSR)))
+       #x00000000))
+      (branchWritePC
+       (ite
+        (call uf.arm.is_r15 op.rDN)
+        (bvand
+         #xfffffffd
+         ((_ extract 35 4)
+          res_nzcv))
+        (bvadd loc.PC #x00000002))))
+     branchWritePC)))
+   (loc.CPSR
+    (with () loc.CPSR))
+   (op.rDN
+    (with
+     ()
+     (let
+      ((res_nzcv
+       (call
+        df.addWithCarry
+        op.rDN
+        ((_ extract 32 1)
+         (call
+          df.shiftC
+          op.rM
+          #b000
+          #x00000000
+          ((_ extract 2 2)
+           loc.CPSR)))
+        #x00000000)))
       (ite
-       ((_ call "uf.arm.is_r15")
-        rDN)
-       rDN
-       ((_ extract 35 4)
-        (res_nzcv)))
-      rDN))))))
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (call uf.arm.is_r15 op.rDN)
+        op.rDN
+        ((_ extract 35 4)
+         res_nzcv))
+       op.rDN)))))))

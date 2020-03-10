@@ -1,22 +1,27 @@
 ;; Move Condition Register Field (XL-form)
 ((operands
- ((BF . 'Crrc)
-  (BFA . 'Crrc)))
+ ((BF Crrc)
+  (BFA Crrc)))
  (in
-  ('CR BFA BF 'IP))
+  (loc.CR op.BFA op.BF loc.IP))
  (defs
-  (('CR
-   ((_ call "df.updateCRField")
-    'CR
-    BF
-    ((_ extract 3 0)
-     (bvlshr
-      'CR
-      (bvmul
-       (bvsub
-        #x00000007
-        ((_ zero_extend 29)
-         BFA))
-       #x00000004)))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.updateCRField
+     loc.CR
+     op.BF
+     ((_ extract 3 0)
+      (bvlshr
+       loc.CR
+       (bvmul
+        (bvsub
+         #x00000007
+         ((_ zero_extend 29)
+          op.BFA))
+        #x00000004))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

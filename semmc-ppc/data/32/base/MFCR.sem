@@ -1,9 +1,12 @@
 ;; Move From Condition Register
 ((operands
- ((rT . 'Gprc)))
+ ((rT Gprc)))
  (in
-  ('CR 'IP))
+  (loc.CR loc.IP))
  (defs
-  ((rT 'CR)
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with () loc.CR))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,26 +1,28 @@
 ;; Store Floating-Point Double with Update Indexed (X-form)
 ((operands
- ((memref . 'Memrr)
-  (frS . 'Fprc)))
+ ((memref Memrr)
+  (frS Fprc)))
  (in
-  ('Mem memref frS 'IP))
+  (loc.Mem op.memref op.frS loc.IP))
  (defs
-  ((((_ call "uf.ppc.memrr_base")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memrr_base")
-     memref)
-    ((_ call "uf.ppc.memrr_offset")
-     memref)))
-   ('Mem
-    ((_ call "uf.write_mem.64")
-     'Mem
-     (bvadd
-      ((_ call "uf.ppc.memrr_base")
-       memref)
-      ((_ call "uf.ppc.memrr_offset")
-       memref))
-     ((_ extract 127 64)
-      frS)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  (((call uf.ppc.memrr_base op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memrr_base op.memref)
+     (call uf.ppc.memrr_offset op.memref))))
+   (loc.Mem
+    (with
+     ()
+     (call
+      uf.write_mem.64
+      loc.Mem
+      (bvadd
+       (call uf.ppc.memrr_base op.memref)
+       (call uf.ppc.memrr_offset op.memref))
+      ((_ extract 127 64)
+       op.frS))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

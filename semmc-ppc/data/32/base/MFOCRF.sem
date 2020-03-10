@@ -1,39 +1,44 @@
 ;; Move From One Condition Register Field (XFX-form)
 ((operands
- ((rT . 'Gprc)
-  (FXM . 'Crbitm)))
+ ((rT Gprc)
+  (FXM Crbitm)))
  (in
-  ('CR rT FXM 'IP))
+  (loc.CR op.rT op.FXM loc.IP))
  (defs
-  ((rT
-   (bvor
-    (bvand
-     ((_ call "df.mask_32")
-      (bvmul
-       ((_ zero_extend 24)
-        FXM)
-       #x00000004)
-      (bvadd
+  ((op.rT
+   (with
+    ()
+    (bvor
+     (bvand
+      (call
+       df.mask_32
        (bvmul
         ((_ zero_extend 24)
-         FXM)
-        #x00000004)
-       #x00000003))
-     'CR)
-    (bvand
-     (bvnot
-      ((_ call "df.mask_32")
-       (bvmul
-        ((_ zero_extend 24)
-         FXM)
+         op.FXM)
         #x00000004)
        (bvadd
         (bvmul
          ((_ zero_extend 24)
-          FXM)
+          op.FXM)
          #x00000004)
-        #x00000003)))
-     ((_ call "uf.undefined")
-      #x00000020))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+        #x00000003))
+      loc.CR)
+     (bvand
+      (bvnot
+       (call
+        df.mask_32
+        (bvmul
+         ((_ zero_extend 24)
+          op.FXM)
+         #x00000004)
+        (bvadd
+         (bvmul
+          ((_ zero_extend 24)
+           op.FXM)
+          #x00000004)
+         #x00000003)))
+      (call uf.undefinedBV.32)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

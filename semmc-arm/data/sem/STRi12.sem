@@ -1,80 +1,71 @@
 ;; Store Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1
 ;; doc: F7.1.217, page F7-2880
-(let
- ((addr
-  (ite
-   ((_ call "uf.a32.imm12_add")
-    imm12)
-   (bvadd
-    ((_ call "uf.a32.imm12_reg")
-     imm12)
-    ((_ zero_extend 20)
-     ((_ call "uf.a32.imm12_off")
-      imm12)))
-   (bvsub
-    ((_ call "uf.a32.imm12_reg")
-     imm12)
-    ((_ zero_extend 20)
-     ((_ call "uf.a32.imm12_off")
-      imm12)))))
-  (wval
-   (ite
-    ((_ call "uf.arm.is_r15")
-     gpr)
-    'PC
-    gpr))
-  (rnUpd
-   (ite
-    (wback)
-    (offAddr)
-    ((_ call "uf.a32.imm12_reg")
-     imm12)))
-  (offAddr
-   (ite
-    ((_ call "uf.a32.imm12_add")
-     imm12)
-    (bvadd
-     ((_ call "uf.a32.imm12_reg")
-      imm12)
-     ((_ zero_extend 20)
-      ((_ call "uf.a32.imm12_off")
-       imm12)))
-    (bvsub
-     ((_ call "uf.a32.imm12_reg")
-      imm12)
-     ((_ zero_extend 20)
-      ((_ call "uf.a32.imm12_off")
-       imm12)))))
-  (wback
-   (bvne #b0 #b0)))
- ((operands
-  ((predBits . 'Pred)
-   (imm12 . 'Addrmode_imm12)
-   (gpr . 'GPR)))
-  (in
-   (gpr 'Mem imm12 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000004))
-    ('CPSR 'CPSR)
-    (((_ call "uf.a32.imm12_reg")
-     imm12)
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
-      (rnUpd)
-      ((_ call "uf.a32.imm12_reg")
-       imm12)))
-    ('Mem
-     ((_ call "uf.write_mem.32")
-      'Mem
-      (addr)
+((operands
+ ((predBits Pred)
+  (imm12 Addrmode_imm12)
+  (gpr GPR)))
+ (in
+  (op.gpr loc.Mem op.imm12 loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (bvadd loc.PC #x00000004)))
+   (loc.CPSR
+    (with () loc.CPSR))
+   ((call uf.a32.imm12_reg op.imm12)
+    (with
+     ()
+     (let
+      ((false
+       (bveq #b0 #b0))
+       (wback false)
+       (offAddr
+        (ite
+         (call uf.a32.imm12_add op.imm12)
+         (bvadd
+          (call uf.a32.imm12_reg op.imm12)
+          ((_ zero_extend 20)
+           (call uf.a32.imm12_off op.imm12)))
+         (bvsub
+          (call uf.a32.imm12_reg op.imm12)
+          ((_ zero_extend 20)
+           (call uf.a32.imm12_off op.imm12)))))
+       (rnUpd
+        (ite
+         wback
+         offAddr
+         (call uf.a32.imm12_reg op.imm12))))
       (ite
-       ((_ call "df.testCondition")
-        predBits
-        'CPSR)
-       (wval)
-       ((_ call "uf.read_mem.32")
-        'Mem
-        (addr)))))))))
+       (call df.testCondition op.predBits loc.CPSR)
+       rnUpd
+       (call uf.a32.imm12_reg op.imm12)))))
+   (loc.Mem
+    (with
+     ()
+     (let
+      ((offAddr
+       (ite
+        (call uf.a32.imm12_add op.imm12)
+        (bvadd
+         (call uf.a32.imm12_reg op.imm12)
+         ((_ zero_extend 20)
+          (call uf.a32.imm12_off op.imm12)))
+        (bvsub
+         (call uf.a32.imm12_reg op.imm12)
+         ((_ zero_extend 20)
+          (call uf.a32.imm12_off op.imm12)))))
+       (addr offAddr)
+       (wval
+        (ite
+         (call uf.arm.is_r15 op.gpr)
+         loc.PC
+         op.gpr)))
+      (call
+       uf.write_mem.32
+       loc.Mem
+       addr
+       (ite
+        (call df.testCondition op.predBits loc.CPSR)
+        wval
+        (call uf.read_mem.32 loc.Mem addr)))))))))

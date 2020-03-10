@@ -1,21 +1,21 @@
 ;; VSX Vector Absolute Value Single-Precision (XX2-form)
 ((operands
- ((xT . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (xB Vsrc)))
  (in
-  ('FPSCR xB 'IP))
+  (loc.FPSCR op.xB loc.IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec1")
-     "XVABSSP"
-     xB
-     'FPSCR)))
-   (xT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec1")
-      "XVABSSP"
-      xB
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec1 const.XVABSSP op.xB loc.FPSCR))))
+   (op.xT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec1 const.XVABSSP op.xB loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

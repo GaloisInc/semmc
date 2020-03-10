@@ -1,10 +1,13 @@
 ;; Floating Move Register (X-form)
 ((operands
- ((frT . 'Fprc)
-  (frB . 'Fprc)))
+ ((frT Fprc)
+  (frB Fprc)))
  (in
-  (frB 'IP))
+  (op.frB loc.IP))
  (defs
-  ((frT frB)
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.frT
+   (with () op.frB))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,75 +1,85 @@
 ;; Rotate Left Doubleword then Clear Right (MDS-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (mb . 'U6imm)
-  (rS . 'Gprc)
-  (rB . 'Gprc)))
+ ((rA Gprc)
+  (mb U6imm)
+  (rS Gprc)
+  (rB Gprc)))
  (in
-  ('XER 'CR rB rS mb 'IP))
+  (loc.XER loc.CR op.rB op.rS op.mb loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvand
+       (bvor
+        (bvshl
+         op.rS
+         ((_ zero_extend 58)
+          ((_ extract 5 0)
+           op.rB)))
+        (bvlshr
+         op.rS
+         (bvsub
+          #x0000000000000040
+          ((_ zero_extend 58)
+           ((_ extract 5 0)
+            op.rB)))))
+       (call
+        df.mask_64
+        #x0000000000000000
+        ((_ zero_extend 58)
+         op.mb)))
+      #x0000000000000000)
+     (bvsgt
+      (bvand
+       (bvor
+        (bvshl
+         op.rS
+         ((_ zero_extend 58)
+          ((_ extract 5 0)
+           op.rB)))
+        (bvlshr
+         op.rS
+         (bvsub
+          #x0000000000000040
+          ((_ zero_extend 58)
+           ((_ extract 5 0)
+            op.rB)))))
+       (call
+        df.mask_64
+        #x0000000000000000
+        ((_ zero_extend 58)
+         op.mb)))
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
      (bvand
       (bvor
        (bvshl
-        rS
+        op.rS
         ((_ zero_extend 58)
          ((_ extract 5 0)
-          rB)))
+          op.rB)))
        (bvlshr
-        rS
+        op.rS
         (bvsub
          #x0000000000000040
          ((_ zero_extend 58)
           ((_ extract 5 0)
-           rB)))))
-      ((_ call "df.mask_64")
+           op.rB)))))
+      (call
+       df.mask_64
        #x0000000000000000
        ((_ zero_extend 58)
-        mb)))
-     #x0000000000000000)
-    (bvsgt
-     (bvand
-      (bvor
-       (bvshl
-        rS
-        ((_ zero_extend 58)
-         ((_ extract 5 0)
-          rB)))
-       (bvlshr
-        rS
-        (bvsub
-         #x0000000000000040
-         ((_ zero_extend 58)
-          ((_ extract 5 0)
-           rB)))))
-      ((_ call "df.mask_64")
-       #x0000000000000000
-       ((_ zero_extend 58)
-        mb)))
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    (bvand
-     (bvor
-      (bvshl
-       rS
-       ((_ zero_extend 58)
-        ((_ extract 5 0)
-         rB)))
-      (bvlshr
-       rS
-       (bvsub
-        #x0000000000000040
-        ((_ zero_extend 58)
-         ((_ extract 5 0)
-          rB)))))
-     ((_ call "df.mask_64")
-      #x0000000000000000
-      ((_ zero_extend 58)
-       mb))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+        op.mb)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

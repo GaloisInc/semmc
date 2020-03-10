@@ -1,31 +1,33 @@
 ;; Store Doubleword with Update (DS-form)
 ((operands
- ((memref . 'Memrix)
-  (rS . 'Gprc)))
+ ((memref Memrix)
+  (rS Gprc)))
  (in
-  ('Mem memref rS 'IP))
+  (loc.Mem op.memref op.rS loc.IP))
  (defs
-  ((((_ call "uf.ppc.memrix_reg")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memrix_reg")
-     memref)
-    ((_ sign_extend 48)
-     (concat
-      ((_ call "uf.ppc.memrix_offset")
-       memref)
-      #b00))))
-   ('Mem
-    ((_ call "uf.write_mem.64")
-     'Mem
-     (bvadd
-      ((_ call "uf.ppc.memrix_reg")
-       memref)
-      ((_ sign_extend 48)
-       (concat
-        ((_ call "uf.ppc.memrix_offset")
-         memref)
-        #b00)))
-     rS))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  (((call uf.ppc.memrix_reg op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memrix_reg op.memref)
+     ((_ sign_extend 48)
+      (concat
+       (call uf.ppc.memrix_offset op.memref)
+       #b00)))))
+   (loc.Mem
+    (with
+     ()
+     (call
+      uf.write_mem.64
+      loc.Mem
+      (bvadd
+       (call uf.ppc.memrix_reg op.memref)
+       ((_ sign_extend 48)
+        (concat
+         (call uf.ppc.memrix_offset op.memref)
+         #b00)))
+      op.rS)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

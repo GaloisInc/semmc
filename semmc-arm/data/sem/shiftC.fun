@@ -1,101 +1,103 @@
-(let
- ((rrxC
-  (concat
-   ((_ extract 31 31)
-    value)
-   (concat
-    c
-    ((_ extract 30 0)
-     value))))
-  (rorC
-   (concat
-    (ite
-     (bvult shift_n #x00000020)
-     (ite
-      (bveq
-       #b1
-       ((_ extract 0 0)
-        (bvlshr
-         (bvsub shift_n #x00000001)
-         value)))
-      #b1
-      #b0)
-     #b0)
-    (bvor
+((function shiftC)
+ (arguments
+  ((value
+   (BV 32))
+   (shift_t
+    (BV 3))
+   (shift_n
+    (BV 32))
+   (c
+    (BV 1))))
+ (return
+  (BV 33))
+ (body
+  (with
+   ()
+   (let
+    ((lslC
      (bvshl
-      value
-      (bvsub
-       #x00000020
-       (bvurem shift_n #x00000020)))
-     (bvlshr
-      value
-      (bvurem shift_n #x00000020)))))
-  (arithmeticShiftRightCarry
-   (concat
-    (ite
-     (bvult shift_n #x00000020)
-     (ite
-      (bveq
-       #b1
-       ((_ extract 0 0)
-        (bvlshr
-         (bvsub shift_n #x00000001)
-         value)))
-      #b1
-      #b0)
-     #b0)
-    (bvashr
-     value
-     (bvurem shift_n #x00000020))))
-  (logicalShiftRightCarry
-   (concat
-    (ite
-     (bvult shift_n #x00000020)
-     (ite
-      (bveq
-       #b1
-       ((_ extract 0 0)
-        (bvlshr
-         (bvsub shift_n #x00000001)
-         value)))
-      #b1
-      #b0)
-     #b0)
-    (bvlshr
-     value
-     (bvurem shift_n #x00000020))))
-  (lslC
-   (bvshl
-    ((_ zero_extend 1)
-     value)
-    ((_ zero_extend 1)
-     shift_n))))
- ((function shiftC)
-  (arguments
-   ((value
-    ('bv 32))
-    (shift_t
-     ('bv 3))
-    (shift_n
-     ('bv 32))
-    (c
-     ('bv 1))))
-  (return
-   ('bv 33))
-  (body
-   (ite
-    (bveq shift_n #x00000000)
-    (concat c value)
-    (ite
-     (bveq shift_t #b000)
-     (lslC)
-     (ite
-      (bveq shift_t #b001)
-      (logicalShiftRightCarry)
-      (ite
-       (bveq shift_t #b010)
-       (arithmeticShiftRightCarry)
+      ((_ zero_extend 1)
+       op.value)
+      ((_ zero_extend 1)
+       op.shift_n)))
+     (logicalShiftRightCarry
+      (concat
        (ite
-        (bveq shift_t #b011)
-        (rorC)
-        (rrxC)))))))))
+        (bvult op.shift_n #x00000020)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 0 0)
+           (bvlshr
+            (bvsub op.shift_n #x00000001)
+            op.value)))
+         #b1
+         #b0)
+        #b0)
+       (bvlshr
+        op.value
+        (bvurem op.shift_n #x00000020))))
+     (arithmeticShiftRightCarry
+      (concat
+       (ite
+        (bvult op.shift_n #x00000020)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 0 0)
+           (bvlshr
+            (bvsub op.shift_n #x00000001)
+            op.value)))
+         #b1
+         #b0)
+        #b0)
+       (bvashr
+        op.value
+        (bvurem op.shift_n #x00000020))))
+     (rorC
+      (concat
+       (ite
+        (bvult op.shift_n #x00000020)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 0 0)
+           (bvlshr
+            (bvsub op.shift_n #x00000001)
+            op.value)))
+         #b1
+         #b0)
+        #b0)
+       (bvor
+        (bvshl
+         op.value
+         (bvsub
+          #x00000020
+          (bvurem op.shift_n #x00000020)))
+        (bvlshr
+         op.value
+         (bvurem op.shift_n #x00000020)))))
+     (rrxC
+      (concat
+       ((_ extract 31 31)
+        op.value)
+       (concat
+        op.c
+        ((_ extract 30 0)
+         op.value)))))
+    (ite
+     (bveq op.shift_n #x00000000)
+     (concat op.c op.value)
+     (ite
+      (bveq op.shift_t #b000)
+      lslC
+      (ite
+       (bveq op.shift_t #b001)
+       logicalShiftRightCarry
+       (ite
+        (bveq op.shift_t #b010)
+        arithmeticShiftRightCarry
+        (ite
+         (bveq op.shift_t #b011)
+         rorC
+         rrxC)))))))))

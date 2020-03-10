@@ -38,7 +38,6 @@ library
                        SemMC.Formula.Load
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
-                       SemMC.Formula.SETokens
                        SemMC.Log
                        SemMC.Log.Tests
                        SemMC.Symbolic
@@ -62,6 +61,7 @@ library
                        template-haskell,
                        ghc-prim,
                        containers >= 0.5.8,
+                       ordered-containers,
                        bytestring,
                        binary,
                        filepath,
@@ -86,7 +86,11 @@ library
                        directory,
                        unliftio,
                        what4 >= 0.4,
-                       crucible-llvm
+                       crucible-llvm,
+                       what4-serialize,
+                       ordered-containers,
+                       ansi-wl-pprint
+
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
@@ -103,6 +107,7 @@ executable cmpsem
   build-depends:   base
                  , optparse-applicative
                  , semmc
+                 , what4-serialize
                  , text
 
 
@@ -153,4 +158,5 @@ test-suite semmc-semstore-tests
                , tasty-hedgehog
                , text
                , transformers
+               , what4-serialize
                , what4

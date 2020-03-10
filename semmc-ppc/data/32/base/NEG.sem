@@ -1,13 +1,17 @@
 ;; Negate (XO-form, RC=0)
 ((operands
- ((rT . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rA Gprc)))
  (in
-  (rA 'IP))
+  (op.rA loc.IP))
  (defs
-  ((rT
-   (bvadd
-    (bvnot rA)
-    #x00000001))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvadd
+     (bvnot op.rA)
+     #x00000001)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,27 +1,30 @@
 ;; Floating Point Convert from Integer Doubleword Unsigned Single (X-form)
 ((operands
- ((frT . 'Fprc)
-  (frB . 'Fprc)))
+ ((frT Fprc)
+  (frB Fprc)))
  (in
-  ('FPSCR frB 'IP))
+  (loc.FPSCR op.frB loc.IP))
  (defs
-  (('FPSCR
-   (concat
-    ((_ call "uf.fp.un_op_fpscr")
-     "FCFIDUS"
-     frB
-     'FPSCR)
-    ((_ extract 7 0)
-     'FPSCR)))
-   (frT
+  ((loc.FPSCR
+   (with
+    ()
     (concat
-     (fp_double_to_binary
-      (fp_single_to_double
-       (fcfidus
-        ((_ extract 1 0)
-         'FPSCR)
-        ((_ extract 127 64)
-         frB))))
-     #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+     (call uf.fp.un_op_fpscr const.FCFIDUS op.frB loc.FPSCR)
+     ((_ extract 7 0)
+      loc.FPSCR))))
+   (op.frT
+    (with
+     ()
+     (concat
+      (fp_double_to_binary
+       (fp_single_to_double
+        (fcfidus
+         ((_ extract 1 0)
+          loc.FPSCR)
+         ((_ extract 127 64)
+          op.frB))))
+      #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

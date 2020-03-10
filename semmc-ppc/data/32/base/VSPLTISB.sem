@@ -1,23 +1,31 @@
 ;; Vector Splat Immediate Signed Byte (VX-form)
 ((operands
- ((vrT . 'Vrrc)
-  (sim . 'S5imm)))
+ ((vrT Vrrc)
+  (sim S5imm)))
  (in
-  ('VSCR 'IP))
+  (loc.VSCR loc.IP))
  (defs
-  (('VSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec1")
-     "VSPLTISB"
-     ((_ sign_extend 123)
-      sim)
-     'VSCR)))
-   (vrT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec1")
-      "VSPLTISB"
+  ((loc.VSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call
+      uf.ppc.vec1
+      const.VSPLTISB
       ((_ sign_extend 123)
-       sim)
-      'VSCR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+       op.sim)
+      loc.VSCR))))
+   (op.vrT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call
+       uf.ppc.vec1
+       const.VSPLTISB
+       ((_ sign_extend 123)
+        op.sim)
+       loc.VSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,11 +1,14 @@
 ;; Move to FPSCR Bit 0 (X-form, RC=0)
 ((operands
- ((BT . 'U5imm)))
+ ((BT U5imm)))
  (in
-  ('IP))
+  (loc.IP))
  (defs
-  (('FPSCR
-   ((_ call "uf.undefined")
-    #x00000020))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    (call uf.undefinedBV.32)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

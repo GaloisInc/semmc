@@ -1,0 +1,230 @@
+;; ORR register, Encoding A1 (A8.8.123, A8-518)
+((operands
+ ((rD GPR)
+  (setcc Cc_out)
+  (predBits Pred)
+  (rM GPR)
+  (rN GPR)))
+ (in
+  (op.setcc op.rM op.rN loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((immShift
+      (concat
+       #b000
+       ((_ zero_extend 27)
+        #b00000)))
+      (bxWritePC
+       (ite
+        (call uf.arm.is_r15 op.rD)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 31 31)
+           (bvor
+            op.rM
+            ((_ extract 32 1)
+             (call
+              df.shiftC
+              op.rN
+              ((_ extract 2 0)
+               immShift)
+              ((_ extract 34 3)
+               immShift)
+              ((_ extract 2 2)
+               loc.CPSR))))))
+         (bvand
+          #xfffffffe
+          (bvor
+           op.rM
+           ((_ extract 32 1)
+            (call
+             df.shiftC
+             op.rN
+             ((_ extract 2 0)
+              immShift)
+             ((_ extract 34 3)
+              immShift)
+             ((_ extract 2 2)
+              loc.CPSR)))))
+         (ite
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            (bvor
+             op.rM
+             ((_ extract 32 1)
+              (call
+               df.shiftC
+               op.rN
+               ((_ extract 2 0)
+                immShift)
+               ((_ extract 34 3)
+                immShift)
+               ((_ extract 2 2)
+                loc.CPSR))))))
+          (bvand
+           #xfffffffd
+           (bvor
+            op.rM
+            ((_ extract 32 1)
+             (call
+              df.shiftC
+              op.rN
+              ((_ extract 2 0)
+               immShift)
+              ((_ extract 34 3)
+               immShift)
+              ((_ extract 2 2)
+               loc.CPSR)))))
+          (bvor
+           op.rM
+           ((_ extract 32 1)
+            (call
+             df.shiftC
+             op.rN
+             ((_ extract 2 0)
+              immShift)
+             ((_ extract 34 3)
+              immShift)
+             ((_ extract 2 2)
+              loc.CPSR))))))
+        (bvadd loc.PC #x00000004))))
+     bxWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((immShift
+       (concat
+        #b000
+        ((_ zero_extend 27)
+         #b00000)))
+       (SetT32Mode
+        (bvand
+         #xfeffffff
+         (bvor #x00000020 loc.CPSR))))
+      (ite
+       (call df.testCondition op.predBits loc.CPSR)
+       (ite
+        (andp
+         (bveq op.setcc #b1)
+         (notp
+          (call uf.arm.is_r15 op.rD)))
+        (concat
+         (concat
+          ((_ extract 0 0)
+           (bvor
+            op.rM
+            ((_ extract 32 1)
+             (call
+              df.shiftC
+              op.rN
+              ((_ extract 2 0)
+               immShift)
+              ((_ extract 34 3)
+               immShift)
+              ((_ extract 2 2)
+               loc.CPSR)))))
+          (concat
+           (call
+            df.isZeroBit
+            (bvor
+             op.rM
+             ((_ extract 32 1)
+              (call
+               df.shiftC
+               op.rN
+               ((_ extract 2 0)
+                immShift)
+               ((_ extract 34 3)
+                immShift)
+               ((_ extract 2 2)
+                loc.CPSR)))))
+           (concat
+            ((_ extract 0 0)
+             (call
+              df.shiftC
+              op.rN
+              ((_ extract 2 0)
+               immShift)
+              ((_ extract 34 3)
+               immShift)
+              ((_ extract 2 2)
+               loc.CPSR)))
+            ((_ extract 3 3)
+             loc.CPSR))))
+         ((_ extract 31 4)
+          (ite
+           (call uf.arm.is_r15 op.rD)
+           (ite
+            (bveq
+             #b1
+             ((_ extract 31 31)
+              (bvor
+               op.rM
+               ((_ extract 32 1)
+                (call
+                 df.shiftC
+                 op.rN
+                 ((_ extract 2 0)
+                  immShift)
+                 ((_ extract 34 3)
+                  immShift)
+                 ((_ extract 2 2)
+                  loc.CPSR))))))
+            SetT32Mode
+            loc.CPSR)
+           loc.CPSR)))
+        (ite
+         (call uf.arm.is_r15 op.rD)
+         (ite
+          (bveq
+           #b1
+           ((_ extract 31 31)
+            (bvor
+             op.rM
+             ((_ extract 32 1)
+              (call
+               df.shiftC
+               op.rN
+               ((_ extract 2 0)
+                immShift)
+               ((_ extract 34 3)
+                immShift)
+               ((_ extract 2 2)
+                loc.CPSR))))))
+          SetT32Mode
+          loc.CPSR)
+         loc.CPSR))
+       loc.CPSR))))
+   (op.rD
+    (with
+     ()
+     (let
+      ((immShift
+       (concat
+        #b000
+        ((_ zero_extend 27)
+         #b00000))))
+      (ite
+       (call df.testCondition op.predBits loc.CPSR)
+       (ite
+        (call uf.arm.is_r15 op.rD)
+        op.rD
+        (bvor
+         op.rM
+         ((_ extract 32 1)
+          (call
+           df.shiftC
+           op.rN
+           ((_ extract 2 0)
+            immShift)
+           ((_ extract 34 3)
+            immShift)
+           ((_ extract 2 2)
+            loc.CPSR)))))
+       op.rD)))))))

@@ -1,35 +1,42 @@
 ;; Shift Left Word (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS rB 'IP))
+  (loc.XER loc.CR op.rS op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvshl
+       op.rS
+       ((_ zero_extend 26)
+        ((_ extract 5 0)
+         op.rB)))
+      #x00000000)
+     (bvsgt
+      (bvshl
+       op.rS
+       ((_ zero_extend 26)
+        ((_ extract 5 0)
+         op.rB)))
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
      (bvshl
-      rS
+      op.rS
       ((_ zero_extend 26)
        ((_ extract 5 0)
-        rB)))
-     #x00000000)
-    (bvsgt
-     (bvshl
-      rS
-      ((_ zero_extend 26)
-       ((_ extract 5 0)
-        rB)))
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    (bvshl
-     rS
-     ((_ zero_extend 26)
-      ((_ extract 5 0)
-       rB))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+        op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,25 +1,27 @@
 ;; Load Halfword and Zero with Update Indexed (X-form)
 ((operands
- ((rT . 'Gprc)
-  (memref . 'Memrr)))
+ ((rT Gprc)
+  (memref Memrr)))
  (in
-  ('Mem memref 'IP))
+  (loc.Mem op.memref loc.IP))
  (defs
-  ((((_ call "uf.ppc.memrr_base")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memrr_base")
-     memref)
-    ((_ call "uf.ppc.memrr_offset")
-     memref)))
-   (rT
-    ((_ zero_extend 48)
-     ((_ call "uf.read_mem.16")
-      'Mem
-      (bvadd
-       ((_ call "uf.ppc.memrr_base")
-        memref)
-       ((_ call "uf.ppc.memrr_offset")
-        memref)))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  (((call uf.ppc.memrr_base op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memrr_base op.memref)
+     (call uf.ppc.memrr_offset op.memref))))
+   (op.rT
+    (with
+     ()
+     ((_ zero_extend 48)
+      (call
+       uf.read_mem.16
+       loc.Mem
+       (bvadd
+        (call uf.ppc.memrr_base op.memref)
+        (call uf.ppc.memrr_offset op.memref))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

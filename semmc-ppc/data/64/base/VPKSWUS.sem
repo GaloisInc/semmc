@@ -1,24 +1,22 @@
 ;; Vector Pack Signed Word Unsigned Saturate (VX-form)
 ((operands
- ((vrT . 'Vrrc)
-  (vrA . 'Vrrc)
-  (vrB . 'Vrrc)))
+ ((vrT Vrrc)
+  (vrA Vrrc)
+  (vrB Vrrc)))
  (in
-  ('VSCR vrB vrA 'IP))
+  (loc.VSCR op.vrB op.vrA loc.IP))
  (defs
-  (('VSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec2")
-     "VPKSWUS"
-     vrA
-     vrB
-     'VSCR)))
-   (vrT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec2")
-      "VPKSWUS"
-      vrA
-      vrB
-      'VSCR)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.VSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec2 const.VPKSWUS op.vrA op.vrB loc.VSCR))))
+   (op.vrT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec2 const.VPKSWUS op.vrA op.vrB loc.VSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

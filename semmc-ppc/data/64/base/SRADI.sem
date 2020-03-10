@@ -1,42 +1,48 @@
 ;; Shift Right Algebraic Doubleword Immediate (XS-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (sh . 'U6imm)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (sh U6imm)
+  (rS Gprc)))
  (in
-  ('XER rS sh 'IP))
+  (loc.XER op.rS op.sh loc.IP))
  (defs
-  (('XER
-   (concat
-    ((_ extract 63 30)
-     'XER)
+  ((loc.XER
+   (with
+    ()
     (concat
-     (ite
-      (bvne
-       (bvlshr
-        (bvshl
-         rS
+     ((_ extract 63 30)
+      loc.XER)
+     (concat
+      (ite
+       (bvne
+        (bvlshr
+         (bvshl
+          op.rS
+          (bvsub
+           #x0000000000000040
+           ((_ zero_extend 58)
+            op.sh)))
          (bvsub
           #x0000000000000040
           ((_ zero_extend 58)
-           sh)))
-        (bvsub
-         #x0000000000000040
+           op.sh)))
+        #x0000000000000000)
+       ((_ extract 63 63)
+        (bvashr
+         op.rS
          ((_ zero_extend 58)
-          sh)))
-       #x0000000000000000)
-      ((_ extract 63 63)
-       (bvashr
-        rS
-        ((_ zero_extend 58)
-         sh)))
-      #b0)
-     ((_ extract 28 0)
-      'XER))))
-   (rA
-    (bvashr
-     rS
-     ((_ zero_extend 58)
-      sh)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+          op.sh)))
+       #b0)
+      ((_ extract 28 0)
+       loc.XER)))))
+   (op.rA
+    (with
+     ()
+     (bvashr
+      op.rS
+      ((_ zero_extend 58)
+       op.sh))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

@@ -1,31 +1,33 @@
 ;; Load Floating-Point Single with Update (D-form)
 ((operands
- ((frT . 'Fprc)
-  (memref . 'Memri)))
+ ((frT Fprc)
+  (memref Memri)))
  (in
-  (memref 'Mem 'IP))
+  (op.memref loc.Mem loc.IP))
  (defs
-  ((((_ call "uf.ppc.memri_reg")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memri_reg")
-     memref)
-    ((_ sign_extend 16)
-     ((_ call "uf.ppc.memri_offset")
-      memref))))
-   (frT
-    (concat
-     (fp_double_to_binary
-      (fp_single_to_double
-       (fp_binary_to_single
-        ((_ call "uf.read_mem.32")
-         'Mem
-         (bvadd
-          ((_ call "uf.ppc.memri_reg")
-           memref)
-          ((_ sign_extend 16)
-           ((_ call "uf.ppc.memri_offset")
-            memref)))))))
-     #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  (((call uf.ppc.memri_reg op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memri_reg op.memref)
+     ((_ sign_extend 16)
+      (call uf.ppc.memri_offset op.memref)))))
+   (op.frT
+    (with
+     ()
+     (concat
+      (fp_double_to_binary
+       (fp_single_to_double
+        (fp_binary_to_single
+         (call
+          uf.read_mem.32
+          loc.Mem
+          (bvadd
+           (call uf.ppc.memri_reg op.memref)
+           ((_ sign_extend 16)
+            (call uf.ppc.memri_offset op.memref)))))))
+      #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

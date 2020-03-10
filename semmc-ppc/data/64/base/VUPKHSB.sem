@@ -1,21 +1,21 @@
 ;; Vector Unpack High Signed Byte (VX-form)
 ((operands
- ((vrT . 'Vrrc)
-  (vrB . 'Vrrc)))
+ ((vrT Vrrc)
+  (vrB Vrrc)))
  (in
-  ('VSCR vrB 'IP))
+  (loc.VSCR op.vrB loc.IP))
  (defs
-  (('VSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec1")
-     "VUPKHSB"
-     vrB
-     'VSCR)))
-   (vrT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec1")
-      "VUPKHSB"
-      vrB
-      'VSCR)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.VSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec1 const.VUPKHSB op.vrB loc.VSCR))))
+   (op.vrT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec1 const.VUPKHSB op.vrB loc.VSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

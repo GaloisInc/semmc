@@ -1,41 +1,48 @@
 ;; Shift Right Word (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS rB 'IP))
+  (loc.XER loc.CR op.rS op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      ((_ zero_extend 32)
+       (bvlshr
+        ((_ extract 31 0)
+         op.rS)
+        ((_ zero_extend 26)
+         ((_ extract 5 0)
+          op.rB))))
+      #x0000000000000000)
+     (bvsgt
+      ((_ zero_extend 32)
+       (bvlshr
+        ((_ extract 31 0)
+         op.rS)
+        ((_ zero_extend 26)
+         ((_ extract 5 0)
+          op.rB))))
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
      ((_ zero_extend 32)
       (bvlshr
        ((_ extract 31 0)
-        rS)
+        op.rS)
        ((_ zero_extend 26)
         ((_ extract 5 0)
-         rB))))
-     #x0000000000000000)
-    (bvsgt
-     ((_ zero_extend 32)
-      (bvlshr
-       ((_ extract 31 0)
-        rS)
-       ((_ zero_extend 26)
-        ((_ extract 5 0)
-         rB))))
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    ((_ zero_extend 32)
-     (bvlshr
-      ((_ extract 31 0)
-       rS)
-      ((_ zero_extend 26)
-       ((_ extract 5 0)
-        rB)))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+         op.rB))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

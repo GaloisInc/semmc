@@ -1,97 +1,115 @@
 ;; Logical Shift Left, Encoding T1
 ;; doc: F7.1.99, page F7-2692
-(let
- ((immShift
-  (concat
-   #b000
-   ((_ zero_extend 27)
-    imm)))
-  (nzcv
-   (concat
-    ((_ extract 0 0)
-     'CPSR)
-    (concat
-     ((_ extract 1 1)
-      'CPSR)
-     (concat
-      ((_ extract 0 0)
-       ((_ call "df.shiftC")
-        rM
-        #b000
-        ((_ extract 34 3)
-         (immShift))
-        ((_ extract 2 2)
-         'CPSR)))
-      ((_ extract 3 3)
-       'CPSR)))))
-  (branchWritePC
-   (ite
-    ((_ call "uf.arm.is_r15")
-     rD)
-    (bvand
-     #xfffffffd
-     ((_ extract 32 1)
-      ((_ call "df.shiftC")
-       rM
+((operands
+ ((rD TGPR)
+  (imm Imm0_31)
+  (rM TGPR)))
+ (in
+  (op.rM op.imm loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((immShift
+      (concat
        #b000
-       ((_ extract 34 3)
-        (immShift))
-       ((_ extract 2 2)
-        'CPSR))))
-    (bvadd 'PC #x00000002))))
- ((operands
-  ((rD . 'TGPR)
-   (imm . 'Imm0_31)
-   (rM . 'TGPR)))
-  (in
-   (rM imm 'CPSR 'PC))
-  (defs
-   (('PC
-    (branchWritePC))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
-      (ite
-       (andp
-        (notp
-         (bvne
-          #x00
-          (concat
-           ((_ extract 19 16)
-            'CPSR)
-           (concat
-            ((_ extract 21 20)
-             'CPSR)
-            ((_ extract 6 5)
-             'CPSR)))))
-        (notp
-         ((_ call "uf.arm.is_r15")
-          rD)))
+       ((_ zero_extend 27)
+        op.imm)))
+      (branchWritePC
+       (ite
+        (call uf.arm.is_r15 op.rD)
+        (bvand
+         #xfffffffd
+         ((_ extract 32 1)
+          (call
+           df.shiftC
+           op.rM
+           #b000
+           ((_ extract 34 3)
+            immShift)
+           ((_ extract 2 2)
+            loc.CPSR))))
+        (bvadd loc.PC #x00000002))))
+     branchWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((immShift
        (concat
-        (nzcv)
-        ((_ extract 31 4)
-         'CPSR))
-       'CPSR)
-      'CPSR))
-    (rD
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+        #b000
+        ((_ zero_extend 27)
+         op.imm)))
+       (nzcv
+        (concat
+         ((_ extract 0 0)
+          loc.CPSR)
+         (concat
+          ((_ extract 1 1)
+           loc.CPSR)
+          (concat
+           ((_ extract 0 0)
+            (call
+             df.shiftC
+             op.rM
+             #b000
+             ((_ extract 34 3)
+              immShift)
+             ((_ extract 2 2)
+              loc.CPSR)))
+           ((_ extract 3 3)
+            loc.CPSR))))))
       (ite
-       ((_ call "uf.arm.is_r15")
-        rD)
-       rD
-       ((_ extract 32 1)
-        ((_ call "df.shiftC")
-         rM
-         #b000
-         ((_ extract 34 3)
-          (immShift))
-         ((_ extract 2 2)
-          'CPSR))))
-      rD))))))
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (andp
+         (notp
+          (bvne
+           #x00
+           (concat
+            ((_ extract 19 16)
+             loc.CPSR)
+            (concat
+             ((_ extract 21 20)
+              loc.CPSR)
+             ((_ extract 6 5)
+              loc.CPSR)))))
+         (notp
+          (call uf.arm.is_r15 op.rD)))
+        (concat
+         nzcv
+         ((_ extract 31 4)
+          loc.CPSR))
+        loc.CPSR)
+       loc.CPSR))))
+   (op.rD
+    (with
+     ()
+     (let
+      ((immShift
+       (concat
+        #b000
+        ((_ zero_extend 27)
+         op.imm))))
+      (ite
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (call uf.arm.is_r15 op.rD)
+        op.rD
+        ((_ extract 32 1)
+         (call
+          df.shiftC
+          op.rM
+          #b000
+          ((_ extract 34 3)
+           immShift)
+          ((_ extract 2 2)
+           loc.CPSR))))
+       op.rD)))))))

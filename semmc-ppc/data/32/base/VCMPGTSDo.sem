@@ -1,30 +1,30 @@
 ;; Vector Compare Greater Than Signed Doubleword (VC-form, RC=1)
 ((operands
- ((vrT . 'Vrrc)
-  (vrA . 'Vrrc)
-  (vrB . 'Vrrc)))
+ ((vrT Vrrc)
+  (vrA Vrrc)
+  (vrB Vrrc)))
  (in
-  ('XER 'CR 'VSCR vrB vrA 'IP))
+  (loc.XER loc.CR loc.VSCR op.vrB op.vrA loc.IP))
  (defs
-  (('CR
-   ((_ call "df.updateCRField")
-    'CR
-    #b110
-    ((_ call "uf.undefined")
-     #x00000004)))
-   ('VSCR
-    ((_ extract 31 0)
-     ((_ call "uf.ppc.vec2")
-      "VCMPGTSD"
-      vrA
-      vrB
-      'VSCR)))
-   (vrT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec2")
-      "VCMPGTSD"
-      vrA
-      vrB
-      'VSCR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.updateCRField
+     loc.CR
+     #b110
+     (call uf.undefinedBV.4))))
+   (loc.VSCR
+    (with
+     ()
+     ((_ extract 31 0)
+      (call uf.ppc.vec2 const.VCMPGTSD op.vrA op.vrB loc.VSCR))))
+   (op.vrT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec2 const.VCMPGTSD op.vrA op.vrB loc.VSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))
