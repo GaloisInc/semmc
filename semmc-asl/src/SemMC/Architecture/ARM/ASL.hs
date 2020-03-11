@@ -12,6 +12,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 -- | Converting the output of the asl translator into semmc formulas
 
@@ -23,12 +24,15 @@ module SemMC.Architecture.ARM.ASL
   , attachSemantics
   ) where
 
+import           GHC.TypeLits
+
 import           Data.Kind
 import           Data.Maybe ( catMaybes )
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import qualified Data.List as List
+import           Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Control.Applicative ( Const(..) )
@@ -40,6 +44,10 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
 import qualified System.IO as IO
 import qualified System.IO.Unsafe as IO
+import qualified Data.HashTable.Class as H
+import qualified Control.Monad.ST as ST
+
+
 
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
@@ -53,6 +61,7 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
 import           Data.Parameterized.Pair
@@ -82,6 +91,7 @@ import qualified Language.ASL.Globals as ASL
 import qualified Language.ASL.Formulas as ASL
 
 import qualified What4.Interface as WI
+import qualified What4.Symbol as WI
 import qualified What4.Expr.Builder as WB
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Utils.Log as Log
@@ -94,10 +104,7 @@ type OperandTypesCtx arch sh = TL.ToContextFwd (TL.Map (OperandTypeWrapper arch)
 data GlobalsTypeWrapper :: TL.TyFun Symbol WI.BaseType -> Type
 type instance TL.Apply GlobalsTypeWrapper s = ASL.GlobalsType s
 
-
-_testGlobalSyms :: Ctx.Assignment f (TM.MapContext GlobalsTypeWrapper ASL.GlobalSymsCtx) :~: Ctx.Assignment f ASL.GlobalsCtx
-_testGlobalSyms = Refl
-
+type AllGlobalsCtx = TM.MapContext GlobalsTypeWrapper ASL.GlobalSymsCtx
 
 shapeOfOperands :: SL.List ARMOperandRepr sh -> SL.List WI.BaseTypeRepr (OperandTypes AArch32 sh)
 shapeOfOperands SL.Nil = SL.Nil
@@ -117,7 +124,7 @@ mkOperandVars sym op = do
       let ty = ARM.shapeReprType opRep
       BV.BoundVar <$> WI.freshBoundVar sym (WI.safeSymbol $ A.operandTypeReprSymbol (Proxy @AArch32) opRep) ty
 
-type FnArgSig sh = (OperandTypesCtx AArch32 sh Ctx.::> WI.BaseStructType ASL.GlobalsCtx)
+type FnArgSig sh = (OperandTypesCtx AArch32 sh Ctx.::> WI.BaseStructType ASL.StructGlobalsCtx)
 
 testEqualityErr :: (TestEquality f, ShowF f, ME.MonadError String m)
                 => f tps
@@ -134,15 +141,17 @@ testOpcodeSig :: forall sym args ret sh m
               -> ARM.ARMOpcode ARM.ARMOperand sh
               -> WI.SymFn sym args ret
               -> m ((WI.BaseTypeRepr (WI.BaseStructType args), WI.BaseTypeRepr ret)
-                    :~: (WI.BaseTypeRepr (WI.BaseStructType (FnArgSig sh)), (WI.BaseTypeRepr (WI.BaseStructType ASL.GlobalsCtx))))
+                    :~: (WI.BaseTypeRepr (WI.BaseStructType (FnArgSig sh)), (WI.BaseTypeRepr (WI.BaseStructType ASL.StructGlobalsCtx))))
 testOpcodeSig _ op symfn = do
-  Refl <- testEqualityErr (operandsToAsn (typeRepr op) Ctx.:> WI.BaseStructRepr ASL.trackedGlobalBaseReprs) (WI.fnArgTypes symfn) 
-  Refl <- testEqualityErr (WI.BaseStructRepr ASL.trackedGlobalBaseReprs) (WI.fnReturnType symfn)
+  globalBaseReprs <- return $ (knownRepr :: Ctx.Assignment WI.BaseTypeRepr ASL.StructGlobalsCtx)
+  Refl <- testEqualityErr (operandsToAsn (typeRepr op) Ctx.:> WI.BaseStructRepr globalBaseReprs) (WI.fnArgTypes symfn)
+  Refl <- testEqualityErr (WI.BaseStructRepr globalBaseReprs) (WI.fnReturnType symfn)
   return Refl
 
-data GlobalBoundVar sym s =
-  GlobalBoundVar { unGBoundVar :: WI.BoundVar sym (ASL.GlobalsType s) }
-
+data GlobalBoundVar sym s where
+  GlobalBoundVar :: WI.BoundVar sym (ASL.GlobalsType s)
+                 -> ASL.GlobalRef s
+                 -> GlobalBoundVar sym s
 
 operandsToAsn :: SL.List ARMOperandRepr sh -> Ctx.Assignment WI.BaseTypeRepr (OperandTypesCtx AArch32 sh)
 operandsToAsn repr = TL.toAssignmentFwd (shapeOfOperands repr)
@@ -151,34 +160,21 @@ bvsToAsn :: SL.List (BV.BoundVar sym AArch32) sh
          -> Ctx.Assignment (WI.BoundVar sym) (OperandTypesCtx AArch32 sh)
 bvsToAsn bvs = TL.toAssignmentFwd $ TM.applyMapList (Proxy @(OperandTypeWrapper AArch32)) BV.unBoundVar bvs
 
-unGBoundVarAsn :: WI.IsSymExprBuilder sym
-               => sym
-               -> Ctx.Assignment (GlobalBoundVar sym) ASL.GlobalSymsCtx
-               -> Ctx.Assignment (WI.BoundVar sym) ASL.GlobalsCtx
-unGBoundVarAsn sym gbvs = TM.applyMapContext (Proxy @GlobalsTypeWrapper) unGBoundVar gbvs
-
-
 mkGlobalVars :: forall sym
               . WI.IsSymExprBuilder sym
              => sym -> IO (Ctx.Assignment (GlobalBoundVar sym) ASL.GlobalSymsCtx)
 mkGlobalVars sym = FC.traverseFC mkBV ASL.allGlobalRefs
   where
     mkBV :: ASL.GlobalRef s -> IO (GlobalBoundVar sym s)
-    mkBV gr =
-      GlobalBoundVar <$> WI.freshBoundVar sym (WI.safeSymbol $ T.unpack $ SR.symbolRepr $ ASL.globalRefSymbol gr) (ASL.globalRefRepr gr)
+    mkBV gr = do
+      bv <- WI.freshBoundVar sym (WI.safeSymbol $ T.unpack $ SR.symbolRepr $ ASL.globalRefSymbol gr) (ASL.globalRefRepr gr)
+      return $ GlobalBoundVar bv gr
 
 getLiteralVarMap :: Ctx.Assignment (GlobalBoundVar sym) ASL.GlobalSymsCtx
                  -> MapF.MapF (L.Location AArch32) (WI.BoundVar sym)
-getLiteralVarMap bvs = MapF.fromList $ FC.toListFC (\(Const c) -> c) $
-  Ctx.zipWith (\(GlobalBoundVar bv) gr -> Const (Pair (ARM.Location gr) bv)) bvs ASL.allGlobalRefs
+getLiteralVarMap bvs = MapF.fromList $
+  FC.toListFC (\(GlobalBoundVar bv gr) -> (Pair (ARM.Location gr) bv)) bvs
 
-getGlobalStruct :: WI.IsSymExprBuilder sym
-                => sym
-                -> Ctx.Assignment (GlobalBoundVar sym) ASL.GlobalSymsCtx
-                -> IO (WI.SymExpr sym (WI.BaseStructType ASL.GlobalsCtx))
-getGlobalStruct sym gbvs = do
-  let bvs = unGBoundVarAsn sym gbvs
-  WI.mkStruct sym (FC.fmapFC (WI.varExpr sym) bvs)
 
 
 mkOpParams :: SL.List ARMOperandRepr sh -> Set.Set (Some (SF.Parameter AArch32 sh))
@@ -197,58 +193,203 @@ instance SymFnsHaveBVs (WB.ExprBuilder t st fs) where
       _ -> Nothing
   showSymFn _sym symFn = show symFn
 
+data UFBundle sym =
+   UFBundle { ufGetGPR :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "GPRS" Ctx.::> (WI.BaseBVType 4)) (WI.BaseBVType 32)
+            , ufGetSIMD :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "SIMDS" Ctx.::> (WI.BaseBVType 8)) (WI.BaseBVType 128)
+            , initGPRs :: WI.SymFn sym ASL.GPRCtx (ASL.GlobalsType "GPRS")
+            , initSIMDs :: WI.SymFn sym ASL.SIMDCtx (ASL.GlobalsType "SIMDS")
+            }
 
-encodingToFormula :: forall sym sh
-                   . WI.IsSymExprBuilder sym
+encodingToFormula :: forall sym t st fs sh
+                   . (sym ~ WB.ExprBuilder t st fs)
                   => sym
+                  -> UFBundle sym
                   -> Map.Map T.Text (SomeSome (WI.SymFn sym))
                   -> ARM.ARMOpcode ARM.ARMOperand sh
                   -> ASL.Encoding
-                  -> IO (Maybe (SF.ParameterizedFormula sym AArch32 sh))
-encodingToFormula sym symFnEnv opcode enc = case Map.lookup (T.pack $ (ASL.encName enc)) symFnEnv of
+                  -> IO (Maybe (SF.ParameterizedFormula sym AArch32 sh, [SomeSome (WI.SymFn sym)]))
+encodingToFormula sym ufBundle symFnEnv opcode enc = case Map.lookup (T.pack $ (ASL.encName enc)) symFnEnv of
   Just (SomeSome symFn) -> do
     case testOpcodeSig sym opcode symFn of
-      Right Refl -> Just <$> symFnToParamFormula sym opcode symFn
+      Right Refl -> Just <$> symFnToParamFormula sym ufBundle opcode symFn
       Left err -> do error $ "testOpcodeSig: " ++ ASL.encName enc ++ "\n" ++ err
   Nothing -> do
     putStrLn $ "Missing function definition for: " ++ ASL.encName enc
     return Nothing
-    -- let argRepr = operandsToAsn (typeRepr opcode) Ctx.:> WI.BaseStructRepr ASL.trackedGlobalBaseReprs
-    -- let retRepr = WI.BaseStructRepr ASL.trackedGlobalBaseReprs
-    -- symFn <- WI.freshTotalUninterpFn sym (WI.safeSymbol $ ASL.encName enc) argRepr retRepr
-    -- mkFormula sym opcode symFn
 
+data GlobalParameter sym sh s where
+  GlobalParameter :: SF.Parameter AArch32 sh (ASL.GlobalsType s)
+                  -> WI.SymExpr sym (ASL.GlobalsType s)
+                  -> GlobalParameter sym sh s
 
-symFnToParamFormula :: forall sym sh
-                     . WI.IsSymExprBuilder sym
+getGlobalStruct :: WI.IsSymExprBuilder sym
+                => sym
+                -> UFBundle sym
+                -> Ctx.Assignment (GlobalBoundVar sym) ASL.GlobalSymsCtx
+                -> IO (WI.SymExpr sym (WI.BaseStructType ASL.StructGlobalsCtx))
+getGlobalStruct sym (UFBundle { initGPRs, initSIMDs }) gbvs = do
+  (simple, gprs, simds, mem) <- ASL.destructGlobals gbvs (\(GlobalBoundVar bv _) -> return $ WI.varExpr sym bv)
+  allgprs <- WI.applySymFn sym initGPRs gprs
+  allsimds <- WI.applySymFn sym initSIMDs simds
+  WI.mkStruct sym (simple Ctx.:> allgprs Ctx.:> allsimds Ctx.:> mem)
+
+-- | Expand the body of a function, ignoring its evaluation criteria
+unfoldSymFn :: (sym ~ WB.ExprBuilder t st fs)
+            => sym
+            -> WI.SymFn sym args ret
+            -> Ctx.Assignment (WI.SymExpr sym) args
+            -> IO (WI.SymExpr sym ret)
+unfoldSymFn sym symFn args = case WB.symFnInfo symFn of
+  WB.DefinedFnInfo argBvs expr _ -> WB.evalBoundVars sym expr argBvs args
+  _ -> fail "unfoldSymFn: unexpected function kind"
+
+getUsedBvsOfExpr :: (sym ~ WB.ExprBuilder t st fs)
+                 => sym
+                 -> WI.SymExpr sym tp
+                 -> IO (Set (Some (WI.BoundVar sym)))
+getUsedBvsOfExpr sym expr = liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
+
+appendToSymbol ::  WI.SolverSymbol -> String -> WI.SolverSymbol
+appendToSymbol symbol str =
+  let
+    symbolstr = T.unpack $ WI.solverSymbolAsText symbol
+  in unsafeSymbol (symbolstr ++ str)
+
+-- | Abstract an expression over any bound variables it contains.
+-- e.g. ?x + ?y --> (f ?x ?y, f a b := a + b)
+extractFunction :: forall t st fs sym tp
+                 . (sym ~ WB.ExprBuilder t st fs)
+                => sym
+                -> WI.SolverSymbol
+                -> WI.SymExpr sym tp
+                -> IO (WI.SymExpr sym tp, SomeSome (WI.SymFn sym))
+extractFunction sym name expr = do
+  bvsSet <- getUsedBvsOfExpr sym expr
+  Some bvs <- return $ Ctx.fromList $ Set.toList bvsSet
+  freshBvs <- Ctx.traverseWithIndex refreshBoundVar bvs
+  exprBody <- WB.evalBoundVars sym expr bvs (FC.fmapFC (WI.varExpr sym) freshBvs)
+
+  symFn' <- WI.definedFn sym name freshBvs exprBody (\_ -> False)
+  expr' <- WI.applySymFn sym symFn' (FC.fmapFC (WI.varExpr sym) bvs)
+  return (expr', SomeSome symFn')
+  where
+    refreshBoundVar :: forall ctx tp
+                     . Ctx.Index ctx tp
+                    -> WB.ExprBoundVar t tp
+                    -> IO (WB.ExprBoundVar t tp)
+    refreshBoundVar idx bv = WI.freshBoundVar sym (unsafeSymbol ("bv" ++ (show (Ctx.indexVal idx)))) (WB.bvarType bv)
+
+-- | Extract a parameterized formula from a given function, returning
+-- any freshly-generated helper functions that appear in the resulting formula.
+symFnToParamFormula :: forall sym t st fs sh
+                     . (sym ~ WB.ExprBuilder t st fs)
                     => sym
+                    -> UFBundle sym
                     -> ARM.ARMOpcode ARM.ARMOperand sh
-                    -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.GlobalsCtx)
-                    -> IO (SF.ParameterizedFormula sym AArch32 sh)
-symFnToParamFormula sym opcode symFn = do
+                    -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.StructGlobalsCtx)
+                    -> IO ((SF.ParameterizedFormula sym AArch32 sh), [SomeSome (WI.SymFn sym)])
+symFnToParamFormula sym ufBundle@(UFBundle { ufGetGPR, ufGetSIMD }) opcode symFn = do
   opvars <- mkOperandVars sym opcode
   gbvars <- mkGlobalVars sym
-  gbstruct <- getGlobalStruct sym gbvars
+  gbstruct <- getGlobalStruct sym ufBundle gbvars
   argbvs <- return $ FC.fmapFC (WI.varExpr sym) $ bvsToAsn opvars
 
-  expr <- WI.applySymFn sym symFn (argbvs Ctx.:> gbstruct)
-  defs <- (MapF.fromList . FC.toListFC (\(Const c) -> c)) <$> FC.traverseFC (mkPair expr) ASL.allGlobalRefs
+  expr <- unfoldSymFn sym symFn (argbvs Ctx.:> gbstruct)
+  let WI.BaseStructRepr structRepr = WI.exprType expr
+  structExprs <- Ctx.traverseWithIndex (\idx _ -> WI.structField sym expr idx) structRepr
+  let gStruct = ASL.toGlobalsStruct structExprs
+
+  (gprs', gprsFn) <- extractFunction sym (appendToSymbol (WB.symFnName symFn) "_GPRS") (ASL.sGPRs gStruct)
+  (simds', simdsFn) <- extractFunction sym (appendToSymbol (WB.symFnName symFn) "_SIMDS") (ASL.sSIMDs gStruct)
+  let gStruct' = gStruct { ASL.sGPRs =  gprs', ASL.sSIMDs = simds' }
+
+  glbParams <- ASL.flattenGlobalsStruct gStruct' mkSimpleGlobal mkGPRGlobal mkSIMDGlobal mkMemGlobal
+  defs <- MapF.fromList . catMaybes . FC.toListFC (\(Const c) -> c) <$> Ctx.zipWithM filterTrivial gbvars glbParams
+
   let litVarMap = getLiteralVarMap gbvars
-  let params = mkOpParams (typeRepr opcode) `Set.union` (Set.fromList $ MapF.keys defs)
-  return $
-    SF.ParameterizedFormula
-      { SF.pfUses = params
-      , SF.pfOperandVars = opvars
-      , SF.pfLiteralVars = litVarMap
-      , SF.pfDefs = defs
-      }
+  usedParams <- getUsedParams gbvars expr
+  let params = mkOpParams (typeRepr opcode) `Set.union` usedParams
+  let pformula = SF.ParameterizedFormula
+                   { SF.pfUses = params
+                   , SF.pfOperandVars = opvars
+                   , SF.pfLiteralVars = litVarMap
+                   , SF.pfDefs = defs
+                   }
+  return (pformula, [gprsFn, simdsFn])
+
   where
-    mkPair :: forall s. WI.SymExpr sym (WI.BaseStructType ASL.GlobalsCtx)
-           -> ASL.GlobalRef s
-           -> IO (Const (Pair (SF.Parameter AArch32 sh) (WI.SymExpr sym)) s)
-    mkPair struct gr = do
-      expr <- WI.structField sym struct (ASL.globalRefIndex gr)
-      return $ Const $ Pair (SF.LiteralParameter (ARM.Location gr)) expr      
+    -- | We can drop any output parameters that trivially pass through their inputs
+    filterTrivial :: forall s
+                   . GlobalBoundVar sym s
+                  -> GlobalParameter sym sh s
+                  -> IO (Const (Maybe (Pair (SF.Parameter AArch32 sh) (WI.SymExpr sym))) s)
+    filterTrivial (GlobalBoundVar bv _) gbparam@(GlobalParameter param expr) =
+      case WI.varExpr sym bv == expr of
+        True -> return $ Const $ Nothing
+        False -> return $ Const $ Just $ (Pair param expr)
+
+    getUsedParams :: Ctx.Assignment (GlobalBoundVar sym) ASL.GlobalSymsCtx
+                  -> WI.SymExpr sym (WI.BaseStructType ASL.StructGlobalsCtx)
+                  -> IO (Set.Set (Some (SF.Parameter AArch32 sh)))
+    getUsedParams gbvars expr = do
+      usedBvs <- getUsedBvsOfExpr sym expr
+
+      let
+        filterUsed :: forall s. GlobalBoundVar sym s -> Maybe (Some (SF.Parameter AArch32 sh))
+        filterUsed (GlobalBoundVar bv ref) =
+            if Set.member (Some bv) usedBvs then
+              Just $ Some $ SF.LiteralParameter (ARM.Location ref)
+            else Nothing
+
+      return $ Set.fromList $ catMaybes $ FC.toListFC filterUsed gbvars
+
+
+    mkSimpleGlobal :: ASL.SimpleGlobalRef s
+                   -> WI.SymExpr sym (ASL.GlobalsType s)
+                   -> IO (GlobalParameter sym sh s)
+    mkSimpleGlobal ref expr = return $
+      GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SimpleGlobalRef ref))) expr
+
+    mkMemGlobal :: WI.SymExpr sym (ASL.GlobalsType "__Memory")
+                -> IO (GlobalParameter sym sh "__Memory")
+    mkMemGlobal expr = return $
+      GlobalParameter (SF.LiteralParameter (ARM.Location ASL.MemoryRef)) expr
+
+    mkGPRGlobal :: ASL.GPRRef n
+                -> WI.SymExpr sym (ASL.GlobalsType "GPRS")
+                -> IO (GlobalParameter sym sh (ASL.IndexedSymbol "_R" n))
+    mkGPRGlobal ref gprsExpr = ASL.withGPRRef ref $ \n -> do
+      idx <- natToGPRIdx sym n
+      expr <- WI.applySymFn sym ufGetGPR (Ctx.empty Ctx.:> gprsExpr Ctx.:> idx)
+      return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.GPRRef ref))) expr
+
+    mkSIMDGlobal :: ASL.SIMDRef n
+                 -> WI.SymExpr sym (ASL.GlobalsType "SIMDS")
+                 -> IO (GlobalParameter sym sh (ASL.IndexedSymbol "_V" n))
+    mkSIMDGlobal ref simdsExpr = ASL.withSIMDRef ref $ \n -> do
+      idx <- natToSIMDIdx sym n
+      expr <- WI.applySymFn sym ufGetSIMD (Ctx.empty Ctx.:> simdsExpr Ctx.:> idx)
+      return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SIMDRef ref))) expr
+
+
+natToGPRIdx :: n <= ASL.MaxGPR
+            => WI.IsSymExprBuilder sym
+            => sym
+            -> NR.NatRepr n
+            -> IO (WI.SymExpr sym (WI.BaseBVType 4))
+natToGPRIdx sym n = WI.bvLit sym WI.knownNat (NR.intValue n)
+
+natToSIMDIdx :: n <= ASL.MaxSIMD
+             => WI.IsSymExprBuilder sym
+             => sym
+             -> NR.NatRepr n
+             -> IO (WI.SymExpr sym (WI.BaseBVType 8))
+natToSIMDIdx sym n = WI.bvLit sym WI.knownNat (NR.intValue n)
+
+unsafeSymbol :: String -> WI.SolverSymbol
+unsafeSymbol nm = case WI.userSymbol nm of
+  Left err -> error (show err)
+  Right s -> s
 
 dropUFPrefix :: String -> String
 dropUFPrefix nm = case List.stripPrefix "uf." nm of
@@ -260,25 +401,25 @@ symFnToFunFormula :: forall sym args ret
                 => sym
                 -> T.Text
                 -> WI.SymFn sym args ret
-                -> Maybe (String, SF.FunctionFormula sym '(TL.FromContextFwd args, ret))
-symFnToFunFormula sym name symFn = case mkArgLists symFn of
-    Just (argtps, argvars) | Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn) ->
-      Just $ ((dropUFPrefix $ T.unpack name), SF.FunctionFormula
+                -> (String, SF.FunctionFormula sym '(TL.FromContextFwd args, ret))
+symFnToFunFormula sym name symFn
+  | (argtps, argvars) <- mkArgLists symFn
+  , Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn)
+  = ((dropUFPrefix $ T.unpack name), SF.FunctionFormula
         { SF.ffName = dropUFPrefix $ T.unpack name
         , SF.ffArgTypes = argtps
         , SF.ffArgVars = argvars
         , SF.ffRetType = WI.fnReturnType symFn
         , SF.ffDef = symFn
         })
-    Nothing -> Nothing
   where
     mkArgLists :: WI.SymFn sym args ret
-               -> Maybe ( SL.List WI.BaseTypeRepr (TL.FromContextFwd args)
-                        , SL.List (WI.BoundVar sym) (TL.FromContextFwd args)
-                        )
+               -> ( SL.List WI.BaseTypeRepr (TL.FromContextFwd args)
+                  , SL.List (WI.BoundVar sym) (TL.FromContextFwd args)
+                  )
     mkArgLists symFn = case fnBoundVars sym symFn of
-      Just vars -> Just $ (TL.fromAssignmentFwd (WI.fnArgTypes symFn), TL.fromAssignmentFwd vars)
-      _ -> Nothing
+      Just vars -> (TL.fromAssignmentFwd (WI.fnArgTypes symFn), TL.fromAssignmentFwd vars)
+      _ -> error $ "mkArgLists: unexpected function: " ++ T.unpack name
 
 sanitizedName :: String -> String
 sanitizedName name = map (\c -> case c of ' ' -> '_'; '.' -> '_'; _ -> c) name
@@ -320,25 +461,15 @@ embedByteString bs =
   where
     len = BS.length bs
 
-mkEncoding :: (sym ~ WB.ExprBuilder t st fs)
-           => sym
-           -> ASL.NamedSymFnEnv sym
-           -> ARM.ARMOpcode ARM.ARMOperand sh
-           -> ASL.Encoding
-           -> IO (Maybe (String, Pair (ARM.ARMOpcode ARM.ARMOperand) (SF.ParameterizedFormula sym AArch32)))
-mkEncoding sym symfns opcode enc = do
-  encodingToFormula sym symfns opcode enc >>= \case
-    Just formula -> return $ Just $ (ASL.encName enc, Pair opcode formula)
-    Nothing -> return Nothing
 
 mkFormula :: forall sym t st fs
            . (sym ~ WB.ExprBuilder t st fs)
           => sym
           -> (T.Text, SomeSome (WI.SymFn sym))
-          -> Maybe (String, Some (SF.FunctionFormula sym))
-mkFormula sym (nm, SomeSome symFn) = do
-  (nm', formula) <- symFnToFunFormula sym nm symFn
-  return (nm', Some formula)
+          -> (String, Some (SF.FunctionFormula sym))
+mkFormula sym (nm, SomeSome symFn) =
+  let (nm', formula) = symFnToFunFormula sym nm symFn
+  in (nm', Some formula)
 
 data ASLSemantics = ASLSemantics
   { a32Semantics :: [(Some (A32.Opcode A32.Operand), BS.ByteString)]
@@ -346,17 +477,45 @@ data ASLSemantics = ASLSemantics
   , funSemantics :: [(String, BS.ByteString)]
   }
 
+mkUFBundle :: forall sym arch. WI.IsSymExprBuilder sym => SF.FormulaEnv sym arch -> IO (UFBundle sym)
+mkUFBundle (SF.FormulaEnv env _) = do
+  getGPR <- getUF "uf.gpr_get" knownRepr knownRepr
+  getSIMD <- getUF "uf.simd_get" knownRepr knownRepr
+  initGPRs <- getUF "uf.init_gprs" knownRepr knownRepr
+  initSIMDs <- getUF "uf.init_simds" knownRepr knownRepr
+  return $ UFBundle getGPR getSIMD initGPRs initSIMDs
+  where
+    getUF :: String -> Ctx.Assignment WI.BaseTypeRepr args -> WI.BaseTypeRepr ret -> IO (WI.SymFn sym args ret)
+    getUF nm argsT retT = case Map.lookup nm env of
+      Just (SF.SomeSome symFn, _)
+       | Just Refl <- testEquality (WI.fnArgTypes symFn) argsT
+       , Just Refl <- testEquality (WI.fnReturnType symFn) retT
+       -> return symFn
+      _ -> fail $ "mkUFBundle: missing uninterpreted function: " ++ nm
+
 loadSemantics :: IO ASLSemantics
 loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   Some ng <- PN.newIONonceGenerator
   sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
   initenv <- formulaEnv (Proxy @ARM.AArch32) sym
-  funs <- ASL.getFormulas sym (getParserEnv initenv)
-  symfnEnv <- return $ Map.fromList funs
-  a32pfs <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) ->
-    fmap (\pf -> Pair a32opcode pf) <$> encodingToFormula sym symfnEnv (ARM.A32Opcode a32opcode) enc
-  t32pfs <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) ->
-    fmap (\pf -> Pair t32opcode pf) <$> encodingToFormula sym symfnEnv (ARM.T32Opcode t32opcode) enc
+  ufBundle <- mkUFBundle initenv
+
+  funcFormulas <- ASL.getFunctionFormulas sym (getParserEnv initenv)
+  funcEnv <- return $ Map.fromList funcFormulas
+
+  instrFormulas <- ASL.getInstructionFormulas sym funcEnv
+  instrEnv <- return $ Map.fromList instrFormulas
+
+  a32pfs' <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) -> do
+    result <- encodingToFormula sym ufBundle instrEnv (ARM.A32Opcode a32opcode) enc
+    return $ fmap (\(pf, deps) -> (Pair a32opcode pf, deps)) result
+  t32pfs' <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) -> do
+    result <- encodingToFormula sym ufBundle instrEnv (ARM.T32Opcode t32opcode) enc
+    return $ fmap (\(pf, deps) -> (Pair t32opcode pf, deps)) result
+
+  let
+    a32pfs = map fst a32pfs'
+    t32pfs = map fst t32pfs'
 
   T.hPutStrLn handle "A32 Instructions"
   a32Bytes <- forM a32pfs $ \(Pair opcode pformula) -> do
@@ -372,7 +531,18 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
       bs = T.encodeUtf8 $ t
     T.hPutStrLn handle t
     return (Some opcode, bs)
-  let fformulas = catMaybes $ map (mkFormula sym) funs
+
+  let
+    a32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems A32.aslEncodingMap
+    t32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems T32.aslEncodingMap
+    -- individual functions representing the projection of each global for every instruction
+    instrProxies = Map.assocs $ Map.withoutKeys instrEnv (Set.fromList (a32Names ++ t32Names))
+    -- final additional helper functions generated during the creation of the parameterized formulas
+    helperFns = concat (map snd a32pfs') ++ concat (map snd t32pfs')
+    instrHelpers =
+        map (\(SomeSome symFn) -> (WI.solverSymbolAsText $ WB.symFnName symFn, SomeSome symFn)) helperFns
+
+  let fformulas = map (mkFormula sym) (funcFormulas ++ instrProxies ++ instrHelpers)
   T.hPutStrLn handle "Function Library"
   defBytes <- forM fformulas $ \(nm, Some fformula) -> do
     let
@@ -382,7 +552,6 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
     return (nm, bs)
 
   return $ ASLSemantics a32Bytes t32Bytes defBytes
-
 
 attachSemantics :: TH.ExpQ
 attachSemantics = do
