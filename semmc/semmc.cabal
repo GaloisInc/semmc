@@ -117,6 +117,7 @@ library
                        transformers >= 0.5.2 && < 0.6,
                        sqlite-simple >= 0.4 && < 0.5,
                        directory,
+                       unliftio-core < 0.2.0.0,
                        unliftio,
                        what4 >= 0.4,
                        crucible-llvm,
