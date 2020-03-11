@@ -39,6 +39,7 @@ library
                        dismantle-arm-xml,
                        dismantle-tablegen,
                        megaparsec,
+                       hashtables,
                        mtl,
                        template-haskell,
                        text,
@@ -81,4 +82,4 @@ test-suite semmc-asl-test-formulas
                   , text
                   , what4
   -- dismantle-tablegen needed for Data.Parameterized.HasRepr
-  ghc-options:      -Wall
+  ghc-options:      -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
