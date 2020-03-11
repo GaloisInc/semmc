@@ -18,9 +18,7 @@
     (with
      ()
      (let
-      ((true
-       (bveq #b0 #b0))
-       (wback true)
+      ((wback #true)
        (offAddr
         (ite
          (call uf.a32.imm12_add op.imm)

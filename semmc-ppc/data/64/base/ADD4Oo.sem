@@ -9,20 +9,68 @@
   ((loc.CR
    (with
     ()
-    (let
-     ((false
-      (bveq #b0 #b0)))
-     (call
-      df.cmpImm
-      (bvslt
-       (bvadd op.rA op.rB)
-       #x0000000000000000)
-      (bvsgt
-       (bvadd op.rA op.rB)
-       #x0000000000000000)
-      #b000
+    (call
+     df.cmpImm
+     (bvslt
+      (bvadd op.rA op.rB)
+      #x0000000000000000)
+     (bvsgt
+      (bvadd op.rA op.rB)
+      #x0000000000000000)
+     #b000
+     (concat
+      ((_ extract 63 32)
+       (concat
+        ((_ extract 63 31)
+         loc.XER)
+        (concat
+         (ite
+          (ite
+           (andp
+            (bvslt op.rA #x0000000000000000)
+            (bvslt op.rB #x0000000000000000))
+           (notp
+            (bvslt
+             (bvadd op.rA op.rB)
+             #x0000000000000000))
+           (ite
+            (andp
+             (bvsge op.rA #x0000000000000000)
+             (bvsge op.rB #x0000000000000000))
+            (notp
+             (bvsge
+              (bvadd op.rA op.rB)
+              #x0000000000000000))
+            #false))
+          #b1
+          #b0)
+         ((_ extract 29 0)
+          loc.XER))))
       (concat
-       ((_ extract 63 32)
+       (bvor
+        ((_ extract 31 31)
+         loc.XER)
+        (ite
+         (ite
+          (andp
+           (bvslt op.rA #x0000000000000000)
+           (bvslt op.rB #x0000000000000000))
+          (notp
+           (bvslt
+            (bvadd op.rA op.rB)
+            #x0000000000000000))
+          (ite
+           (andp
+            (bvsge op.rA #x0000000000000000)
+            (bvsge op.rB #x0000000000000000))
+           (notp
+            (bvsge
+             (bvadd op.rA op.rB)
+             #x0000000000000000))
+           #false))
+         #b1
+         #b0))
+       ((_ extract 30 0)
         (concat
          ((_ extract 63 31)
           loc.XER)
@@ -44,71 +92,68 @@
               (bvsge
                (bvadd op.rA op.rB)
                #x0000000000000000))
-             false))
+             #false))
            #b1
            #b0)
           ((_ extract 29 0)
-           loc.XER))))
-       (concat
-        (bvor
-         ((_ extract 31 31)
-          loc.XER)
-         (ite
-          (ite
-           (andp
-            (bvslt op.rA #x0000000000000000)
-            (bvslt op.rB #x0000000000000000))
-           (notp
-            (bvslt
-             (bvadd op.rA op.rB)
-             #x0000000000000000))
-           (ite
-            (andp
-             (bvsge op.rA #x0000000000000000)
-             (bvsge op.rB #x0000000000000000))
-            (notp
-             (bvsge
-              (bvadd op.rA op.rB)
-              #x0000000000000000))
-            false))
-          #b1
-          #b0))
-        ((_ extract 30 0)
-         (concat
-          ((_ extract 63 31)
-           loc.XER)
-          (concat
-           (ite
-            (ite
-             (andp
-              (bvslt op.rA #x0000000000000000)
-              (bvslt op.rB #x0000000000000000))
-             (notp
-              (bvslt
-               (bvadd op.rA op.rB)
-               #x0000000000000000))
-             (ite
-              (andp
-               (bvsge op.rA #x0000000000000000)
-               (bvsge op.rB #x0000000000000000))
-              (notp
-               (bvsge
-                (bvadd op.rA op.rB)
-                #x0000000000000000))
-              false))
-            #b1
-            #b0)
-           ((_ extract 29 0)
-            loc.XER))))))
-      loc.CR))))
+           loc.XER))))))
+     loc.CR)))
    (loc.XER
     (with
      ()
-     (let
-      ((false
-       (bveq #b0 #b0)))
+     (concat
+      ((_ extract 63 32)
+       (concat
+        ((_ extract 63 31)
+         loc.XER)
+        (concat
+         (ite
+          (ite
+           (andp
+            (bvslt op.rA #x0000000000000000)
+            (bvslt op.rB #x0000000000000000))
+           (notp
+            (bvslt
+             (bvadd op.rA op.rB)
+             #x0000000000000000))
+           (ite
+            (andp
+             (bvsge op.rA #x0000000000000000)
+             (bvsge op.rB #x0000000000000000))
+            (notp
+             (bvsge
+              (bvadd op.rA op.rB)
+              #x0000000000000000))
+            #false))
+          #b1
+          #b0)
+         ((_ extract 29 0)
+          loc.XER))))
       (concat
-       ((_ extract 63 32)
+       (bvor
+        ((_ extract 31 31)
+         loc.XER)
+        (ite
+         (ite
+          (andp
+           (bvslt op.rA #x0000000000000000)
+           (bvslt op.rB #x0000000000000000))
+          (notp
+           (bvslt
+            (bvadd op.rA op.rB)
+            #x0000000000000000))
+          (ite
+           (andp
+            (bvsge op.rA #x0000000000000000)
+            (bvsge op.rB #x0000000000000000))
+           (notp
+            (bvsge
+             (bvadd op.rA op.rB)
+             #x0000000000000000))
+           #false))
+         #b1
+         #b0))
+       ((_ extract 30 0)
         (concat
          ((_ extract 63 31)
           loc.XER)
@@ -130,62 +175,11 @@
               (bvsge
                (bvadd op.rA op.rB)
                #x0000000000000000))
-             false))
+             #false))
            #b1
            #b0)
           ((_ extract 29 0)
-           loc.XER))))
-       (concat
-        (bvor
-         ((_ extract 31 31)
-          loc.XER)
-         (ite
-          (ite
-           (andp
-            (bvslt op.rA #x0000000000000000)
-            (bvslt op.rB #x0000000000000000))
-           (notp
-            (bvslt
-             (bvadd op.rA op.rB)
-             #x0000000000000000))
-           (ite
-            (andp
-             (bvsge op.rA #x0000000000000000)
-             (bvsge op.rB #x0000000000000000))
-            (notp
-             (bvsge
-              (bvadd op.rA op.rB)
-              #x0000000000000000))
-            false))
-          #b1
-          #b0))
-        ((_ extract 30 0)
-         (concat
-          ((_ extract 63 31)
-           loc.XER)
-          (concat
-           (ite
-            (ite
-             (andp
-              (bvslt op.rA #x0000000000000000)
-              (bvslt op.rB #x0000000000000000))
-             (notp
-              (bvslt
-               (bvadd op.rA op.rB)
-               #x0000000000000000))
-             (ite
-              (andp
-               (bvsge op.rA #x0000000000000000)
-               (bvsge op.rB #x0000000000000000))
-              (notp
-               (bvsge
-                (bvadd op.rA op.rB)
-                #x0000000000000000))
-              false))
-            #b1
-            #b0)
-           ((_ extract 29 0)
-            loc.XER)))))))))
+           loc.XER))))))))
    (op.rT
     (with
      ()
