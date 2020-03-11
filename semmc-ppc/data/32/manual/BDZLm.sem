@@ -11,21 +11,18 @@
    (loc.IP
     (with
      ()
-     (let
-      ((true
-       (bveq #b0 #b0)))
-      (ite
-       (xorp
-        (notp
-         (bveq
-          (bvsub loc.CTR #x00000001)
-          #x00000000))
-        true)
-       (bvadd
-        ((_ sign_extend 16)
-         (concat op.target #b00))
-        loc.IP)
-       (bvadd loc.IP #x00000004)))))
+     (ite
+      (xorp
+       (notp
+        (bveq
+         (bvsub loc.CTR #x00000001)
+         #x00000000))
+       #true)
+      (bvadd
+       ((_ sign_extend 16)
+        (concat op.target #b00))
+       loc.IP)
+      (bvadd loc.IP #x00000004))))
    (loc.CTR
     (with
      ()

@@ -1324,14 +1324,7 @@ assignName serializedExpr name = do
 convertExpr :: Some Expr -> Memo SExpr
 convertExpr (Some initExpr) =
   case initExpr of
-    -- there is no atomic True or False value, so represent those as
-    -- an expression, but use the base expression form without any
-    -- possible re-evaluation to avoid recursion.
-    LitBool b -> do
-      let x = A $ ABV 1 0
-      if b
-        then assignName (L [ident "bveq", x, x]) "true"
-        else assignName (L [ident "bveq", x, x]) "false"
+    LitBool b -> return $ A $ ABool b
     LitInt i -> return $ int i
     -- We serialize the string literal `"FOO"` as the s-expression identifier
     -- `const.FOO`, so that when we're parsing the serialized s-expression

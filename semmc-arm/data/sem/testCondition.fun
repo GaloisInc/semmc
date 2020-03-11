@@ -9,87 +9,85 @@
   (with
    ()
    (let
-    ((true
-     (bveq #b0 #b0))
-     (conditionMatch
+    ((conditionMatch
+     (ite
+      (bveq
+       ((_ extract 2 0)
+        op.instrPred)
+       #b000)
+      (bveq
+       #b1
+       ((_ extract 1 1)
+        op.cpsr))
       (ite
        (bveq
         ((_ extract 2 0)
          op.instrPred)
-        #b000)
+        #b001)
        (bveq
         #b1
-        ((_ extract 1 1)
+        ((_ extract 2 2)
          op.cpsr))
        (ite
         (bveq
          ((_ extract 2 0)
           op.instrPred)
-         #b001)
+         #b010)
         (bveq
          #b1
-         ((_ extract 2 2)
+         ((_ extract 0 0)
           op.cpsr))
         (ite
          (bveq
           ((_ extract 2 0)
            op.instrPred)
-          #b010)
+          #b011)
          (bveq
           #b1
-          ((_ extract 0 0)
+          ((_ extract 3 3)
            op.cpsr))
          (ite
           (bveq
            ((_ extract 2 0)
             op.instrPred)
-           #b011)
-          (bveq
-           #b1
-           ((_ extract 3 3)
-            op.cpsr))
+           #b100)
+          (andp
+           (bveq
+            #b1
+            ((_ extract 2 2)
+             op.cpsr))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 1 1)
+              op.cpsr))))
           (ite
            (bveq
             ((_ extract 2 0)
              op.instrPred)
-            #b100)
-           (andp
-            (bveq
-             #b1
-             ((_ extract 2 2)
-              op.cpsr))
-            (notp
-             (bveq
-              #b1
-              ((_ extract 1 1)
-               op.cpsr))))
+            #b101)
+           (bveq
+            ((_ extract 0 0)
+             op.cpsr)
+            ((_ extract 3 3)
+             op.cpsr))
            (ite
             (bveq
              ((_ extract 2 0)
               op.instrPred)
-             #b101)
-            (bveq
-             ((_ extract 0 0)
-              op.cpsr)
-             ((_ extract 3 3)
-              op.cpsr))
-            (ite
+             #b110)
+            (andp
              (bveq
-              ((_ extract 2 0)
-               op.instrPred)
-              #b110)
-             (andp
+              ((_ extract 0 0)
+               op.cpsr)
+              ((_ extract 3 3)
+               op.cpsr))
+             (notp
               (bveq
-               ((_ extract 0 0)
-                op.cpsr)
-               ((_ extract 3 3)
-                op.cpsr))
-              (notp
-               (bveq
-                #b1
-                ((_ extract 1 1)
-                 op.cpsr))))
-             true)))))))))
+               #b1
+               ((_ extract 1 1)
+                op.cpsr))))
+            #true)))))))))
     (ite
      (andp
       (bveq
