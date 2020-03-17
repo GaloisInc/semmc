@@ -295,6 +295,8 @@ data FunctionRef (sig :: ([BaseType], BaseType)) where
 
 deriving instance Show (FunctionRef sig)
 
+instance ShowF FunctionRef
+
 instance Eq (FunctionRef sig) where
   FunctionRef n1 ats1 rt1 == FunctionRef n2 ats2 rt2 =
     n1 == n2 &&
