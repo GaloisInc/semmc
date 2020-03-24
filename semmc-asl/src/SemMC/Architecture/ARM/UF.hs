@@ -107,6 +107,10 @@ mkGlobalUF gb =
     BaseArrayRepr (Empty :> BaseIntegerRepr) (BaseBVRepr nr) |
       Just Refl <- testEquality nr (knownNat @64) ->
       A.mkUninterpFn @EmptyCtx @(BaseArrayType (EmptyCtx ::> BaseIntegerType) (BaseBVType 64)) name (\_ -> [])
+    BaseArrayRepr (Empty :> BaseBVRepr ixRepr) (BaseBVRepr nr) |
+      Just Refl <- testEquality ixRepr (knownNat @8),
+      Just Refl <- testEquality nr (knownNat @128) ->
+      A.mkUninterpFn @EmptyCtx @(BaseArrayType (EmptyCtx ::> BaseBVType 8) (BaseBVType 128)) name (\_ -> [])
     x -> error $ "Unexpected globals type: " ++ show x
 
 mkReadMemUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
