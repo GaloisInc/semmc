@@ -21,9 +21,11 @@ module SemMC.Architecture.ARM.UF
 
 import           Data.Parameterized.WithRepr
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some
 import           Control.Applicative ( Const(..) )
 import qualified Data.Text as T
+import           Data.Maybe ( catMaybes )
 
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Context
@@ -67,19 +69,20 @@ uninterpretedFunctions _ =
                    @(G.GlobalsType "SIMDS")
                    ("simd_set")
                    (\_ -> [])
-  , A.mkUninterpFn @(G.GPRCtx)
+  , A.mkUninterpFn @(EmptyCtx)
                    @(G.GlobalsType "GPRS")
                    ("init_gprs")
                    (\_ -> [])
-  , A.mkUninterpFn @(G.SIMDCtx)
+  , A.mkUninterpFn @(EmptyCtx)
                    @(G.GlobalsType "SIMDS")
                    ("init_simds")
                    (\_ -> [])
   ]
-  ++ (mkUndefBVUF  <$> ([1..32] ++ [40,48,52,64,128,160,256]))
+  ++ (mkUndefBVUF  <$> ([1..32] ++ [40,48,52,64,65,128,160,256]))
+  ++ (mkAssertBVUF <$> [1..65])
   ++ (mkWriteMemUF <$> [8,16,32,64])
   ++ (mkReadMemUF <$> [8,16,32,64])
-  ++ FC.toListFC mkGlobalUF G.untrackedGlobals
+  ++ (catMaybes $ FC.toListFC mkGlobalUF G.untrackedGlobals)
 
 -- Standard signatures for "UNDEFINED" functions
 type UFArgs = EmptyCtx
@@ -96,17 +99,27 @@ mkUndefBVUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                    (\_ -> [])
 mkUndefBVUF n | otherwise = error $ "Cannot construct UNDEFINED_bitvector_0N_" ++ show n
 
-mkGlobalUF :: G.Global tp -> A.UninterpFn arm
+mkAssertBVUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
+             => Integer
+             -> A.UninterpFn arm
+mkAssertBVUF n
+  | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
+  , Just NR.LeqProof <- NR.isPosNat (knownNat @n)
+  = A.mkUninterpFn @(EmptyCtx ::> BaseBoolType ::> BaseBVType n) @(BaseBVType n) ("assertBV_" ++ show n) (\_ -> [])
+
+
+mkGlobalUF :: G.Global tp -> Maybe (A.UninterpFn arm)
 mkGlobalUF gb =
   let
     name = "INIT_GLOBAL_" ++ (T.unpack $ G.gbName gb)
   in case G.gbType gb of
-    BaseBVRepr (nr :: NatRepr n) -> withKnownNat nr $ A.mkUninterpFn @(EmptyCtx) @(BaseBVType n) name (\_ -> [])
-    BaseIntegerRepr -> A.mkUninterpFn @EmptyCtx @BaseIntegerType name (\_ -> [])
-    BaseBoolRepr -> A.mkUninterpFn @EmptyCtx @BaseBoolType name (\_ -> [])
+    BaseBVRepr (nr :: NatRepr n) -> withKnownNat nr $ Just $ A.mkUninterpFn @(EmptyCtx) @(BaseBVType n) name (\_ -> [])
+    BaseIntegerRepr -> Just $ A.mkUninterpFn @EmptyCtx @BaseIntegerType name (\_ -> [])
+    BaseBoolRepr -> Just $ A.mkUninterpFn @EmptyCtx @BaseBoolType name (\_ -> [])
     BaseArrayRepr (Empty :> BaseIntegerRepr) (BaseBVRepr nr) |
       Just Refl <- testEquality nr (knownNat @64) ->
-      A.mkUninterpFn @EmptyCtx @(BaseArrayType (EmptyCtx ::> BaseIntegerType) (BaseBVType 64)) name (\_ -> [])
+      Just $ A.mkUninterpFn @EmptyCtx @(BaseArrayType (EmptyCtx ::> BaseIntegerType) (BaseBVType 64)) name (\_ -> [])
+    BaseArrayRepr (Empty :> BaseBVRepr _) _ -> Nothing
     x -> error $ "Unexpected globals type: " ++ show x
 
 mkReadMemUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)

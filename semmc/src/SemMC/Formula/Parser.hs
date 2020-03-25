@@ -515,6 +515,7 @@ lookupOp = \case
 readOneArg ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
+    ShowF (S.SymExpr sym),
     MR.MonadReader (DefsInfo sym arch sh) m,
     A.Architecture arch,
     MonadIO m)
@@ -531,6 +532,7 @@ readOneArg operands = do
 readTwoArgs ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
+    ShowF (S.SymExpr sym),
     MR.MonadReader (DefsInfo sym arch sh) m,
     A.Architecture arch,
     MonadIO m)
@@ -547,6 +549,7 @@ readTwoArgs operands = do
 readThreeArgs ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
+    ShowF (S.SymExpr sym),
     MR.MonadReader (DefsInfo sym arch sh) m,
     A.Architecture arch,
     MonadIO m)
@@ -563,6 +566,7 @@ readThreeArgs operands = do
 readApp ::
   forall sym m arch sh .
   (S.IsSymExprBuilder sym,
+   ShowF (S.SymExpr sym),
     E.MonadError String m,
     MR.MonadReader (DefsInfo sym arch sh) m,
     A.Architecture arch,
@@ -860,7 +864,7 @@ expectArrayWithIndex _ repr = E.throwError $ unwords ["expected an array, got", 
 
 
 exprAssignment' :: (E.MonadError String m,
-                    S.IsExpr ex)
+                    S.IsExpr ex,  ShowF ex)
                 => Ctx.Assignment BaseTypeRepr ctx
                 -> [Some ex]
                 -> Int
@@ -870,18 +874,20 @@ exprAssignment' (Ctx.viewAssign -> Ctx.AssignEmpty) [] _ _ = return Ctx.empty
 exprAssignment' (Ctx.viewAssign -> Ctx.AssignExtend restTps tp) (Some e : restExprs) idx len = do
   Refl <- case testEquality tp (S.exprType e) of
             Just pf -> return pf
-            Nothing -> E.throwError ("unexpected type in index " ++ (show idx) ++ " (total length " ++ (show len)
-                                     ++ "), assigning to: " ++ show tp ++ " from expr: " ++ show (S.exprType e))
+            Nothing -> E.throwError ("unexpected type in index " ++ (show idx) ++ " (signature " ++ (show len)
+                                     ++ "), assigning to: " ++ show tp ++ " from expr: " ++ show (Some e))
   restAssn <- exprAssignment' restTps restExprs (idx + 1) len
   return $ restAssn Ctx.:> e
 exprAssignment' _ _ _  _ = E.throwError "mismatching numbers of arguments"
 
 exprAssignment :: (E.MonadError String m,
-                   S.IsExpr ex)
+                   S.IsExpr ex, ShowF ex)
                => Ctx.Assignment BaseTypeRepr ctx
                -> [Some ex]
                -> m (Ctx.Assignment ex ctx)
-exprAssignment tpAssn exs = exprAssignment' tpAssn (reverse exs) 0 (Ctx.sizeInt $ Ctx.size tpAssn)
+exprAssignment tpAssn exs =
+  E.catchError (exprAssignment' tpAssn (reverse exs) 0 (Ctx.sizeInt $ Ctx.size tpAssn))
+    (\err -> E.throwError $ "For signature: " ++ show tpAssn ++ " " ++ err)
 
 -- | Given the s-expressions for the bindings and body of a
 -- let, parse the bindings into the Reader monad's state and
@@ -890,6 +896,7 @@ readLetExpr ::
   forall sym m arch sh
   . (S.IsSymExprBuilder sym,
       Monad m,
+      ShowF (S.SymExpr sym),
       E.MonadError String m,
       A.Architecture arch,
       MR.MonadReader (DefsInfo sym arch sh) m,
@@ -912,6 +919,7 @@ readLetExpr bindings _body = E.throwError $
 readExpr :: forall sym m arch sh
           . (S.IsSymExprBuilder sym,
              Monad m,
+             ShowF (S.SymExpr sym),
              E.MonadError String m,
              A.Architecture arch,
              MR.MonadReader (DefsInfo sym arch sh) m,
@@ -980,6 +988,7 @@ readExpr (SC.SCons operator operands) = do
 -- | Parse multiple expressions in a list.
 readExprs :: (S.IsSymExprBuilder sym,
               Monad m,
+              ShowF (S.SymExpr sym),
               E.MonadError String m,
               A.Architecture arch,
               MR.MonadReader (DefsInfo sym arch sh) m,
@@ -999,6 +1008,7 @@ readExprsAsAssignment ::
     Monad m,
     E.MonadError String m,
     A.Architecture arch,
+    ShowF (S.SymExpr sym),
     MR.MonadReader (DefsInfo sym arch sh) m,
     MonadIO m)
   => SC.SExpr FAtom

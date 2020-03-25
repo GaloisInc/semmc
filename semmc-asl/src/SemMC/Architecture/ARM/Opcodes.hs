@@ -28,6 +28,7 @@ import           SemMC.Architecture.ARM.Opcodes.InternalA32 ( a32Opcodes, a32Opc
 import           SemMC.Architecture.ARM.Opcodes.InternalT32 ( t32Opcodes, t32OpcodeInfo )
 import qualified SemMC.Architecture.ARM.ASL as ASL
 
+
 allASLSemantics :: ASL.ASLSemantics
 allASLSemantics = $(ASL.attachSemantics)
 
