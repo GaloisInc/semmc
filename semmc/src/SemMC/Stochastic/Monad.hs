@@ -5,6 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 -- | This module defines a monad ('Syn') used in all of the stochastic synthesis code.
@@ -126,10 +127,7 @@ instance U.MonadHasLogCfg (Syn t solver fs arch) where
   getLogCfgM = logConfig <$> askConfig
 
 -- | The 'Syn' monad can run its actions in 'IO'.
-instance U.MonadUnliftIO (Syn t solver fs arch) where
-  askUnliftIO = do
-    localSynEnv <- R.ask
-    return $ U.UnliftIO (runSyn localSynEnv)
+deriving instance U.MonadUnliftIO (Syn t solver fs arch)
 
 -- | This is the exception that is thrown if the synthesis times out waiting for
 -- a result from the remote test runner.
