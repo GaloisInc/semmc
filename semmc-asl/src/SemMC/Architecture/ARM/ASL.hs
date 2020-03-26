@@ -556,6 +556,7 @@ loadSemantics :: IO ASLSemantics
 loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   Some ng <- PN.newIONonceGenerator
   sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
+
   initenv <- formulaEnv (Proxy @ARM.AArch32) sym
   ufBundle <- mkUFBundle sym initenv
 
@@ -586,8 +587,13 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
       bs = T.encodeUtf8 $ t
     T.hPutStrLn handle t
     return (Some opcode, bs)
+  let
+    a32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems A32.aslEncodingMap
+    t32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems T32.aslEncodingMap
+    -- individual functions representing the projection of each global for every instruction
+    instrProxies = Map.assocs $ Map.withoutKeys instrEnv (Set.fromList (a32Names ++ t32Names))
 
-  let fformulas = map (mkFormula sym) funcFormulas
+  let fformulas = map (mkFormula sym) (funcFormulas ++ instrProxies)
   T.hPutStrLn handle "Function Library"
   defBytes <- forM fformulas $ \(nm, Some fformula) -> do
     let
