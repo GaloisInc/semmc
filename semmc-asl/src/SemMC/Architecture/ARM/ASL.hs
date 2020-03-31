@@ -120,12 +120,13 @@ mkOperandVars :: forall sym sh
               -> ARM.ARMOpcode ARM.ARMOperand sh
               -> IO (SL.List (BV.BoundVar sym AArch32) sh)
 mkOperandVars sym op = do
-  FC.traverseFC mkBV (typeRepr op)
+  SL.itraverse mkBV (typeRepr op)
   where
-    mkBV :: ARMOperandRepr s -> IO (BV.BoundVar sym AArch32 s)
-    mkBV opRep = do
+    mkBV :: forall s. SL.Index sh s -> ARMOperandRepr s -> IO (BV.BoundVar sym AArch32 s)
+    mkBV idx opRep = do
       let ty = ARM.shapeReprType opRep
-      BV.BoundVar <$> WI.freshBoundVar sym (WI.safeSymbol $ A.operandTypeReprSymbol (Proxy @AArch32) opRep) ty
+      let nm = WI.safeSymbol $ (A.operandTypeReprSymbol (Proxy @AArch32) opRep) ++ "_" ++ show (SL.indexValue idx)
+      BV.BoundVar <$> WI.freshBoundVar sym nm ty
 
 type FnArgSig sh = (OperandTypesCtx AArch32 sh Ctx.::> WI.BaseStructType ASL.StructGlobalsCtx)
 
