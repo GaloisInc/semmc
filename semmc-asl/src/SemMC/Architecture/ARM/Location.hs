@@ -50,9 +50,7 @@ data Location arm :: BaseType -> * where
 locPC :: Location arm (BaseBVType 32)
 locPC = Location $ ASL.knownGlobalRef @"_PC"
 
-locMem :: Location arm
-            (WI.BaseArrayType (EmptyCtx ::> WI.BaseBVType 32)
-              (WI.BaseBVType 8))
+locMem :: Location arm ASL.MemoryBaseType
 locMem = Location $ ASL.knownGlobalRef @"__Memory"
 
 locRepr :: Location arm tp -> WI.BaseTypeRepr tp

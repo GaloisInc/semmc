@@ -39,7 +39,8 @@ import Data.Proxy
 -- | The basic type of indices into the array
 type BaseIdxType arch = BaseBVType (A.RegWidth arch)
 -- | The type of the memory array
-type BaseMemType arch = BaseArrayType (SingleCtx (BaseIdxType arch)) (BaseBVType 8)
+--type BaseMemType arch = BaseArrayType (SingleCtx (BaseIdxType arch)) (BaseBVType 8)
+type BaseMemType arch = G.MemoryBaseType
 
 uninterpretedFunctions :: forall proxy arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
                          proxy arm
