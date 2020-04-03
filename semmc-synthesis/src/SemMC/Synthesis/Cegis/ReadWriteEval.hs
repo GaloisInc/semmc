@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes, TypeOperators, TypeApplications, DataKinds, 
 TypeFamilies, ScopedTypeVariables, AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -fno-warn-unticked-promoted-constructors #-}
@@ -98,7 +99,7 @@ readMemEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments a
 
 
 
--- | Interpretes a 'readMem' as a function over well-typed symbolic expressions
+-- | Interprets a 'readMem' as a function over well-typed symbolic expressions
 -- as a sequence of reads of primitive memory
 readMemEvaluatorTotal :: forall arch sym w t st fs.
                        ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
@@ -122,5 +123,7 @@ readMemEvaluatorTotal sym evalLoc w memExpr i
     startingMem <- evalLoc memLoc
     LLVM.withMem @arch sym startingMem $ do
       LLVM.instantiateMemOps memExpr
+      bbMapRef <- LLVM.askAnn
+      let ?badBehaviorMap = bbMapRef
       LLVM.readMem w i
   | otherwise = error "Could not find memory location for this architecture"

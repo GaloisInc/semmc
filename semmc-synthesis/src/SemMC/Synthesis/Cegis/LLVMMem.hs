@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeOperators, DataKinds, TypeFamilies, GeneralizedNewtypeDeriving,
   PatternSynonyms, TypeApplications, ScopedTypeVariables, RankNTypes,
   AllowAmbiguousTypes, FlexibleContexts, ViewPatterns #-}
@@ -8,6 +9,7 @@ module SemMC.Synthesis.Cegis.LLVMMem
   , withMem
   , askImpl
   , askBase
+  , askAnn
   -- * Memory operations
   , readMem
   , readMemIO
@@ -18,6 +20,7 @@ module SemMC.Synthesis.Cegis.LLVMMem
   ) where
 
 import           Data.Proxy (Proxy(..))
+import           Data.IORef
 import qualified Control.Monad.Fail as MF
 import           Control.Monad.State
 -- import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -44,6 +47,7 @@ data MemData sym arch = MemData { memSym :: sym
                                 , memBase :: LLVM.LLVMPtr sym (A.RegWidth arch)
                                 , memAlignment :: LLVM.Alignment
                                 , memExpr :: S.SymExpr sym (A.MemType arch)
+                                , memAnn  :: IORef (LLVM.LLVMAnnMap sym)
                                 }
 
 -- | This monad has an underlying 'LLMV.MemImpl' that holds the current state of
@@ -68,6 +72,9 @@ askBase = MemM $ memBase <$> get
 
 askAlignment :: MemM sym arch (LLVM.Alignment)
 askAlignment = MemM $ memAlignment <$> get
+
+askAnn :: MemM sym arch (IORef (LLVM.LLVMAnnMap sym))
+askAnn = MemM $ memAnn <$> get
 
 putImpl :: LLVM.MemImpl sym -> MemM sym w ()
 putImpl m = MemM $ do
@@ -95,9 +102,12 @@ withMem sym memExp op = do
 
     -- 3) Write the initial memory expression array to the allocated block
     mem' <- LLVM.doArrayStoreUnbounded sym mem base LLVM.noAlignment memExp
+
+    -- 4) Create a map for LLVM annotations
+    ann <- newIORef mempty
     
-    -- 4) Execute the operation with these starting conditions
-    evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp)
+    -- 5) Execute the operation with these starting conditions
+    evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp ann)
 
 
 -- Input: a bit vector representing the offset from the base ptr for memory
@@ -117,7 +127,11 @@ mkPtr offset = do
 -- | Read 'bits' number of bits starting from location i in memory
 --
 -- Precondition: offset+bitsToBytes(bits) <= A.RegWidth arch
-readMemNoOF :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
+readMemNoOF :: ( LLVM.HasPtrWidth (A.RegWidth arch)
+               , B.IsSymInterface sym
+               , 1 S.<= bits
+               , LLVM.HasLLVMAnn sym
+               )
             => S.NatRepr bits
             -- ^ The number of bits to read
             -> S.SymBV sym (A.RegWidth arch)
@@ -174,7 +188,12 @@ checkOverflowITE bytes off maxSize trueCont falseCont =
 
 -- | Read 'bits' number of bits starting from location i in memory
 readMem :: forall arch sym bits.
-           (A.Architecture arch, LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
+           ( A.Architecture arch
+           , LLVM.HasPtrWidth (A.RegWidth arch)
+           , B.IsSymInterface sym
+           , 1 S.<= bits
+           , LLVM.HasLLVMAnn sym
+           )
         => S.NatRepr bits
         -- ^ The number of bits to read
         -> S.SymBV sym (A.RegWidth arch)
@@ -183,7 +202,10 @@ readMem :: forall arch sym bits.
 readMem bits addr = readMemNoOF bits addr
 
 readMemIO :: forall arch sym bits.
-             (A.Architecture arch, B.IsSymInterface sym, 1 S.<= bits)
+             ( A.Architecture arch
+             , B.IsSymInterface sym
+             , 1 S.<= bits
+             )
           => sym
           -> S.NatRepr bits
           -- ^ The number of bits to read
@@ -192,12 +214,21 @@ readMemIO :: forall arch sym bits.
           -> S.SymExpr sym (A.MemType arch)
           -- ^ The memory expression from which to read
           -> IO (S.SymBV sym bits)
-readMemIO sym bits i mem = withMem @arch sym mem $ readMem bits i
+readMemIO sym bits i mem = do
+  withMem @arch sym mem $ do
+    bbMapRef <- askAnn
+    let ?badBehaviorMap = bbMapRef
+    readMem bits i
 
 
 -- | Read 'bits' number of bits starting from location i in memory, possibly overflowing the address space
 readMemOF :: forall arch sym bits.
-           (A.Architecture arch, LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
+           ( A.Architecture arch
+           , LLVM.HasPtrWidth (A.RegWidth arch)
+           , B.IsSymInterface sym
+           , 1 S.<= bits
+           , LLVM.HasLLVMAnn sym
+           )
         => S.NatRepr bits
         -- ^ The number of bits to read
         -> S.SymBV sym (A.RegWidth arch)
@@ -282,7 +313,11 @@ bvType :: LLVM.HasPtrWidth (A.RegWidth arch)
 bvType x = LLVM.toStorableType $ MemType.IntType (fromIntegral (S.natValue x))
 
 writeMem :: forall arch sym bits.
-            (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
+            ( LLVM.HasPtrWidth (A.RegWidth arch)
+            , B.IsSymInterface sym
+            , 1 S.<= bits
+            , LLVM.HasLLVMAnn sym
+            )
          => S.SymBV sym (A.RegWidth arch)
          -- ^ The address in memory at which to write
          -> S.SymBV sym bits
@@ -308,7 +343,11 @@ writeMem offset v = do
 
 -- | For each @WriteData@ that occurs in the list of 'A.AccessData', write that
 -- value to the underlying 'LLVM.MemImpl'.
-doWrites :: (A.Architecture arch, B.IsSymInterface sym, LLVM.HasPtrWidth (A.RegWidth arch))
+doWrites :: ( A.Architecture arch
+            , B.IsSymInterface sym
+            , LLVM.HasPtrWidth (A.RegWidth arch)
+            , LLVM.HasLLVMAnn sym
+            )
               => [A.AccessData sym arch]
               -> MemM sym arch ()
 doWrites [] = return ()
@@ -339,11 +378,15 @@ instantiateMemOps mem
   | Just (mem', A.WriteData idx val) <- isUpdateArray @arch mem =
   LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
     instantiateMemOps mem'
+    bbMapRef <- askAnn
+    let ?badBehaviorMap = bbMapRef
     writeMem idx val
 instantiateMemOps mem
   | Just (mem', A.WriteData idx val) <- MA.isWriteMem @arch mem = do
   LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
     instantiateMemOps mem'
+    bbMapRef <- askAnn
+    let ?badBehaviorMap = bbMapRef
     writeMem idx val
 instantiateMemOps _ | otherwise = return ()
 
