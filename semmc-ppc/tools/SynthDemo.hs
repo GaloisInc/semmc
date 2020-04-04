@@ -83,7 +83,7 @@ disassembleProgram bs
           in Left (printf "Invalid instruction \"%s\"" badInsnHex)
 
 fromRightM :: (Monad m) => Either String a -> m a
-fromRightM (Left err) = fail err
+fromRightM (Left err) = error err
 fromRightM (Right val) = return val
 
 makePlain :: forall arch sym
