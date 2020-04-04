@@ -1,32 +1,34 @@
 ;; Floating Add (A-form)
 ((operands
- ((frT . 'Fprc)
-  (frB . 'Fprc)
-  (frA . 'Fprc)))
+ ((frT Fprc)
+  (frB Fprc)
+  (frA Fprc)))
  (in
-  ('FPSCR frB frA 'IP))
+  (loc.FPSCR op.frB op.frA loc.IP))
  (defs
-  (('FPSCR
-   (concat
-    ((_ call "uf.fp.bin_op_fpscr")
-     "FADD"
-     frA
-     frB
-     'FPSCR)
-    ((_ extract 7 0)
-     'FPSCR)))
-   (frT
+  ((loc.FPSCR
+   (with
+    ()
     (concat
-     (fp_double_to_binary
-      (fadd
-       ((_ extract 1 0)
-        'FPSCR)
-       (fp_binary_to_double
-        ((_ extract 127 64)
-         frA))
-       (fp_binary_to_double
-        ((_ extract 127 64)
-         frB))))
-     #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+     (call uf.fp.bin_op_fpscr const.FADD op.frA op.frB loc.FPSCR)
+     ((_ extract 7 0)
+      loc.FPSCR))))
+   (op.frT
+    (with
+     ()
+     (concat
+      (fp_double_to_binary
+       (fadd
+        ((_ extract 1 0)
+         loc.FPSCR)
+        (fp_binary_to_double
+         ((_ extract 127 64)
+          op.frA))
+        (fp_binary_to_double
+         ((_ extract 127 64)
+          op.frB))))
+      #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,24 +1,22 @@
 ;; Floating Copy Sign (X-form)
 ((operands
- ((frT . 'Fprc)
-  (frA . 'Fprc)
-  (frB . 'Fprc)))
+ ((frT Fprc)
+  (frA Fprc)
+  (frB Fprc)))
  (in
-  ('FPSCR frB frA 'IP))
+  (loc.FPSCR op.frB op.frA loc.IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec2")
-     "FCPSGND"
-     frA
-     frB
-     'FPSCR)))
-   (frT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec2")
-      "FCPSGND"
-      frA
-      frB
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec2 const.FCPSGND op.frA op.frB loc.FPSCR))))
+   (op.frT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec2 const.FCPSGND op.frA op.frB loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

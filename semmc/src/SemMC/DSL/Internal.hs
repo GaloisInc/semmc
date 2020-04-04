@@ -17,10 +17,14 @@ module SemMC.DSL.Internal
   ) where
 
 import Control.Monad ( guard )
+import Data.Text ( Text )
 import Data.Parameterized.Classes
 import Data.Parameterized.List as SL
 import Data.Parameterized.Some ( Some(..) )
-import Data.Parameterized.TH.GADT ( structuralTypeEquality )
+import Data.Parameterized.TH.GADT ( structuralTypeEquality
+                                  , structuralTypeOrd
+                                  , TypePat(..)
+                                  )
 
 data ExprTag = TBool
               | TBV
@@ -31,6 +35,7 @@ data ExprTag = TBool
               | TMemRef
               | TString
               | TPackedOperand
+             deriving (Eq, Show, Ord)
 
 data ExprTypeRepr (tp :: ExprTag) where
   -- | A type of bitvectors of a fixed width
@@ -46,6 +51,7 @@ data ExprTypeRepr (tp :: ExprTag) where
 
 deriving instance Eq (ExprTypeRepr tp)
 deriving instance Show (ExprTypeRepr tp)
+deriving instance Ord (ExprTypeRepr tp)
 
 instance ShowF ExprTypeRepr
 
@@ -53,6 +59,10 @@ $(return [])
 
 instance TestEquality ExprTypeRepr where
   testEquality = $(structuralTypeEquality [t| ExprTypeRepr |] [])
+
+instance OrdF ExprTypeRepr where
+  compareF = $(structuralTypeOrd [t|ExprTypeRepr|] [])
+
 
 -- | A parameter and its type
 --
@@ -62,7 +72,7 @@ data Parameter (tp :: ExprTag) = Parameter { pName :: String
                                            , pType :: String
                                            , pExprTypeRepr :: ExprTypeRepr tp
                                            }
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 instance ShowF Parameter
 
@@ -75,18 +85,33 @@ instance TestEquality Parameter where
     Refl <- testEquality (pExprTypeRepr p1) (pExprTypeRepr p2)
     return Refl
 
+
+instance OrdF Parameter where
+  compareF = $(structuralTypeOrd [t|Parameter|]
+               [(ConType [t|ExprTypeRepr|] `TypeApp` AnyType, [|compareF|])
+               ])
+
+
 data Literal tp = Literal { lName :: String
                           , lExprType :: ExprTypeRepr tp
                           }
-               deriving (Show)
+               deriving (Show, Eq, Ord)
 
 instance ShowF Literal
+
+$(return [])
 
 instance TestEquality Literal where
   testEquality l1 l2 = do
     guard (lName l1 == lName l2)
     Refl <- testEquality (lExprType l1) (lExprType l2)
     return Refl
+
+instance OrdF Literal where
+  compareF = $(structuralTypeOrd [t|Literal|]
+               [(ConType [t|ExprTypeRepr|] `TypeApp` AnyType, [|compareF|])
+               ])
+
 
 data Location tp where
   ParamLoc :: Parameter tp -> Location tp
@@ -107,8 +132,20 @@ data Location tp where
   MemoryLoc :: Integer -> Location 'TMemory
   LocationFunc :: ExprTypeRepr tp -> String -> Location tp' -> Location tp
 
+
 deriving instance Show (Location tp)
 instance ShowF Location
+
+$(return [])
+
+instance OrdF Location where
+  compareF = $(structuralTypeOrd [t|Location|]
+               [ (ConType [t|Parameter|] `TypeApp` AnyType, [|compareF|])
+               , (ConType [t|Literal|] `TypeApp` AnyType, [|compareF|])
+               , (ConType [t|ExprTypeRepr|] `TypeApp` AnyType, [|compareF|])
+               , (ConType [t|Location|] `TypeApp` AnyType, [|compareF|])
+               ])
+
 
 instance TestEquality Location where
   testEquality l1 l2 =
@@ -175,14 +212,11 @@ data Expr (tp :: ExprTag) where
   UninterpretedFunc :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
   -- | Defined functions called with the @call@ SMTLib primitive
   LibraryFunc :: LibraryFunctionDef '(args, ret) -> SL.List Expr args -> Expr ret
-  -- | Assign an advisory name to a sub-expression.  This can be used
-  -- (for example) to guide let-binding for output S-expression forms
-  -- of this expression.
-  NamedSubExpr :: String -> Expr tp -> Expr tp
   -- | Reference to a packed operand; these are unique types that can
   -- only be unpacked into more useable expression values by
   -- uninterpreted function(s).
   PackedOperand :: String -> Expr 'TPackedOperand
+  NamedExpr :: String -> Expr tp -> Expr tp
 
 deriving instance Show (Expr tp)
 instance ShowF Expr
@@ -199,8 +233,6 @@ litEq (LitBV w x) (LitBV v y) = if w == v
                                 else Nothing -- error indicated elsewhere
 litEq (LitInt x) (LitInt y) = Just $ LitBool $ x == y
 litEq (LitString x) (LitString y) = Just $ LitBool $ x == y
-litEq (NamedSubExpr _ x) y = litEq x y
-litEq x (NamedSubExpr _ y) = litEq x y
 litEq _ _ = Nothing
 
 

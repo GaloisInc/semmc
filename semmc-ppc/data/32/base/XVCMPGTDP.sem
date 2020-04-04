@@ -1,24 +1,22 @@
 ;; VSX Vector Compare Greater Than To Double-Precision (XX3-form)
 ((operands
- ((xT . 'Vsrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  ('FPSCR xB xA 'IP))
+  (loc.FPSCR op.xB op.xA loc.IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec2")
-     "XVCMPGTDP"
-     xA
-     xB
-     'FPSCR)))
-   (xT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec2")
-      "XVCMPGTDP"
-      xA
-      xB
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec2 const.XVCMPGTDP op.xA op.xB loc.FPSCR))))
+   (op.xT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec2 const.XVCMPGTDP op.xA op.xB loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

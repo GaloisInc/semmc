@@ -1,14 +1,18 @@
 ;; VSX Logical AND with Complement (XX3-form)
 ((operands
- ((xT . 'Vsrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  (xB xA 'IP))
+  (op.xB op.xA loc.IP))
  (defs
-  ((xT
-   (bvand
-    xA
-    (bvnot xB)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.xT
+   (with
+    ()
+    (bvand
+     op.xA
+     (bvnot op.xB))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

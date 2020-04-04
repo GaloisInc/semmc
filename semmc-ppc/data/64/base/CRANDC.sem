@@ -1,37 +1,41 @@
 ;; Condition Register AND with Complement (XL-form)
 ((operands
- ((BT . 'Crbitrc)
-  (BA . 'Crbitrc)
-  (BB . 'Crbitrc)))
+ ((BT Crbitrc)
+  (BA Crbitrc)
+  (BB Crbitrc)))
  (in
-  ('CR BB BA 'IP))
+  (loc.CR op.BB op.BA loc.IP))
  (defs
-  (('CR
-   (bvor
-    (bvand
-     'CR
-     (bvnot
-      (bvshl
-       #x00000001
-       (bvsub
-        #x0000001f
-        ((_ zero_extend 27)
-         BT)))))
-    (bvshl
-     ((_ zero_extend 31)
-      (bvand
-       ((_ extract 31 31)
-        (bvshl
-         'CR
+  ((loc.CR
+   (with
+    ()
+    (bvor
+     (bvand
+      loc.CR
+      (bvnot
+       (bvshl
+        #x00000001
+        (bvsub
+         #x0000001f
          ((_ zero_extend 27)
-          BA)))
-       (bvnot
+          op.BT)))))
+     (bvshl
+      ((_ zero_extend 31)
+       (bvand
         ((_ extract 31 31)
          (bvshl
-          'CR
+          loc.CR
           ((_ zero_extend 27)
-           BB))))))
-     ((_ zero_extend 27)
-      BT))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+           op.BA)))
+        (bvnot
+         ((_ extract 31 31)
+          (bvshl
+           loc.CR
+           ((_ zero_extend 27)
+            op.BB))))))
+      ((_ zero_extend 27)
+       op.BT)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

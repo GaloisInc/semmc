@@ -1,28 +1,30 @@
 ;; Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)
 ((operands
- ((frT . 'Fprc)
-  (frB . 'Fprc)))
+ ((frT Fprc)
+  (frB Fprc)))
  (in
-  ('FPSCR frB 'IP))
+  (loc.FPSCR op.frB loc.IP))
  (defs
-  (('FPSCR
-   (concat
-    ((_ call "uf.fp.un_op_fpscr")
-     "FCTIWUZ"
-     frB
-     'FPSCR)
-    ((_ extract 7 0)
-     'FPSCR)))
-   (frT
+  ((loc.FPSCR
+   (with
+    ()
     (concat
+     (call uf.fp.un_op_fpscr const.FCTIWUZ op.frB loc.FPSCR)
+     ((_ extract 7 0)
+      loc.FPSCR))))
+   (op.frT
+    (with
+     ()
      (concat
-      ((_ call "uf.undefined")
-       #x00000020)
-      (fctiwu
-       #b01
-       (fp_binary_to_double
-        ((_ extract 127 64)
-         frB))))
-     #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+      (concat
+       (call uf.undefinedBV.32)
+       (fctiwu
+        #b01
+        (fp_binary_to_double
+         ((_ extract 127 64)
+          op.frB))))
+      #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

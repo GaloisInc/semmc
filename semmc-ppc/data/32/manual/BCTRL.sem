@@ -2,12 +2,16 @@
 ;; This is a specialized unconditional BCCTR
 ((operands ())
  (in
-  ('IP 'CTR))
+  (loc.IP loc.CTR))
  (defs
-  (('LNK
-   (bvadd 'IP #x00000004))
-   ('IP
-    (concat
-     ((_ extract 31 2)
-      'CTR)
-     #b00)))))
+  ((loc.LNK
+   (with
+    ()
+    (bvadd loc.IP #x00000004)))
+   (loc.IP
+    (with
+     ()
+     (concat
+      ((_ extract 31 2)
+       loc.CTR)
+      #b00))))))

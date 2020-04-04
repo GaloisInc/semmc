@@ -6,6 +6,7 @@
 module Main ( main ) where
 
 import           Control.Exception
+import           Control.Monad ( when )
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
 import           Data.Parameterized.Classes
@@ -42,6 +43,8 @@ data Options = Options { oManualDir :: FilePath
                        , oPseudoDir :: FilePath
                        , oBitSize :: B.BitSize
                        , oNoCheck :: Bool
+                       , oWriteOnFail :: Bool
+                       , oLogProgress :: Bool
                        }
 
 optionsParser :: O.Parser Options
@@ -64,6 +67,12 @@ optionsParser = Options <$> O.strOption ( O.long "manual"
                         <*> O.switch ( O.long "nocheck"
                                      <> O.short 'n'
                                      <> O.help "Disable checking of semantics formula before writing")
+                        <*> O.switch ( O.long "write-on-fail"
+                                     <> O.short 'f'
+                                     <> O.help "Write out the formula to disk even if the semantic check fails")
+                        <*> O.switch ( O.long "log-progress"
+                                     <> O.short 'l'
+                                     <> O.help "Write out the name of each formula/op being processed")
 
 main :: IO ()
 main = O.execParser optParser >>= mainWithOptions
@@ -85,53 +94,74 @@ mainWithOptions opts = do
   genTo sym (oManualDir opts) sz (B.manual sz)
   genTo sym (oBaseDir   opts) sz (B.base   sz)
   genTo sym (oPseudoDir opts) sz (B.pseudo sz)
-      where genTo sym d sz l = do (s, e) <- genOpDefs sym d sz (not $ oNoCheck opts) l
-                                  putStrLn $ "Wrote " <> show s <> " files to " <> d <>
-                                               (if 0 == e then "" else " (" <> show e <> " errors!)")
+      where genTo sym d sz l =
+              do (noErrors, errors) <-
+                   genOpDefs sym d sz (not $ oNoCheck opts) (oWriteOnFail opts) (oLogProgress opts) l
+                 putStrLn $ "Wrote " <>
+                   (if (oWriteOnFail opts) then (show $ noErrors + errors) else (show noErrors)) <>
+                   " files to " <> d <>
+                   (if 0 == errors then "" else " (" <> show errors <> " errors!)")
 
 genOpDefs :: forall sym
            . ( CRUB.IsSymInterface sym
              , ShowF (CRU.SymExpr sym) )
-          => sym -> FilePath -> B.BitSize -> Bool
+          => sym
+          -- ^ Symbolic backend
+          -> FilePath
+          -- ^ File to generate
+          -> B.BitSize
+          -- ^ What size? (E.g., Size32 vs Size64)
+          -> Bool
+          -- ^ Should we check the semantics after generating the serialized format?
+          -> Bool
+          -- ^ Should we write out to disk even if the semantics check encounters an error?
+          -> Bool
+          -- ^ Should we log the name of each fun/op as we process it?
           -> DSL.Package
+          -- ^ DSL package
           -> IO (Int, Int)
-genOpDefs sym d sz chk (DSL.Package { DSL.pkgFormulas = dl, DSL.pkgFunctions = fl }) = do
+genOpDefs sym d sz checkSemantics writeOnFail logProgress pkg = do
+  let (DSL.Package { DSL.pkgFormulas = dl, DSL.pkgFunctions = fl }) = pkg
   (s, e, lib) :: (Int, Int, SF.Library sym)
     <- F.foldlM writeFunDef (0, 0, SF.emptyLibrary) fl
   F.foldlM (writeDef lib) (s, e) dl
-    where writeFunDef (s,e,lib) (funName, def) =
-              let fundef = DSL.printFunctionDefinition def
-                  fundefB = encodeUtf8 fundef
-                  writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
-              in if chk
-                 then do r <- case sz of
-                                B.Size32 -> checkFunction (Proxy @PPC32Sem.PPC) sym fundefB funName
-                                B.Size64 -> checkFunction (Proxy @PPC64Sem.PPC) sym fundefB funName
-                         case r of
-                           Right lib' -> writeIt >> return (s+1,e,lib' `MapF.union` lib)
-                           Left err -> do putStrLn ("Error for function " <> funName <> ": " <> err)
-                                          return (s, e+1, lib)
-                 else writeIt >> return (s+1, e, lib)
-          writeDef lib (s,e) (opName, def) =
+    where writeFunDef (s,e,lib) (funName, def) = do
+            let fundef = DSL.printFunctionDefinition def
+                fundefB = encodeUtf8 fundef
+                writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
+            when logProgress $ putStrLn ("Processing function " <> funName <> "...")
+            if checkSemantics
+              then do r <- case sz of
+                             B.Size32 -> checkFunction (Proxy @PPC32Sem.PPC) sym fundefB funName
+                             B.Size64 -> checkFunction (Proxy @PPC64Sem.PPC) sym fundefB funName
+                      case r of
+                        Right lib' -> writeIt >> return (s+1,e,lib' `MapF.union` lib)
+                        Left err -> do when writeOnFail writeIt
+                                       putStrLn ("Error for function " <> funName <> ": " <> err)
+                                       return (s, e+1, lib)
+              else writeIt >> return (s+1, e, lib)
+          writeDef lib (s,e) (opName, def) = do
               let opcode = F.find ((==) opName . show) opcodes
                   semdef = DSL.printDefinition def
                   semdefB = encodeUtf8 semdef
                   writeIt = TIO.writeFile (d </> opName <.> "sem") $ semdef <> "\n"
-              in case opcode of
-                   Nothing -> do putStrLn ("Warning: unknown DSL defined opcode \"" <>
-                                           opName <> "\" (-> " <> d <> ")")
-                                 writeIt
-                                 return (s+1, e+1)
-                   Just op -> if chk
-                              -- then checkFormula arch semdefB op >>= \case
-                              then do r <- case sz of
-                                             B.Size32 -> checkFormula (Proxy @PPC32Sem.PPC) sym lib semdefB op
-                                             B.Size64 -> checkFormula (Proxy @PPC64Sem.PPC) sym lib semdefB op
-                                      case r of
-                                        Nothing -> writeIt >> return (s+1, e)
-                                        Just err -> do putStrLn ("Error for " <> opName <> ": " <> err)
-                                                       return (s, e+1)
-                              else writeIt >> return (s+1, e)
+              when logProgress $ putStrLn ("Processing op " <> opName <> "...")
+              case opcode of
+                Nothing -> do putStrLn ("Warning: unknown DSL defined opcode \"" <>
+                                        opName <> "\" (-> " <> d <> ")")
+                              writeIt
+                              return (s+1, e+1)
+                Just op -> if checkSemantics
+                           -- then checkFormula arch semdefB op >>= \case
+                           then do r <- case sz of
+                                          B.Size32 -> checkFormula (Proxy @PPC32Sem.PPC) sym lib semdefB op
+                                          B.Size64 -> checkFormula (Proxy @PPC64Sem.PPC) sym lib semdefB op
+                                   case r of
+                                     Nothing -> writeIt >> return (s+1, e)
+                                     Just err -> do when writeOnFail writeIt
+                                                    putStrLn ("Error for " <> opName <> ": " <> err)
+                                                    return (s, e+1)
+                           else writeIt >> return (s+1, e)
           opcodes = case sz of
                       B.Size32 -> PPC32.allOpcodes
                       B.Size64 -> PPC64.allOpcodes

@@ -1,27 +1,29 @@
 ;; Store Word with Update (D-form)
 ((operands
- ((memref . 'Memri)
-  (rS . 'Gprc)))
+ ((memref Memri)
+  (rS Gprc)))
  (in
-  ('Mem memref rS 'IP))
+  (loc.Mem op.memref op.rS loc.IP))
  (defs
-  ((((_ call "uf.ppc.memri_reg")
-   memref)
-   (bvadd
-    ((_ call "uf.ppc.memri_reg")
-     memref)
-    ((_ sign_extend 16)
-     ((_ call "uf.ppc.memri_offset")
-      memref))))
-   ('Mem
-    ((_ call "uf.write_mem.32")
-     'Mem
-     (bvadd
-      ((_ call "uf.ppc.memri_reg")
-       memref)
-      ((_ sign_extend 16)
-       ((_ call "uf.ppc.memri_offset")
-        memref)))
-     rS))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  (((call uf.ppc.memri_reg op.memref)
+   (with
+    ()
+    (bvadd
+     (call uf.ppc.memri_reg op.memref)
+     ((_ sign_extend 16)
+      (call uf.ppc.memri_offset op.memref)))))
+   (loc.Mem
+    (with
+     ()
+     (call
+      uf.write_mem.32
+      loc.Mem
+      (bvadd
+       (call uf.ppc.memri_reg op.memref)
+       ((_ sign_extend 16)
+        (call uf.ppc.memri_offset op.memref)))
+      op.rS)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,14 +1,18 @@
 ;; AND with Complement (X-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  (rS rB 'IP))
+  (op.rS op.rB loc.IP))
  (defs
-  ((rA
-   (bvand
-    rS
-    (bvnot rB)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rA
+   (with
+    ()
+    (bvand
+     op.rS
+     (bvnot op.rB))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,23 +1,30 @@
 ;; Divide Word Unsigned (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA rB 'IP))
+  (loc.XER loc.CR op.rA op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     (bvudiv rA rB)
-     #x00000000)
-    (bvsgt
-     (bvudiv rA rB)
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    (bvudiv rA rB))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvudiv op.rA op.rB)
+      #x00000000)
+     (bvsgt
+      (bvudiv op.rA op.rB)
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
+     (bvudiv op.rA op.rB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

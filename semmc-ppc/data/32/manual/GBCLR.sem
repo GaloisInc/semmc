@@ -1,38 +1,40 @@
 ;; BCLR (XL-form, LK=0, AA=0)
 ;; Generic branch conditional to LR with arbitrary BO field
 ((operands
- ((bh . 'I32imm)
-  (bi . 'Crbitrc)
-  (bo . 'U5imm)))
+ ((bh I32imm)
+  (bi Crbitrc)
+  (bo U5imm)))
  (in
-  ('CR 'CTR 'IP 'LNK))
+  (loc.CR loc.CTR loc.IP loc.LNK))
  (defs
-  (('IP
-   (ite
-    (andp
-     ((_ call "df.generic_cond_ok")
-      'CR
-      bo
-      bi)
-     ((_ call "df.generic_ctr_ok")
-      bo
-      (ite
-       (bveq
-        #b1
-        ((_ extract 0 0)
-         (bvlshr bo #b00010)))
-       'CTR
-       (bvsub 'CTR #x00000001))))
-    (concat
-     ((_ extract 31 2)
-      'LNK)
-     #b00)
-    (bvadd 'IP #x00000004)))
-   ('CTR
+  ((loc.IP
+   (with
+    ()
     (ite
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       (bvlshr bo #b00010)))
-     'CTR
-     (bvsub 'CTR #x00000001))))))
+     (andp
+      (call df.generic_cond_ok loc.CR op.bo op.bi)
+      (call
+       df.generic_ctr_ok
+       op.bo
+       (ite
+        (bveq
+         #b1
+         ((_ extract 0 0)
+          (bvlshr op.bo #b00010)))
+        loc.CTR
+        (bvsub loc.CTR #x00000001))))
+     (concat
+      ((_ extract 31 2)
+       loc.LNK)
+      #b00)
+     (bvadd loc.IP #x00000004))))
+   (loc.CTR
+    (with
+     ()
+     (ite
+      (bveq
+       #b1
+       ((_ extract 0 0)
+        (bvlshr op.bo #b00010)))
+      loc.CTR
+      (bvsub loc.CTR #x00000001)))))))

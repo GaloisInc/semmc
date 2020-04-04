@@ -13,10 +13,13 @@
 ;; imm == 5: SEVL (Send Event Local) hint (F7-2805)
 ;;           Signal an event locally, but not necessarily to all PEs in the multiprocessor system.
 ((operands
- ((imm . 'Imm0_15)))
+ ((imm Imm0_15)))
  (in
-  ('CPSR 'PC))
+  (loc.CPSR loc.PC))
  (defs
-  (('PC
-   (bvadd 'PC #x00000002))
-   ('CPSR 'CPSR))))
+  ((loc.PC
+   (with
+    ()
+    (bvadd loc.PC #x00000002)))
+   (loc.CPSR
+    (with () loc.CPSR)))))

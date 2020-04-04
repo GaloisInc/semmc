@@ -2,10 +2,12 @@
 ;; This is a specialized unconditional BCLR
 ((operands ())
  (in
-  ('IP 'LNK))
+  (loc.IP loc.LNK))
  (defs
-  (('IP
-   (concat
-    ((_ extract 63 2)
-     'LNK)
-    #b00)))))
+  ((loc.IP
+   (with
+    ()
+    (concat
+     ((_ extract 63 2)
+      loc.LNK)
+     #b00))))))

@@ -1,25 +1,28 @@
 ;; Load Floating-Point as Integer Word Zero Indexed (X-form)
 ((operands
- ((rT . 'Fprc)
-  (memref . 'Memrr)))
+ ((rT Fprc)
+  (memref Memrr)))
  (in
-  ('Mem memref 'IP))
+  (loc.Mem op.memref loc.IP))
  (defs
-  ((rT
-   (concat
-    ((_ zero_extend 32)
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (bvadd
-       (ite
-        ((_ call "uf.ppc.is_r0")
-         ((_ call "uf.ppc.memrr_base")
-          memref))
-        #x00000000
-        ((_ call "uf.ppc.memrr_base")
-         memref))
-       ((_ call "uf.ppc.memrr_offset")
-        memref))))
-    #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with
+    ()
+    (concat
+     ((_ zero_extend 32)
+      (call
+       uf.read_mem.32
+       loc.Mem
+       (bvadd
+        (ite
+         (call
+          uf.ppc.is_r0
+          (call uf.ppc.memrr_base op.memref))
+         #x00000000
+         (call uf.ppc.memrr_base op.memref))
+        (call uf.ppc.memrr_offset op.memref))))
+     #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

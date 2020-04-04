@@ -1,14 +1,18 @@
 ((operands
- ((rT . 'Gprc)
-  (ui . 'U16imm)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (ui U16imm)
+  (rA Gprc)))
  (in
-  (ui rA 'IP))
+  (op.ui op.rA loc.IP))
  (defs
-  ((rT
-   (bvor
-    rA
-    ((_ zero_extend 16)
-     ui)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvor
+     op.rA
+     ((_ zero_extend 16)
+      op.ui))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

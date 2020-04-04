@@ -1,23 +1,30 @@
 ;; Divide Doubleword Signed (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA rB 'IP))
+  (loc.XER loc.CR op.rA op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     (bvsdiv rA rB)
-     #x0000000000000000)
-    (bvsgt
-     (bvsdiv rA rB)
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    (bvsdiv rA rB))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvsdiv op.rA op.rB)
+      #x0000000000000000)
+     (bvsgt
+      (bvsdiv op.rA op.rB)
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
+     (bvsdiv op.rA op.rB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

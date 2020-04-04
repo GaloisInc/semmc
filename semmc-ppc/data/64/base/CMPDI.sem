@@ -1,24 +1,29 @@
 ;; Compare Immediate (D-form)
 ;; This variant is the double word variant (where L=1)
 ((operands
- ((fld . 'Crrc)
-  (imm . 'S16imm64)
-  (rA . 'Gprc)))
+ ((fld Crrc)
+  (imm S16imm64)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA imm 'IP))
+  (loc.XER loc.CR op.rA op.imm loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     rA
-     ((_ sign_extend 48)
-      imm))
-    (bvsgt
-     rA
-     ((_ sign_extend 48)
-      imm))
-    fld
-    'XER
-    'CR))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      op.rA
+      ((_ sign_extend 48)
+       op.imm))
+     (bvsgt
+      op.rA
+      ((_ sign_extend 48)
+       op.imm))
+     op.fld
+     loc.XER
+     loc.CR)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

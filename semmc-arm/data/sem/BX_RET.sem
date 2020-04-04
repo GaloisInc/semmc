@@ -1,41 +1,44 @@
 ;; BX, returning (target addr in LR), Encoding A1
 ;; F7.1.27, F7-2579
-(let
- ((SetT32Mode
-  (bvand
-   #xfeffffff
-   (bvor #x00000020 'CPSR)))
-  (bxWritePC
-   (ite
-    (bveq
-     #b1
-     ((_ extract 31 31)
-      'R14))
-    (bvand #xfffffffe 'R14)
-    (ite
-     (bveq
-      #b1
-      ((_ extract 30 30)
-       'R14))
-     (bvand #xfffffffd 'R14)
-     'R14))))
- ((operands
-  ((predBits . 'Pred)))
-  (in
-   ('R14 'CPSR 'PC))
-  (defs
-   (('PC
-    (bxWritePC))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
+((operands
+ ((predBits Pred)))
+ (in
+  (loc.R14 loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((bxWritePC
       (ite
        (bveq
         #b1
         ((_ extract 31 31)
-         'R14))
-       (SetT32Mode)
-       'CPSR)
-      'CPSR))))))
+         loc.R14))
+       (bvand #xfffffffe loc.R14)
+       (ite
+        (bveq
+         #b1
+         ((_ extract 30 30)
+          loc.R14))
+        (bvand #xfffffffd loc.R14)
+        loc.R14))))
+     bxWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((SetT32Mode
+       (bvand
+        #xfeffffff
+        (bvor #x00000020 loc.CPSR))))
+      (ite
+       (call df.testCondition op.predBits loc.CPSR)
+       (ite
+        (bveq
+         #b1
+         ((_ extract 31 31)
+          loc.R14))
+        SetT32Mode
+        loc.CPSR)
+       loc.CPSR)))))))

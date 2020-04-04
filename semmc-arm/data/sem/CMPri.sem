@@ -1,44 +1,45 @@
 ;; Compare immediate, Encoding A1
 ;; doc: F7.1.36, page F7-2589
 ;; unpredictable argument is ignored
-(let
- ((res_nzcv
-  ((_ call "df.addWithCarry")
-   rN
-   (bvnot
-    (armExpandImm))
-   #x00000001))
-  (armExpandImm
-   ((_ extract 32 1)
-    ((_ call "df.shiftC")
-     ((_ zero_extend 24)
-      ((_ call "uf.a32.modimm_imm")
-       modimm))
-     #b011
-     (bvshl
-      #x00000001
-      ((_ zero_extend 28)
-       ((_ call "uf.a32.modimm_rot")
-        modimm)))
-     #b0))))
- ((operands
-  ((predBits . 'Pred)
-   (modimm . 'Mod_imm)
-   (rN . 'GPR)
-   (unpredictable . 'Unpredictable)))
-  (in
-   (rN modimm 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000004))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
-      (concat
-       ((_ extract 3 0)
-        (res_nzcv))
-       ((_ extract 31 4)
-        'CPSR))
-      'CPSR))))))
+((operands
+ ((predBits Pred)
+  (modimm Mod_imm)
+  (rN GPR)
+  (unpredictable Unpredictable)))
+ (in
+  (op.rN op.modimm loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (bvadd loc.PC #x00000004)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((armExpandImm
+       ((_ extract 32 1)
+        (call
+         df.shiftC
+         ((_ zero_extend 24)
+          (call uf.a32.modimm_imm op.modimm))
+         #b011
+         (bvshl
+          #x00000001
+          ((_ zero_extend 28)
+           (call uf.a32.modimm_rot op.modimm)))
+         #b0)))
+       (res_nzcv
+        (call
+         df.addWithCarry
+         op.rN
+         (bvnot armExpandImm)
+         #x00000001)))
+      (ite
+       (call df.testCondition op.predBits loc.CPSR)
+       (concat
+        ((_ extract 3 0)
+         res_nzcv)
+        ((_ extract 31 4)
+         loc.CPSR))
+       loc.CPSR)))))))

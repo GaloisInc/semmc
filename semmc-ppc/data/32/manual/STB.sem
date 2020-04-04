@@ -1,25 +1,28 @@
 ;; Store Byte (D-form)
 ((operands
- ((memref . 'Memri)
-  (rS . 'Gprc)))
+ ((memref Memri)
+  (rS Gprc)))
  (in
-  ('Mem memref rS 'IP))
+  (loc.Mem op.memref op.rS loc.IP))
  (defs
-  (('Mem
-   ((_ call "uf.write_mem.8")
-    'Mem
-    (bvadd
-     (ite
-      ((_ call "uf.ppc.is_r0")
-       ((_ call "uf.ppc.memri_reg")
-        memref))
-      #x00000000
-      ((_ call "uf.ppc.memri_reg")
-       memref))
-     ((_ sign_extend 16)
-      ((_ call "uf.ppc.memri_offset")
-       memref)))
-    ((_ extract 7 0)
-     rS)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.Mem
+   (with
+    ()
+    (call
+     uf.write_mem.8
+     loc.Mem
+     (bvadd
+      (ite
+       (call
+        uf.ppc.is_r0
+        (call uf.ppc.memri_reg op.memref))
+       #x00000000
+       (call uf.ppc.memri_reg op.memref))
+      ((_ sign_extend 16)
+       (call uf.ppc.memri_offset op.memref)))
+     ((_ extract 7 0)
+      op.rS))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

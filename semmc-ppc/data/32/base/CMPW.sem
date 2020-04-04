@@ -1,18 +1,23 @@
 ;; Compare Word (X-form)
 ;; This is a word variant (where L=0)
 ((operands
- ((fld . 'Crrc)
-  (rA . 'Gprc)
-  (rB . 'Gprc)))
+ ((fld Crrc)
+  (rA Gprc)
+  (rB Gprc)))
  (in
-  ('CR 'XER rB rA 'IP))
+  (loc.CR loc.XER op.rB op.rA loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt rB rA)
-    (bvsgt rB rA)
-    fld
-    'XER
-    'CR))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt op.rB op.rA)
+     (bvsgt op.rB op.rA)
+     op.fld
+     loc.XER
+     loc.CR)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

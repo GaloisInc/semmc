@@ -1,81 +1,90 @@
 ;; Shift Right Algebraic Word (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR 'XER rS rB 'IP))
+  (loc.XER loc.CR loc.XER op.rS op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     ((_ sign_extend 32)
-      (bvashr
-       ((_ extract 31 0)
-        rS)
-       ((_ zero_extend 26)
-        ((_ extract 5 0)
-         rB))))
-     #x0000000000000000)
-    (bvsgt
-     ((_ sign_extend 32)
-      (bvashr
-       ((_ extract 31 0)
-        rS)
-       ((_ zero_extend 26)
-        ((_ extract 5 0)
-         rB))))
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   ('XER
-    (concat
-     ((_ extract 63 30)
-      'XER)
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      ((_ sign_extend 32)
+       (bvashr
+        ((_ extract 31 0)
+         op.rS)
+        ((_ zero_extend 26)
+         ((_ extract 5 0)
+          op.rB))))
+      #x0000000000000000)
+     (bvsgt
+      ((_ sign_extend 32)
+       (bvashr
+        ((_ extract 31 0)
+         op.rS)
+        ((_ zero_extend 26)
+         ((_ extract 5 0)
+          op.rB))))
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (loc.XER
+    (with
+     ()
      (concat
-      (ite
-       (bvne
-        (bvlshr
-         (bvshl
-          ((_ extract 31 0)
-           rS)
+      ((_ extract 63 30)
+       loc.XER)
+      (concat
+       (ite
+        (bvne
+         (bvlshr
+          (bvshl
+           ((_ extract 31 0)
+            op.rS)
+           (ite
+            (bvuge
+             ((_ extract 5 0)
+              op.rB)
+             #b100000)
+            #x00000000
+            (bvsub
+             #x00000020
+             ((_ zero_extend 26)
+              ((_ extract 5 0)
+               op.rB)))))
           (ite
            (bvuge
             ((_ extract 5 0)
-             rB)
+             op.rB)
             #b100000)
            #x00000000
            (bvsub
             #x00000020
             ((_ zero_extend 26)
              ((_ extract 5 0)
-              rB)))))
-         (ite
-          (bvuge
-           ((_ extract 5 0)
-            rB)
-           #b100000)
-          #x00000000
-          (bvsub
-           #x00000020
-           ((_ zero_extend 26)
-            ((_ extract 5 0)
-             rB)))))
-        #x00000000)
-       ((_ extract 31 31)
-        ((_ extract 31 0)
-         rS))
-       #b0)
-      ((_ extract 28 0)
-       'XER))))
-   (rA
-    ((_ sign_extend 32)
-     (bvashr
-      ((_ extract 31 0)
-       rS)
-      ((_ zero_extend 26)
-       ((_ extract 5 0)
-        rB)))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+              op.rB)))))
+         #x00000000)
+        ((_ extract 31 31)
+         ((_ extract 31 0)
+          op.rS))
+        #b0)
+       ((_ extract 28 0)
+        loc.XER)))))
+   (op.rA
+    (with
+     ()
+     ((_ sign_extend 32)
+      (bvashr
+       ((_ extract 31 0)
+        op.rS)
+       ((_ zero_extend 26)
+        ((_ extract 5 0)
+         op.rB))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))
