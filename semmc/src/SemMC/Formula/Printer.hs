@@ -95,7 +95,6 @@ import qualified What4.Expr as S
 import qualified What4.Expr.Builder as S
 import qualified What4.Symbol as S
 import           What4.Serialize.Printer ( serializeExprWithConfig
-                                         , serializeSymFn
                                          , serializeBaseType
                                          , Config(..)
                                          , Result(..)
@@ -182,10 +181,7 @@ convertSimpleDef _ paramVars (MapF.Pair loc expr) =
                                         ++" which did not correspond to a known"
                                         ++" architecture location.")
             ]
-               
-convertSomeSymFn :: SomeExprSymFn sym -> SExpr
-convertSomeSymFn (SomeExprSymFn fn) = ident $ S.solverSymbolAsText $ S.symFnName fn
-  
+
 showSomeExprBoundVar :: Some (S.ExprBoundVar t) -> String
 showSomeExprBoundVar (Some bv) = T.unpack $ S.solverSymbolAsText $ S.bvarName bv
 
@@ -208,7 +204,8 @@ sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
        , L [ident "defs", convertDefs opVars litVars defs]
        ]
 
-sexprConvertFunction :: FunctionFormula (S.ExprBuilder t st fs) tps
+sexprConvertFunction :: forall t st fs tps
+                      . FunctionFormula (S.ExprBuilder t st fs) tps
                      -> SExpr
 sexprConvertFunction (FunctionFormula { ffName = name
                                       , ffArgTypes = argTypes
@@ -216,11 +213,41 @@ sexprConvertFunction (FunctionFormula { ffName = name
                                       , ffRetType = retType
                                       , ffDef = def
                                       }) =
-  L [ L [ ident "function", ident (T.pack name)]
+  let
+    expr = case S.symFnInfo def of
+      S.DefinedFnInfo _ expr' _ -> expr'
+      _ -> error "sexprConvertFunction: expected defined function"
+    Result body freeVarNameTable symFnNameTable =
+      serializeExprWithConfig
+        defaultConfig { cfgAllowFreeVars = True
+                      , cfgAllowFreeSymFns = True}
+        expr
+    exprs :: [SExpr]
+    exprs = [ L [ident nm, ident (argumentName bv) ]
+            | (Some bv, nm) <- OMap.toAscList freeVarNameTable
+            ]
+    symFns :: [SExpr]
+    symFns = [ L [ ident nm, convertSomeSymFn sfn ]
+             | (sfn, nm) <- OMap.toAscList symFnNameTable
+             ]
+  in L [ L [ ident "function", ident (T.pack name)]
        , L [ ident "arguments", convertArgumentVars argTypes argVars ]
        , L [ ident "return", serializeBaseType retType ]
-       , L [ ident "body", serializeSymFn def ]
+       , L [ ident "body", L [ ident "with", L (exprs++symFns), body ] ]
        ]
+
+argumentName :: WI.BoundVar (S.ExprBuilder t st fs) tp -> T.Text
+argumentName bv = "op." <> S.solverSymbolAsText (S.bvarName bv)
+
+convertSomeSymFn :: SomeExprSymFn sym -> SExpr
+convertSomeSymFn (SomeExprSymFn fn) =
+  let
+    rawnm = S.solverSymbolAsText $ S.symFnName fn
+    prefix = case S.symFnInfo fn of
+      S.DefinedFnInfo{} -> "df."
+      S.UninterpFnInfo{} -> "uf."
+      _ -> error "convertSomeSymFn: unexpected function kind"
+  in ident (prefix <> rawnm)
 
 convertUses :: (ShowF (A.Location arch))
             => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
