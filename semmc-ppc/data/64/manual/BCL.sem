@@ -1,25 +1,29 @@
 ;; BC (B-form, AA=0, LK=1)
 ;; This form is actually equivalent to BT, which has the BO field=01100
 ((operands
- ((target . 'Condbrtarget)
-  (bi . 'Crbitrc)))
+ ((target Condbrtarget)
+  (bi Crbitrc)))
  (in
-  ('IP 'CR 'CTR))
+  (loc.IP loc.CR loc.CTR))
  (defs
-  (('LNK
-   (bvadd 'IP #x0000000000000004))
-   ('IP
-    (ite
-     (notp
-      (bveq
-       #b1
-       ((_ extract 0 0)
-        (bvlshr
-         'CR
-         ((_ zero_extend 27)
-          (bvsub #b11111 bi))))))
-     (bvadd
-      ((_ sign_extend 48)
-       (concat target #b00))
-      'IP)
-     (bvadd 'IP #x0000000000000004))))))
+  ((loc.LNK
+   (with
+    ()
+    (bvadd loc.IP #x0000000000000004)))
+   (loc.IP
+    (with
+     ()
+     (ite
+      (notp
+       (bveq
+        #b1
+        ((_ extract 0 0)
+         (bvlshr
+          loc.CR
+          ((_ zero_extend 27)
+           (bvsub #b11111 op.bi))))))
+      (bvadd
+       ((_ sign_extend 48)
+        (concat op.target #b00))
+       loc.IP)
+      (bvadd loc.IP #x0000000000000004)))))))

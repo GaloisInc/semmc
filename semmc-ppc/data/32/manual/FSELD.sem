@@ -1,20 +1,24 @@
 ;; Floating-Point Select (A-form)
 ((operands
- ((frT . 'Fprc)
-  (frB . 'Fprc)
-  (frC . 'Fprc)
-  (frA . 'Fprc)))
+ ((frT Fprc)
+  (frB Fprc)
+  (frC Fprc)
+  (frA Fprc)))
  (in
-  (frB frC frA 'IP))
+  (op.frB op.frC op.frA loc.IP))
  (defs
-  ((frT
-   (ite
-    (fled
-     (fp_binary_to_double #x0000000000000000)
-     (fp_binary_to_double
-      ((_ extract 127 64)
-       frA)))
-    frC
-    frB))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.frT
+   (with
+    ()
+    (ite
+     (fled
+      (fp_binary_to_double #x0000000000000000)
+      (fp_binary_to_double
+       ((_ extract 127 64)
+        op.frA)))
+     op.frC
+     op.frB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -29,6 +29,8 @@ library
                      , dismantle-tablegen
                      , parameterized-utils >= 1 && < 2.1
                      , semmc
+                     , semmc-learning
+                     , semmc-synthesis
                      , what4 >= 0.4
                      
 executable semmc-toy-stratify
@@ -43,7 +45,7 @@ executable semmc-toy-stratify
                      , parameterized-utils
                      , semmc
                      , semmc-toy
-
+                     , semmc-learning
                      , async
                      , directory
                      , optparse-applicative

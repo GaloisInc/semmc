@@ -1,6 +1,8 @@
 ((operands ())
  (in
-  ('IP))
+  (loc.IP))
  (defs
-  (('IP
-   (bvadd 'IP #x00000004)))))
+  ((loc.IP
+   (with
+    ()
+    (bvadd loc.IP #x00000004))))))

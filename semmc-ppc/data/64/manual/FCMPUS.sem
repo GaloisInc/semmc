@@ -1,30 +1,85 @@
 ;; Floating Compare Unordered (X-form)
 ((operands
- ((bf . 'Crrc)
-  (frB . 'Fprc)
-  (frA . 'Fprc)))
+ ((bf Crrc)
+  (frB Fprc)
+  (frA Fprc)))
  (in
-  ('FPSCR 'CR frB frA bf 'IP))
+  (loc.FPSCR loc.CR op.frB op.frA op.bf loc.IP))
  (defs
-  (('FPSCR
-   (bvor
-    (bvand
-     'FPSCR
+  ((loc.FPSCR
+   (with
+    ()
+    (bvor
+     (bvand
+      loc.FPSCR
+      (concat
+       (concat #xffff #x0)
+       #xfff))
      (concat
-      (concat #xffff #x0)
-      #xfff))
-    (concat
-     (concat
-      #x0000
+      (concat
+       #x0000
+       (concat
+        (ite
+         (fltd
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            op.frA))
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            op.frB)))
+         #b1
+         #b0)
+        (concat
+         (ite
+          (fltd
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             op.frB))
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             op.frA)))
+          #b1
+          #b0)
+         (concat
+          (ite
+           (feqd
+            (fp_binary_to_double
+             ((_ extract 127 64)
+              op.frA))
+            (fp_binary_to_double
+             ((_ extract 127 64)
+              op.frB)))
+           #b1
+           #b0)
+          (ite
+           (orp
+            (fnand
+             (fp_binary_to_double
+              ((_ extract 127 64)
+               op.frA)))
+            (fnand
+             (fp_binary_to_double
+              ((_ extract 127 64)
+               op.frB))))
+           #b1
+           #b0)))))
+      #x000))))
+   (loc.CR
+    (with
+     ()
+     (call
+      df.updateCRField
+      loc.CR
+      op.bf
       (concat
        (ite
         (fltd
          (fp_binary_to_double
           ((_ extract 127 64)
-           frA))
+           op.frA))
          (fp_binary_to_double
           ((_ extract 127 64)
-           frB)))
+           op.frB)))
         #b1
         #b0)
        (concat
@@ -32,10 +87,10 @@
          (fltd
           (fp_binary_to_double
            ((_ extract 127 64)
-            frB))
+            op.frB))
           (fp_binary_to_double
            ((_ extract 127 64)
-            frA)))
+            op.frA)))
          #b1
          #b0)
         (concat
@@ -43,10 +98,10 @@
           (feqd
            (fp_binary_to_double
             ((_ extract 127 64)
-             frA))
+             op.frA))
            (fp_binary_to_double
             ((_ extract 127 64)
-             frB)))
+             op.frB)))
           #b1
           #b0)
          (ite
@@ -54,62 +109,14 @@
            (fnand
             (fp_binary_to_double
              ((_ extract 127 64)
-              frA)))
+              op.frA)))
            (fnand
             (fp_binary_to_double
              ((_ extract 127 64)
-              frB))))
+              op.frB))))
           #b1
-          #b0)))))
-     #x000)))
-   ('CR
-    ((_ call "df.updateCRField")
-     'CR
-     bf
-     (concat
-      (ite
-       (fltd
-        (fp_binary_to_double
-         ((_ extract 127 64)
-          frA))
-        (fp_binary_to_double
-         ((_ extract 127 64)
-          frB)))
-       #b1
-       #b0)
-      (concat
-       (ite
-        (fltd
-         (fp_binary_to_double
-          ((_ extract 127 64)
-           frB))
-         (fp_binary_to_double
-          ((_ extract 127 64)
-           frA)))
-        #b1
-        #b0)
-       (concat
-        (ite
-         (feqd
-          (fp_binary_to_double
-           ((_ extract 127 64)
-            frA))
-          (fp_binary_to_double
-           ((_ extract 127 64)
-            frB)))
-         #b1
-         #b0)
-        (ite
-         (orp
-          (fnand
-           (fp_binary_to_double
-            ((_ extract 127 64)
-             frA)))
-          (fnand
-           (fp_binary_to_double
-            ((_ extract 127 64)
-             frB))))
-         #b1
-         #b0))))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+          #b0)))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

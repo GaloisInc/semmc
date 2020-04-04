@@ -1,22 +1,23 @@
 ;; BCCTR (XL-form, LK=1)
 ;; This is a generic version of BCCTR
 ((operands
- ((bh . 'I32imm)
-  (bi . 'Crbitrc)
-  (bo . 'U5imm)))
+ ((bh I32imm)
+  (bi Crbitrc)
+  (bo U5imm)))
  (in
-  ('CR 'IP 'LNK 'CTR))
+  (loc.CR loc.IP loc.LNK loc.CTR))
  (defs
-  (('LNK
-   (bvadd 'IP #x00000004))
-   ('IP
-    (ite
-     ((_ call "df.generic_cond_ok")
-      'CR
-      bo
-      bi)
-     (concat
-      ((_ extract 31 2)
-       'CTR)
-      #b00)
-     (bvadd 'IP #x00000004))))))
+  ((loc.LNK
+   (with
+    ()
+    (bvadd loc.IP #x00000004)))
+   (loc.IP
+    (with
+     ()
+     (ite
+      (call df.generic_cond_ok loc.CR op.bo op.bi)
+      (concat
+       ((_ extract 31 2)
+        loc.CTR)
+       #b00)
+      (bvadd loc.IP #x00000004)))))))

@@ -1,16 +1,20 @@
 ;; Shift Left Doubleword (X-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  (rS rB 'IP))
+  (op.rS op.rB loc.IP))
  (defs
-  ((rA
-   (bvshl
-    rS
-    ((_ zero_extend 58)
-     ((_ extract 5 0)
-      rB))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rA
+   (with
+    ()
+    (bvshl
+     op.rS
+     ((_ zero_extend 58)
+      ((_ extract 5 0)
+       op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

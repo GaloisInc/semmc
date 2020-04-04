@@ -44,6 +44,8 @@ import           TestUtils
 import           What4.BaseTypes
 import           What4.Config
 import qualified What4.Interface as WI -- ( getConfiguration )
+import qualified What4.Serialize.Parser as W4P
+
 
 import           Prelude
 
@@ -110,12 +112,13 @@ testRoundTripPrintParse =
                     sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     let opcode = OpPack
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut "TEST: ser/des round trip, simple backend, OpPack"
                     debugOut $ "trace: " <> show trace
                     debugOut $ "parameterizedFormula: " <> show p
                     debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugOut $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula:\n" <> (T.unpack printedFormula)
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
@@ -131,12 +134,13 @@ testRoundTripPrintParse =
                     sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     let opcode = OpWave
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut "TEST: ser/des round trip, simple backend, OpWave"
                     debugOut $ "trace: " <> show trace
                     debugOut $ "parameterizedFormula: " <> show p
                     debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugOut $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula:\n" <> (T.unpack printedFormula)
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
@@ -152,12 +156,13 @@ testRoundTripPrintParse =
                     sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     let opcode = OpSolo
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut "TEST: ser/des round trip, simple backend, OpSolo"
                     debugOut $ "trace: " <> show trace
                     debugOut $ "parameterizedFormula: " <> show p
                     debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugOut $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula:\n" <> (T.unpack printedFormula)
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
@@ -181,12 +186,13 @@ testRoundTripPrintParse =
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
+          debugOut "TEST: ser/des round trip, online backend, OpWave"
           debugOut $ "trace: " <> show trace
           debugOut $ "parameterizedFormula: " <> show p
           debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugOut $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula:\n" <> (T.unpack printedFormula)
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
@@ -212,12 +218,13 @@ testRoundTripPrintParse =
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
+          debugOut "TEST: ser/des round trip, online backend, OpPack"
           debugOut $ "trace: " <> show trace
           debugOut $ "parameterizedFormula: " <> show p
           debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugOut $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula:\n" <> (T.unpack printedFormula)
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
@@ -244,12 +251,13 @@ testRoundTripPrintParse =
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
+          debugOut "TEST: ser/des round trip, online backend, OpSolo"
           debugOut $ "trace: " <> show trace
           debugOut $ "parameterizedFormula: " <> show p
           debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugOut $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula:\n" <> (T.unpack printedFormula)
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
@@ -269,12 +277,14 @@ testRoundTripPrintParse =
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
+          debugOut "TEST: ser/des double round trip, OpWave"
           -- generate a formula
           let opcode = OpWave
           (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
+          debugOut $ "printedFormula round 1:\n" <> (T.unpack printedFormula)
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
@@ -284,6 +294,7 @@ testRoundTripPrintParse =
 
           -- second round trip:
           let printedFormula' = FO.printParameterizedFormula (HR.typeRepr opcode) f
+          debugOut $ "printedFormula round 2:\n" <> (T.unpack printedFormula)
           reForm' <- liftIO $
                      Log.withLogCfg lcfg $
                      FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula'
@@ -303,6 +314,7 @@ testRoundTripPrintParse =
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
+          debugOut "TEST: ser/des double round trip, OpPack"
           let opcode = OpPack
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
@@ -310,6 +322,7 @@ testRoundTripPrintParse =
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
+          debugOut $ "printedFormula round 1:\n" <> (T.unpack printedFormula)
           fenv <- testFormulaEnv sym
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -318,6 +331,7 @@ testRoundTripPrintParse =
 
           -- second round trip:
           let printedFormula' = FO.printParameterizedFormula (HR.typeRepr opcode) f
+          debugOut $ "printedFormula round 2:\n" <> (T.unpack printedFormula)
           reForm' <- liftIO $
                      Log.withLogCfg lcfg $
                      FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula'
@@ -336,6 +350,7 @@ testRoundTripPrintParse =
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
+          debugOut "TEST: ser/des double round trip, OpSolo"
           let opcode = OpSolo
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
@@ -343,6 +358,7 @@ testRoundTripPrintParse =
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
+          debugOut $ "printedFormula round 1:\n" <> (T.unpack printedFormula)
           fenv <- testFormulaEnv sym
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -351,6 +367,7 @@ testRoundTripPrintParse =
 
           -- second round trip:
           let printedFormula' = FO.printParameterizedFormula (HR.typeRepr opcode) f
+          debugOut $ "printedFormula round 2:\n" <> (T.unpack printedFormula)
           reForm' <- liftIO $
                      Log.withLogCfg lcfg $
                      FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula'
@@ -364,6 +381,7 @@ testRoundTripPrintParse =
     , testGroup "DSL specified"
       [
         testCase "Trivial formula, OpSolo" $ do
+          debugOut "TEST: DSL specified Trivial formula, OpSolo"
           let opcode = OpSolo
           -- Use the SemMC DSL to specify a Formula
           let opdef = defineOpcode (show opcode) $
@@ -375,6 +393,7 @@ testRoundTripPrintParse =
           let (pkgN, pkgD) = head $ pkgFormulas pkg
           pkgN @?= show opcode
           let sexprTxt = printDefinition pkgD
+          debugOut $ "printDefinition pkgD: " <> (T.unpack sexprTxt)
           sexprTxt @?= (T.strip $ T.pack $ unlines
                         [ ";; " <> show opcode <> " (no arguments)"
                         , "((operands ())"
@@ -397,6 +416,7 @@ testRoundTripPrintParse =
             Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
 
       , testCase "Small formula, OpSolo" $ do
+          debugOut "TEST: DSL specified Small formula, OpSolo"
           let opcode = OpSolo
               foo = LiteralLoc Literal { lName = "Box_0", lExprType = EBV 32 }
               bar = LiteralLoc Literal { lName = "Bar",   lExprType = EBV 32 }
@@ -414,16 +434,26 @@ testRoundTripPrintParse =
           let (pkgN, pkgD) = head $ pkgFormulas pkg
           pkgN @?= show opcode
           let sexprTxt = printDefinition pkgD
-          sexprTxt @?= (T.strip $ T.pack $ unlines
-                        [ ";; " <> show opcode <> " (no operands, two locations)"
-                        , "((operands ())"
-                        , " (in"
-                        , "  ('Bar 'Box_0))"
-                        , " (defs"
-                        , "  (('Bar #x00000000)"
-                        , "   ('Box_0"
-                        , "    (bvadd 'Bar #x00004a4a)))))"
-                        ])
+          debugOut $ "printDefinition pkgD: " <> (T.unpack sexprTxt)
+          let actual = either
+                       (const "actual failed to parse")
+                       (W4P.printSExpr mempty)
+                       (W4P.parseSExpr sexprTxt)
+              expected = either
+                         (const "expected failed to parse")
+                         (W4P.printSExpr mempty)
+                         (W4P.parseSExpr
+                          (T.strip $ T.pack $ unlines
+                           [ ";; " <> show opcode <> " (no operands, two locations)"
+                           , "((operands ())"
+                           , " (in (loc.Bar loc.Box_0))"
+                           , " (defs"
+                           , "  ((loc.Bar (with () #x00000000))"
+                           , "   (loc.Box_0"
+                           , "    (with ()"
+                           , "      (bvadd loc.Bar #x00004a4a))))))"
+                           ]))
+          actual @?= expected
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
           sym <- liftIO $ newSimpleBackend FloatRealRepr r
@@ -440,6 +470,7 @@ testRoundTripPrintParse =
             Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
 
       , testCase "Medium formula, OpPack" $ do
+          debugOut "TEST: DSL specified Medium formula, OpSolo"
           let opcode = OpPack
               foo = LiteralLoc Literal { lName = "Box_0", lExprType = EBV 32 }
               bar = LiteralLoc Literal { lName = "Bar",   lExprType = EBV 32 }
@@ -474,32 +505,45 @@ testRoundTripPrintParse =
           let (pkgN, pkgD) = head $ pkgFormulas pkg
           pkgN @?= show opcode
           let sexprTxt = printDefinition pkgD
-          sexprTxt @?= (T.strip $ T.pack $ unlines
-                        [ ";; " <> show opcode <> " four operands, two locations"
-                        , "((operands"
-                        , " ((box__0 . 'Box)"
-                        , "  (bar__1 . 'Bar)"
-                        , "  (box__2 . 'Box)"
-                        , "  (box__3 . 'Box)))"
-                        , " (in"
-                        , "  (bar__1 box__2 'Bar 'Box_0))"
-                        , " (defs"
-                        , "  ((box__0"
-                        , "   (bvmul"
-                        , "    (bvadd"
-                        , "     (bvshl #x00000002 box__3)"
-                        , "     #x00000013)"
-                        , "    (bvnot #x00000009)))"
-                        , "   ('Bar #x00000000)"
-                        , "   ('Box_0"
-                        , "    (bvadd"
-                        , "     (ite"
-                        , "      ((_ call \"uf.tst.isBox3\")"
-                        , "       'Bar)"
-                        , "      'Bar"
-                        , "      #x000000a4)"
-                        , "     #x00004a4a)))))"
-                        ])
+          debugOut $ "printDefinition pkgD: " <> (T.unpack sexprTxt)
+          let actual = either
+                       (const "actual failed to parse")
+                       (W4P.printSExpr mempty)
+                       (W4P.parseSExpr sexprTxt)
+              expected = either
+                         (const "expected failed to parse")
+                         (W4P.printSExpr mempty)
+                         (W4P.parseSExpr
+                          (T.strip $ T.pack $ unlines
+                           [ ";; " <> show opcode <> " four operands, two locations"
+                           , "((operands"
+                           , "  ((box__0 Box)"
+                           , "   (bar__1 Bar)"
+                           , "   (box__2 Box)"
+                           , "   (box__3 Box)))"
+                           , " (in"
+                           , "  (op.bar__1"
+                           , "   op.box__2"
+                           , "   loc.Bar"
+                           , "   loc.Box_0))"
+                           , " (defs"
+                           , "  ((op.box__0"
+                           , "    (with ()"
+                           , "     (bvmul"
+                           , "      (bvadd"
+                           , "       (bvshl #x00000002 op.box__3)"
+                           , "       #x00000013)"
+                           , "      (bvnot #x00000009))))"
+                           , "   (loc.Bar (with ()#x00000000))"
+                           , "   (loc.Box_0"
+                           , "    (with ()"
+                           , "     (bvadd"
+                           , "      (ite (call uf.tst.isBox3 loc.Bar)"
+                           , "       loc.Bar"
+                           , "       #x000000a4)"
+                           , "      #x00004a4a))))))"
+                           ]))
+          actual @?= expected
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
           sym <- liftIO $ newSimpleBackend FloatRealRepr r

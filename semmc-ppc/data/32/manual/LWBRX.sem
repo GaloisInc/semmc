@@ -1,68 +1,65 @@
 ;; Load Word Byte-Reverse Indexed (X-form)
-(let
- ((var1
-  (defs
-   ((rT
+((operands
+ ((rT Gprc)
+  (memref Memrr)))
+ (in
+  (loc.Mem op.memref loc.IP))
+ (defs
+  ((op.rT
+   (with
+    ()
     (concat
      ((_ extract 7 0)
-      ((_ call "uf.read_mem.32")
-       'Mem
+      (call
+       uf.read_mem.32
+       loc.Mem
        (bvadd
         (ite
-         ((_ call "uf.ppc.is_r0")
-          ((_ call "uf.ppc.memrr_base")
-           memref))
+         (call
+          uf.ppc.is_r0
+          (call uf.ppc.memrr_base op.memref))
          #x00000000
-         ((_ call "uf.ppc.memrr_base")
-          memref))
-        ((_ call "uf.ppc.memrr_offset")
-         memref))))
+         (call uf.ppc.memrr_base op.memref))
+        (call uf.ppc.memrr_offset op.memref))))
      (concat
       ((_ extract 15 8)
-       ((_ call "uf.read_mem.32")
-        'Mem
+       (call
+        uf.read_mem.32
+        loc.Mem
         (bvadd
          (ite
-          ((_ call "uf.ppc.is_r0")
-           ((_ call "uf.ppc.memrr_base")
-            memref))
+          (call
+           uf.ppc.is_r0
+           (call uf.ppc.memrr_base op.memref))
           #x00000000
-          ((_ call "uf.ppc.memrr_base")
-           memref))
-         ((_ call "uf.ppc.memrr_offset")
-          memref))))
+          (call uf.ppc.memrr_base op.memref))
+         (call uf.ppc.memrr_offset op.memref))))
       (concat
        ((_ extract 23 16)
-        ((_ call "uf.read_mem.32")
-         'Mem
+        (call
+         uf.read_mem.32
+         loc.Mem
          (bvadd
           (ite
-           ((_ call "uf.ppc.is_r0")
-            ((_ call "uf.ppc.memrr_base")
-             memref))
+           (call
+            uf.ppc.is_r0
+            (call uf.ppc.memrr_base op.memref))
            #x00000000
-           ((_ call "uf.ppc.memrr_base")
-            memref))
-          ((_ call "uf.ppc.memrr_offset")
-           memref))))
+           (call uf.ppc.memrr_base op.memref))
+          (call uf.ppc.memrr_offset op.memref))))
        ((_ extract 31 24)
-        ((_ call "uf.read_mem.32")
-         'Mem
+        (call
+         uf.read_mem.32
+         loc.Mem
          (bvadd
           (ite
-           ((_ call "uf.ppc.is_r0")
-            ((_ call "uf.ppc.memrr_base")
-             memref))
+           (call
+            uf.ppc.is_r0
+            (call uf.ppc.memrr_base op.memref))
            #x00000000
-           ((_ call "uf.ppc.memrr_base")
-            memref))
-          ((_ call "uf.ppc.memrr_offset")
-           memref))))))))
-    ('IP
-     (bvadd 'IP #x00000004))))))
- ((operands
-  ((rT . 'Gprc)
-   (memref . 'Memrr)))
-  (in
-   ('Mem memref 'IP))
-  (var1)))
+           (call uf.ppc.memrr_base op.memref))
+          (call uf.ppc.memrr_offset op.memref)))))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

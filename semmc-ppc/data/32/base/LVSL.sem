@@ -1,12 +1,15 @@
 ;; Load Vector for Shift Left Indexed (X-form)
 ((operands
- ((vrT . 'Vrrc)
-  (memrr . 'Memrr)))
+ ((vrT Vrrc)
+  (memrr Memrr)))
  (in
-  ('Mem memrr 'IP))
+  (loc.Mem op.memrr loc.IP))
  (defs
-  ((vrT
-   ((_ call "uf.undefined")
-    #x00000080))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.vrT
+   (with
+    ()
+    (call uf.undefinedBV.128)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

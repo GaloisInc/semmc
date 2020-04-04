@@ -1,11 +1,15 @@
 ((operands
- ((rA . 'Gprc)
-  (imm . 'S16imm)))
+ ((rA Gprc)
+  (imm S16imm)))
  (in
-  (imm 'IP))
+  (op.imm loc.IP))
  (defs
-  ((rA
-   ((_ sign_extend 48)
-    imm))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rA
+   (with
+    ()
+    ((_ sign_extend 48)
+     op.imm)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

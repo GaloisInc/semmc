@@ -1,27 +1,23 @@
 ;; VSX Select (XX4-form)
 ((operands
- ((xT . 'Vsrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)
-  (xC . 'Vsrc)))
+ ((xT Vsrc)
+  (xA Vsrc)
+  (xB Vsrc)
+  (xC Vsrc)))
  (in
-  ('FPSCR xC xB xA 'IP))
+  (loc.FPSCR op.xC op.xB op.xA loc.IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec3")
-     "XXSEL"
-     xA
-     xB
-     xC
-     'FPSCR)))
-   (xT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec3")
-      "XXSEL"
-      xA
-      xB
-      xC
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec3 const.XXSEL op.xA op.xB op.xC loc.FPSCR))))
+   (op.xT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec3 const.XXSEL op.xA op.xB op.xC loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

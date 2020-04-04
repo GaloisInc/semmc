@@ -1,16 +1,20 @@
 ;; Move From FPSCR (X-form, RC=1)
 ((operands
- ((FRT . 'Fprc)))
+ ((FRT Fprc)))
  (in
-  ('FPSCR 'IP))
+  (loc.FPSCR loc.IP))
  (defs
-  (('CR
-   ((_ call "uf.undefined")
-    #x00000020))
-   (FRT
-    (concat
-     'FPSCR
-     ((_ call "uf.undefined")
-      #x00000060)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call uf.undefinedBV.32)))
+   (op.FRT
+    (with
+     ()
+     (concat
+      loc.FPSCR
+      (call uf.undefinedBV.96))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

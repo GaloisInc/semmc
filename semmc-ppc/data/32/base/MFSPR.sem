@@ -1,17 +1,21 @@
 ;; Move From Special Purpose Register (XFX-form)
 ((operands
- ((rT . 'Gprc)
-  (SPR . 'I32imm)))
+ ((rT Gprc)
+  (SPR I32imm)))
  (in
-  ('LNK 'XER 'CTR SPR 'IP))
+  (loc.LNK loc.XER loc.CTR op.SPR loc.IP))
  (defs
-  ((rT
-   (ite
-    (bveq SPR #x00000001)
-    'XER
+  ((op.rT
+   (with
+    ()
     (ite
-     (bveq SPR #x00000008)
-     'LNK
-     'CTR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+     (bveq op.SPR #x00000001)
+     loc.XER
+     (ite
+      (bveq op.SPR #x00000008)
+      loc.LNK
+      loc.CTR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -1,30 +1,30 @@
 ;; VSX Vector Compare Equal To Single-Precision & Record (XX3-form)
 ((operands
- ((xT . 'Vsrc)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  ('XER 'CR 'FPSCR xB xA 'IP))
+  (loc.XER loc.CR loc.FPSCR op.xB op.xA loc.IP))
  (defs
-  (('CR
-   ((_ call "df.updateCRField")
-    'CR
-    #b110
-    ((_ call "uf.undefined")
-     #x00000004)))
-   ('FPSCR
-    ((_ extract 31 0)
-     ((_ call "uf.ppc.vec2")
-      "XVCMPEQSP"
-      xA
-      xB
-      'FPSCR)))
-   (xT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec2")
-      "XVCMPEQSP"
-      xA
-      xB
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.updateCRField
+     loc.CR
+     #b110
+     (call uf.undefinedBV.4))))
+   (loc.FPSCR
+    (with
+     ()
+     ((_ extract 31 0)
+      (call uf.ppc.vec2 const.XVCMPEQSP op.xA op.xB loc.FPSCR))))
+   (op.xT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec2 const.XVCMPEQSP op.xA op.xB loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

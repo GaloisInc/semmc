@@ -1,249 +1,259 @@
 ;; MOV immediate, A32, Encoding A1  (F7.1.107, F7-2708)
-(let
- ((SetT32Mode
-  (bvand
-   #xfeffffff
-   (bvor #x00000020 'CPSR)))
-  (bxWritePC
-   (ite
-    ((_ call "uf.arm.is_r15")
-     rD)
-    (ite
-     (bveq
-      #b1
-      ((_ extract 31 31)
-       ((_ extract 32 1)
-        ((_ call "df.shiftC")
-         ((_ zero_extend 24)
-          ((_ extract 11 4)
-           ((_ extract 15 4)
-            regimm)))
-         #b011
-         (bvshl
-          #x00000001
-          ((_ zero_extend 28)
-           ((_ extract 3 0)
-            ((_ extract 15 4)
-             regimm))))
-         ((_ extract 2 2)
-          'CPSR)))))
-     (bvand
-      #xfffffffe
-      ((_ extract 32 1)
-       ((_ call "df.shiftC")
-        ((_ zero_extend 24)
-         ((_ extract 11 4)
-          ((_ extract 15 4)
-           regimm)))
-        #b011
-        (bvshl
-         #x00000001
-         ((_ zero_extend 28)
-          ((_ extract 3 0)
-           ((_ extract 15 4)
-            regimm))))
-        ((_ extract 2 2)
-         'CPSR))))
-     (ite
-      (bveq
-       #b1
-       ((_ extract 30 30)
-        ((_ extract 32 1)
-         ((_ call "df.shiftC")
-          ((_ zero_extend 24)
-           ((_ extract 11 4)
-            ((_ extract 15 4)
-             regimm)))
-          #b011
-          (bvshl
-           #x00000001
-           ((_ zero_extend 28)
-            ((_ extract 3 0)
-             ((_ extract 15 4)
-              regimm))))
-          ((_ extract 2 2)
-           'CPSR)))))
-      (bvand
-       #xfffffffd
-       ((_ extract 32 1)
-        ((_ call "df.shiftC")
-         ((_ zero_extend 24)
-          ((_ extract 11 4)
-           ((_ extract 15 4)
-            regimm)))
-         #b011
-         (bvshl
-          #x00000001
-          ((_ zero_extend 28)
-           ((_ extract 3 0)
-            ((_ extract 15 4)
-             regimm))))
-         ((_ extract 2 2)
-          'CPSR))))
-      ((_ extract 32 1)
-       ((_ call "df.shiftC")
-        ((_ zero_extend 24)
-         ((_ extract 11 4)
-          ((_ extract 15 4)
-           regimm)))
-        #b011
-        (bvshl
-         #x00000001
-         ((_ zero_extend 28)
-          ((_ extract 3 0)
-           ((_ extract 15 4)
-            regimm))))
-        ((_ extract 2 2)
-         'CPSR)))))
-    (bvadd 'PC #x00000004))))
- ((operands
-  ((rD . 'GPR)
-   (setcc . 'Cc_out)
-   (predBits . 'Pred)
-   (regimm . 'Shift_so_reg_imm)))
-  (in
-   (regimm setcc 'CPSR 'PC))
-  (defs
-   (('PC
-    (bxWritePC))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
+((operands
+ ((rD GPR)
+  (setcc Cc_out)
+  (predBits Pred)
+  (regimm Shift_so_reg_imm)))
+ (in
+  (op.regimm op.setcc loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((bxWritePC
       (ite
-       (andp
-        (bveq setcc #b1)
-        (notp
-         ((_ call "uf.arm.is_r15")
-          rD)))
-       (concat
-        (concat
-         ((_ extract 0 0)
+       (call uf.arm.is_r15 op.rD)
+       (ite
+        (bveq
+         #b1
+         ((_ extract 31 31)
           ((_ extract 32 1)
-           ((_ call "df.shiftC")
+           (call
+            df.shiftC
             ((_ zero_extend 24)
              ((_ extract 11 4)
               ((_ extract 15 4)
-               regimm)))
+               op.regimm)))
             #b011
             (bvshl
              #x00000001
              ((_ zero_extend 28)
               ((_ extract 3 0)
                ((_ extract 15 4)
-                regimm))))
+                op.regimm))))
             ((_ extract 2 2)
-             'CPSR))))
-         (concat
-          ((_ call "df.isZeroBit")
-           ((_ extract 32 1)
-            ((_ call "df.shiftC")
-             ((_ zero_extend 24)
-              ((_ extract 11 4)
-               ((_ extract 15 4)
-                regimm)))
-             #b011
-             (bvshl
-              #x00000001
-              ((_ zero_extend 28)
-               ((_ extract 3 0)
-                ((_ extract 15 4)
-                 regimm))))
-             ((_ extract 2 2)
-              'CPSR))))
-          (concat
-           ((_ extract 0 0)
-            ((_ call "df.shiftC")
-             ((_ zero_extend 24)
-              ((_ extract 11 4)
-               ((_ extract 15 4)
-                regimm)))
-             #b011
-             (bvshl
-              #x00000001
-              ((_ zero_extend 28)
-               ((_ extract 3 0)
-                ((_ extract 15 4)
-                 regimm))))
-             ((_ extract 2 2)
-              'CPSR)))
-           ((_ extract 3 3)
-            'CPSR))))
-        ((_ extract 31 4)
-         (ite
-          ((_ call "uf.arm.is_r15")
-           rD)
-          (ite
-           (bveq
-            #b1
-            ((_ extract 31 31)
-             ((_ extract 32 1)
-              ((_ call "df.shiftC")
-               ((_ zero_extend 24)
-                ((_ extract 11 4)
-                 ((_ extract 15 4)
-                  regimm)))
-               #b011
-               (bvshl
-                #x00000001
-                ((_ zero_extend 28)
-                 ((_ extract 3 0)
-                  ((_ extract 15 4)
-                   regimm))))
-               ((_ extract 2 2)
-                'CPSR)))))
-           (SetT32Mode)
-           'CPSR)
-          'CPSR)))
-       (ite
-        ((_ call "uf.arm.is_r15")
-         rD)
+             loc.CPSR)))))
+        (bvand
+         #xfffffffe
+         ((_ extract 32 1)
+          (call
+           df.shiftC
+           ((_ zero_extend 24)
+            ((_ extract 11 4)
+             ((_ extract 15 4)
+              op.regimm)))
+           #b011
+           (bvshl
+            #x00000001
+            ((_ zero_extend 28)
+             ((_ extract 3 0)
+              ((_ extract 15 4)
+               op.regimm))))
+           ((_ extract 2 2)
+            loc.CPSR))))
         (ite
          (bveq
           #b1
-          ((_ extract 31 31)
+          ((_ extract 30 30)
            ((_ extract 32 1)
-            ((_ call "df.shiftC")
+            (call
+             df.shiftC
              ((_ zero_extend 24)
               ((_ extract 11 4)
                ((_ extract 15 4)
-                regimm)))
+                op.regimm)))
              #b011
              (bvshl
               #x00000001
               ((_ zero_extend 28)
                ((_ extract 3 0)
                 ((_ extract 15 4)
-                 regimm))))
+                 op.regimm))))
              ((_ extract 2 2)
-              'CPSR)))))
-         (SetT32Mode)
-         'CPSR)
-        'CPSR))
-      'CPSR))
-    (rD
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
+              loc.CPSR)))))
+         (bvand
+          #xfffffffd
+          ((_ extract 32 1)
+           (call
+            df.shiftC
+            ((_ zero_extend 24)
+             ((_ extract 11 4)
+              ((_ extract 15 4)
+               op.regimm)))
+            #b011
+            (bvshl
+             #x00000001
+             ((_ zero_extend 28)
+              ((_ extract 3 0)
+               ((_ extract 15 4)
+                op.regimm))))
+            ((_ extract 2 2)
+             loc.CPSR))))
+         ((_ extract 32 1)
+          (call
+           df.shiftC
+           ((_ zero_extend 24)
+            ((_ extract 11 4)
+             ((_ extract 15 4)
+              op.regimm)))
+           #b011
+           (bvshl
+            #x00000001
+            ((_ zero_extend 28)
+             ((_ extract 3 0)
+              ((_ extract 15 4)
+               op.regimm))))
+           ((_ extract 2 2)
+            loc.CPSR)))))
+       (bvadd loc.PC #x00000004))))
+     bxWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((SetT32Mode
+       (bvand
+        #xfeffffff
+        (bvor #x00000020 loc.CPSR))))
       (ite
-       ((_ call "uf.arm.is_r15")
-        rD)
-       rD
+       (call df.testCondition op.predBits loc.CPSR)
+       (ite
+        (andp
+         (bveq op.setcc #b1)
+         (notp
+          (call uf.arm.is_r15 op.rD)))
+        (concat
+         (concat
+          ((_ extract 0 0)
+           ((_ extract 32 1)
+            (call
+             df.shiftC
+             ((_ zero_extend 24)
+              ((_ extract 11 4)
+               ((_ extract 15 4)
+                op.regimm)))
+             #b011
+             (bvshl
+              #x00000001
+              ((_ zero_extend 28)
+               ((_ extract 3 0)
+                ((_ extract 15 4)
+                 op.regimm))))
+             ((_ extract 2 2)
+              loc.CPSR))))
+          (concat
+           (call
+            df.isZeroBit
+            ((_ extract 32 1)
+             (call
+              df.shiftC
+              ((_ zero_extend 24)
+               ((_ extract 11 4)
+                ((_ extract 15 4)
+                 op.regimm)))
+              #b011
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ extract 3 0)
+                 ((_ extract 15 4)
+                  op.regimm))))
+              ((_ extract 2 2)
+               loc.CPSR))))
+           (concat
+            ((_ extract 0 0)
+             (call
+              df.shiftC
+              ((_ zero_extend 24)
+               ((_ extract 11 4)
+                ((_ extract 15 4)
+                 op.regimm)))
+              #b011
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ extract 3 0)
+                 ((_ extract 15 4)
+                  op.regimm))))
+              ((_ extract 2 2)
+               loc.CPSR)))
+            ((_ extract 3 3)
+             loc.CPSR))))
+         ((_ extract 31 4)
+          (ite
+           (call uf.arm.is_r15 op.rD)
+           (ite
+            (bveq
+             #b1
+             ((_ extract 31 31)
+              ((_ extract 32 1)
+               (call
+                df.shiftC
+                ((_ zero_extend 24)
+                 ((_ extract 11 4)
+                  ((_ extract 15 4)
+                   op.regimm)))
+                #b011
+                (bvshl
+                 #x00000001
+                 ((_ zero_extend 28)
+                  ((_ extract 3 0)
+                   ((_ extract 15 4)
+                    op.regimm))))
+                ((_ extract 2 2)
+                 loc.CPSR)))))
+            SetT32Mode
+            loc.CPSR)
+           loc.CPSR)))
+        (ite
+         (call uf.arm.is_r15 op.rD)
+         (ite
+          (bveq
+           #b1
+           ((_ extract 31 31)
+            ((_ extract 32 1)
+             (call
+              df.shiftC
+              ((_ zero_extend 24)
+               ((_ extract 11 4)
+                ((_ extract 15 4)
+                 op.regimm)))
+              #b011
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ extract 3 0)
+                 ((_ extract 15 4)
+                  op.regimm))))
+              ((_ extract 2 2)
+               loc.CPSR)))))
+          SetT32Mode
+          loc.CPSR)
+         loc.CPSR))
+       loc.CPSR))))
+   (op.rD
+    (with
+     ()
+     (ite
+      (call df.testCondition op.predBits loc.CPSR)
+      (ite
+       (call uf.arm.is_r15 op.rD)
+       op.rD
        ((_ extract 32 1)
-        ((_ call "df.shiftC")
+        (call
+         df.shiftC
          ((_ zero_extend 24)
           ((_ extract 11 4)
            ((_ extract 15 4)
-            regimm)))
+            op.regimm)))
          #b011
          (bvshl
           #x00000001
           ((_ zero_extend 28)
            ((_ extract 3 0)
             ((_ extract 15 4)
-             regimm))))
+             op.regimm))))
          ((_ extract 2 2)
-          'CPSR))))
-      rD))))))
+          loc.CPSR))))
+      op.rD))))))

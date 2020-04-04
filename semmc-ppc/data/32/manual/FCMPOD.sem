@@ -1,13 +1,19 @@
 ;; Floating Compare Ordered (X-form)
-(let
- ((var1
-  (defs
-   (('FPSCR
+((operands
+ ((bf Crrc)
+  (frA Fprc)
+  (frB Fprc)))
+ (in
+  (loc.FPSCR loc.CR op.frB op.frA op.bf loc.IP))
+ (defs
+  ((loc.FPSCR
+   (with
+    ()
     (bvor
      (bvand
       (bvor
        (bvand
-        'FPSCR
+        loc.FPSCR
         (concat
          (concat #xffff #x0)
          #xfff))
@@ -19,10 +25,10 @@
            (fltd
             (fp_binary_to_double
              ((_ extract 127 64)
-              frA))
+              op.frA))
             (fp_binary_to_double
              ((_ extract 127 64)
-              frB)))
+              op.frB)))
            #b1
            #b0)
           (concat
@@ -30,10 +36,10 @@
             (fltd
              (fp_binary_to_double
               ((_ extract 127 64)
-               frB))
+               op.frB))
              (fp_binary_to_double
               ((_ extract 127 64)
-               frA)))
+               op.frA)))
             #b1
             #b0)
            (concat
@@ -41,10 +47,10 @@
              (feqd
               (fp_binary_to_double
                ((_ extract 127 64)
-                frA))
+                op.frA))
               (fp_binary_to_double
                ((_ extract 127 64)
-                frB)))
+                op.frB)))
              #b1
              #b0)
             (ite
@@ -52,11 +58,11 @@
               (fnand
                (fp_binary_to_double
                 ((_ extract 127 64)
-                 frA)))
+                 op.frA)))
               (fnand
                (fp_binary_to_double
                 ((_ extract 127 64)
-                 frB))))
+                 op.frB))))
              #b1
              #b0)))))
         #x000))
@@ -71,27 +77,30 @@
          (fnand
           (fp_binary_to_double
            ((_ extract 127 64)
-            frA)))
+            op.frA)))
          (fnand
           (fp_binary_to_double
            ((_ extract 127 64)
-            frB))))
+            op.frB))))
         #b1
         #b0))
-      #b0000000000000000000)))
-    ('CR
-     ((_ call "df.updateCRField")
-      'CR
-      bf
+      #b0000000000000000000))))
+   (loc.CR
+    (with
+     ()
+     (call
+      df.updateCRField
+      loc.CR
+      op.bf
       (concat
        (ite
         (fltd
          (fp_binary_to_double
           ((_ extract 127 64)
-           frA))
+           op.frA))
          (fp_binary_to_double
           ((_ extract 127 64)
-           frB)))
+           op.frB)))
         #b1
         #b0)
        (concat
@@ -99,10 +108,10 @@
          (fltd
           (fp_binary_to_double
            ((_ extract 127 64)
-            frB))
+            op.frB))
           (fp_binary_to_double
            ((_ extract 127 64)
-            frA)))
+            op.frA)))
          #b1
          #b0)
         (concat
@@ -110,10 +119,10 @@
           (feqd
            (fp_binary_to_double
             ((_ extract 127 64)
-             frA))
+             op.frA))
            (fp_binary_to_double
             ((_ extract 127 64)
-             frB)))
+             op.frB)))
           #b1
           #b0)
          (ite
@@ -121,19 +130,14 @@
            (fnand
             (fp_binary_to_double
              ((_ extract 127 64)
-              frA)))
+              op.frA)))
            (fnand
             (fp_binary_to_double
              ((_ extract 127 64)
-              frB))))
+              op.frB))))
           #b1
-          #b0))))))
-    ('IP
-     (bvadd 'IP #x00000004))))))
- ((operands
-  ((bf . 'Crrc)
-   (frA . 'Fprc)
-   (frB . 'Fprc)))
-  (in
-   ('FPSCR 'CR frB frA bf 'IP))
-  (var1)))
+          #b0)))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

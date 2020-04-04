@@ -1,102 +1,86 @@
 ;; Load Register, Post-indexed (P=0, W=0), immediate (A32), Encoding A1
 ;; doc: F7.1.69, page F7-2636
-(let
- ((updAddr
-  (ite
-   ((_ call "uf.a32.am2offset_imm_add")
-    imm)
-   (bvadd
-    off
-    ((_ zero_extend 20)
-     ((_ call "uf.a32.am2offset_imm_imm")
-      imm)))
-   (bvsub
-    off
-    ((_ zero_extend 20)
-     ((_ call "uf.a32.am2offset_imm_imm")
-      imm)))))
-  (SetT32Mode
-   (bvand
-    #xfeffffff
-    (bvor #x00000020 'CPSR)))
-  (bxWritePC
-   (ite
-    ((_ call "uf.arm.is_r15")
-     gpr)
-    (ite
-     (bveq
-      #b1
-      ((_ extract 31 31)
-       ((_ call "uf.read_mem.32")
-        'Mem
-        off)))
-     (bvand
-      #xfffffffe
-      ((_ call "uf.read_mem.32")
-       'Mem
-       off))
-     (ite
-      (bveq
-       #b1
-       ((_ extract 30 30)
-        ((_ call "uf.read_mem.32")
-         'Mem
-         off)))
-      (bvand
-       #xfffffffd
-       ((_ call "uf.read_mem.32")
-        'Mem
-        off))
-      ((_ call "uf.read_mem.32")
-       'Mem
-       off)))
-    (bvadd 'PC #x00000004))))
- ((operands
-  ((gpr . 'GPR)
-   (predBits . 'Pred)
-   (imm . 'Am2offset_imm)
-   (off . 'Addr_offset_none)))
-  (in
-   ('Mem off imm 'CPSR 'PC))
-  (defs
-   (('PC
-    (bxWritePC))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
+((operands
+ ((gpr GPR)
+  (predBits Pred)
+  (imm Am2offset_imm)
+  (off Addr_offset_none)))
+ (in
+  (loc.Mem op.off op.imm loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((bxWritePC
       (ite
-       ((_ call "uf.arm.is_r15")
-        gpr)
+       (call uf.arm.is_r15 op.gpr)
        (ite
         (bveq
          #b1
          ((_ extract 31 31)
-          ((_ call "uf.read_mem.32")
-           'Mem
-           off)))
-        (SetT32Mode)
-        'CPSR)
-       'CPSR)
-      'CPSR))
-    (off
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
-      (updAddr)
-      off))
-    (gpr
-     (ite
-      ((_ call "df.testCondition")
-       predBits
-       'CPSR)
+          (call uf.read_mem.32 loc.Mem op.off)))
+        (bvand
+         #xfffffffe
+         (call uf.read_mem.32 loc.Mem op.off))
+        (ite
+         (bveq
+          #b1
+          ((_ extract 30 30)
+           (call uf.read_mem.32 loc.Mem op.off)))
+         (bvand
+          #xfffffffd
+          (call uf.read_mem.32 loc.Mem op.off))
+         (call uf.read_mem.32 loc.Mem op.off)))
+       (bvadd loc.PC #x00000004))))
+     bxWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((SetT32Mode
+       (bvand
+        #xfeffffff
+        (bvor #x00000020 loc.CPSR))))
       (ite
-       ((_ call "uf.arm.is_r15")
-        gpr)
-       gpr
-       ((_ call "uf.read_mem.32")
-        'Mem
-        off))
-      gpr))))))
+       (call df.testCondition op.predBits loc.CPSR)
+       (ite
+        (call uf.arm.is_r15 op.gpr)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 31 31)
+           (call uf.read_mem.32 loc.Mem op.off)))
+         SetT32Mode
+         loc.CPSR)
+        loc.CPSR)
+       loc.CPSR))))
+   (op.off
+    (with
+     ()
+     (let
+      ((updAddr
+       (ite
+        (call uf.a32.am2offset_imm_add op.imm)
+        (bvadd
+         op.off
+         ((_ zero_extend 20)
+          (call uf.a32.am2offset_imm_imm op.imm)))
+        (bvsub
+         op.off
+         ((_ zero_extend 20)
+          (call uf.a32.am2offset_imm_imm op.imm))))))
+      (ite
+       (call df.testCondition op.predBits loc.CPSR)
+       updAddr
+       op.off))))
+   (op.gpr
+    (with
+     ()
+     (ite
+      (call df.testCondition op.predBits loc.CPSR)
+      (ite
+       (call uf.arm.is_r15 op.gpr)
+       op.gpr
+       (call uf.read_mem.32 loc.Mem op.off))
+      op.gpr))))))

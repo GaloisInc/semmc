@@ -1,15 +1,19 @@
 ;; Add to Zero Extended (XO-form, RC=0)
 ((operands
- ((rT . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rA Gprc)))
  (in
-  ('XER rA 'IP))
+  (loc.XER op.rA loc.IP))
  (defs
-  ((rT
-   (bvadd
-    rA
-    ((_ zero_extend 31)
-     ((_ extract 29 29)
-      'XER))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvadd
+     op.rA
+     ((_ zero_extend 31)
+      ((_ extract 29 29)
+       loc.XER)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

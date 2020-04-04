@@ -1,23 +1,30 @@
 ;; ADD. (XO-form, OE=0, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA rB 'IP))
+  (loc.XER loc.CR op.rA op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     (bvadd rA rB)
-     #x00000000)
-    (bvsgt
-     (bvadd rA rB)
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    (bvadd rA rB))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvadd op.rA op.rB)
+      #x00000000)
+     (bvsgt
+      (bvadd op.rA op.rB)
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
+     (bvadd op.rA op.rB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

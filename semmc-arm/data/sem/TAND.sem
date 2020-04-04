@@ -1,123 +1,144 @@
 ;; AND register, Encoding T1 (F7.1.14, F7-2558)
 ;; This encoding has no shift; fixed to 0
-(let
- ((immShift
-  (concat
-   #b000
-   ((_ zero_extend 27)
-    #b00000)))
-  (nzcv
-   (concat
-    ((_ extract 0 0)
-     (bvand
-      rDN
-      ((_ extract 32 1)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 2 0)
-         (immShift))
-        ((_ extract 34 3)
-         (immShift))
-        ((_ extract 2 2)
-         'CPSR)))))
-    (concat
-     ((_ call "df.isZeroBit")
-      (bvand
-       rDN
-       ((_ extract 32 1)
-        ((_ call "df.shiftC")
-         rM
-         ((_ extract 2 0)
-          (immShift))
-         ((_ extract 34 3)
-          (immShift))
-         ((_ extract 2 2)
-          'CPSR)))))
-     (concat
-      ((_ extract 0 0)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 2 0)
-         (immShift))
-        ((_ extract 34 3)
-         (immShift))
-        ((_ extract 2 2)
-         'CPSR)))
-      ((_ extract 3 3)
-       'CPSR)))))
-  (branchWritePC
-   (ite
-    ((_ call "uf.arm.is_r15")
-     rDN)
-    (bvand
-     #xfffffffd
-     (bvand
-      rDN
-      ((_ extract 32 1)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 2 0)
-         (immShift))
-        ((_ extract 34 3)
-         (immShift))
-        ((_ extract 2 2)
-         'CPSR)))))
-    (bvadd 'PC #x00000002))))
- ((operands
-  ((rDN . 'TGPR)
-   (rM . 'TGPR)))
-  (in
-   (rM rDN 'CPSR 'PC))
-  (defs
-   (('PC
-    (branchWritePC))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
-      (ite
-       (andp
-        (notp
-         (bvne
-          #x00
-          (concat
-           ((_ extract 19 16)
-            'CPSR)
-           (concat
-            ((_ extract 21 20)
-             'CPSR)
-            ((_ extract 6 5)
-             'CPSR)))))
-        (notp
-         ((_ call "uf.arm.is_r15")
-          rDN)))
+((operands
+ ((rDN TGPR)
+  (rM TGPR)))
+ (in
+  (op.rM op.rDN loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (let
+     ((immShift
+      (concat
+       #b000
+       ((_ zero_extend 27)
+        #b00000)))
+      (branchWritePC
+       (ite
+        (call uf.arm.is_r15 op.rDN)
+        (bvand
+         #xfffffffd
+         (bvand
+          op.rDN
+          ((_ extract 32 1)
+           (call
+            df.shiftC
+            op.rM
+            ((_ extract 2 0)
+             immShift)
+            ((_ extract 34 3)
+             immShift)
+            ((_ extract 2 2)
+             loc.CPSR)))))
+        (bvadd loc.PC #x00000002))))
+     branchWritePC)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((immShift
        (concat
-        (nzcv)
-        ((_ extract 31 4)
-         'CPSR))
-       'CPSR)
-      'CPSR))
-    (rDN
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+        #b000
+        ((_ zero_extend 27)
+         #b00000)))
+       (nzcv
+        (concat
+         ((_ extract 0 0)
+          (bvand
+           op.rDN
+           ((_ extract 32 1)
+            (call
+             df.shiftC
+             op.rM
+             ((_ extract 2 0)
+              immShift)
+             ((_ extract 34 3)
+              immShift)
+             ((_ extract 2 2)
+              loc.CPSR)))))
+         (concat
+          (call
+           df.isZeroBit
+           (bvand
+            op.rDN
+            ((_ extract 32 1)
+             (call
+              df.shiftC
+              op.rM
+              ((_ extract 2 0)
+               immShift)
+              ((_ extract 34 3)
+               immShift)
+              ((_ extract 2 2)
+               loc.CPSR)))))
+          (concat
+           ((_ extract 0 0)
+            (call
+             df.shiftC
+             op.rM
+             ((_ extract 2 0)
+              immShift)
+             ((_ extract 34 3)
+              immShift)
+             ((_ extract 2 2)
+              loc.CPSR)))
+           ((_ extract 3 3)
+            loc.CPSR))))))
       (ite
-       ((_ call "uf.arm.is_r15")
-        rDN)
-       rDN
-       (bvand
-        rDN
-        ((_ extract 32 1)
-         ((_ call "df.shiftC")
-          rM
-          ((_ extract 2 0)
-           (immShift))
-          ((_ extract 34 3)
-           (immShift))
-          ((_ extract 2 2)
-           'CPSR)))))
-      rDN))))))
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (andp
+         (notp
+          (bvne
+           #x00
+           (concat
+            ((_ extract 19 16)
+             loc.CPSR)
+            (concat
+             ((_ extract 21 20)
+              loc.CPSR)
+             ((_ extract 6 5)
+              loc.CPSR)))))
+         (notp
+          (call uf.arm.is_r15 op.rDN)))
+        (concat
+         nzcv
+         ((_ extract 31 4)
+          loc.CPSR))
+        loc.CPSR)
+       loc.CPSR))))
+   (op.rDN
+    (with
+     ()
+     (let
+      ((immShift
+       (concat
+        #b000
+        ((_ zero_extend 27)
+         #b00000))))
+      (ite
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (call uf.arm.is_r15 op.rDN)
+        op.rDN
+        (bvand
+         op.rDN
+         ((_ extract 32 1)
+          (call
+           df.shiftC
+           op.rM
+           ((_ extract 2 0)
+            immShift)
+           ((_ extract 34 3)
+            immShift)
+           ((_ extract 2 2)
+            loc.CPSR)))))
+       op.rDN)))))))

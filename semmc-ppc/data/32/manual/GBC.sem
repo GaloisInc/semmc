@@ -1,40 +1,42 @@
 ;; GBC (B-form, AA=0, LK=0)
 ;; Generic branch conditional with arbitrary BO
 ((operands
- ((target . 'Condbrtarget)
-  (bi . 'Crbitrc)
-  (bo . 'U5imm)))
+ ((target Condbrtarget)
+  (bi Crbitrc)
+  (bo U5imm)))
  (in
-  ('IP 'CR 'CTR))
+  (loc.IP loc.CR loc.CTR))
  (defs
-  (('IP
-   (ite
-    (andp
-     ((_ call "df.generic_cond_ok")
-      'CR
-      bo
-      bi)
-     ((_ call "df.generic_ctr_ok")
-      bo
-      (ite
-       (notp
-        (bveq
-         #b1
-         ((_ extract 0 0)
-          (bvlshr bo #b00010))))
-       (bvsub 'CTR #x00000001)
-       'CTR)))
-    (bvadd
-     ((_ sign_extend 16)
-      (concat target #b00))
-     'IP)
-    (bvadd 'IP #x00000004)))
-   ('CTR
+  ((loc.IP
+   (with
+    ()
     (ite
-     (notp
-      (bveq
-       #b1
-       ((_ extract 0 0)
-        (bvlshr bo #b00010))))
-     (bvsub 'CTR #x00000001)
-     'CTR)))))
+     (andp
+      (call df.generic_cond_ok loc.CR op.bo op.bi)
+      (call
+       df.generic_ctr_ok
+       op.bo
+       (ite
+        (notp
+         (bveq
+          #b1
+          ((_ extract 0 0)
+           (bvlshr op.bo #b00010))))
+        (bvsub loc.CTR #x00000001)
+        loc.CTR)))
+     (bvadd
+      ((_ sign_extend 16)
+       (concat op.target #b00))
+      loc.IP)
+     (bvadd loc.IP #x00000004))))
+   (loc.CTR
+    (with
+     ()
+     (ite
+      (notp
+       (bveq
+        #b1
+        ((_ extract 0 0)
+         (bvlshr op.bo #b00010))))
+      (bvsub loc.CTR #x00000001)
+      loc.CTR))))))

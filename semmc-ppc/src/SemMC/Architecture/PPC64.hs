@@ -40,6 +40,7 @@ import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as AL
 import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Pseudo as AP
 import           SemMC.Architecture.PPC ( AnyPPC, V64 )
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.OperandComponents as POC
@@ -50,9 +51,7 @@ import qualified SemMC.Architecture.PPC64.ConcreteState as PPCS
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
-import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
-import qualified SemMC.Stochastic.RvwpOptimization as R
-import qualified SemMC.Synthesis.Template as T
+import qualified SemMC.Template as T
 import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
@@ -624,9 +623,9 @@ operandToSemanticViewPPC op =
         vsrView rno = V.trivialView Proxy (LocVSR (PPC.VSReg rno))
 
 
-type instance Pseudo PPC = PPCP.PseudoOpcode
+type instance AP.Pseudo PPC = PPCP.PseudoOpcode
 
-instance ArchitectureWithPseudo PPC where
+instance AP.ArchitectureWithPseudo PPC where
   assemblePseudo _ = PPCP.ppcAssemblePseudo (Proxy @PPC)
 
 instance A.IsLocation (Location PPC) where
@@ -706,5 +705,5 @@ parseLocation = do
 
 ----------------------------------------------------------------
 
-instance R.RvwpOptimization PPC where
+instance AP.RvwpOptimization PPC where
   rvwpMov _ _ = Nothing -- TODO. Was not needed to compile semmc-ppc.

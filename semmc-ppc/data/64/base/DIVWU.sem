@@ -1,18 +1,22 @@
 ;; Divide Word Unsigned (XO-form, RC=0)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  (rA rB 'IP))
+  (op.rA op.rB loc.IP))
  (defs
-  ((rT
-   (bvudiv
-    ((_ sign_extend 32)
-     ((_ extract 31 0)
-      rA))
-    ((_ sign_extend 32)
-     ((_ extract 31 0)
-      rB))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvudiv
+     ((_ sign_extend 32)
+      ((_ extract 31 0)
+       op.rA))
+     ((_ sign_extend 32)
+      ((_ extract 31 0)
+       op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

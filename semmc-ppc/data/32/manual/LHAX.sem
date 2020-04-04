@@ -1,23 +1,26 @@
 ;; Load Halfword Algebraic Indexed (X-form)
 ((operands
- ((rT . 'Gprc)
-  (memref . 'Memrr)))
+ ((rT Gprc)
+  (memref Memrr)))
  (in
-  ('Mem memref 'IP))
+  (loc.Mem op.memref loc.IP))
  (defs
-  ((rT
-   ((_ sign_extend 16)
-    ((_ call "uf.read_mem.16")
-     'Mem
-     (bvadd
-      (ite
-       ((_ call "uf.ppc.is_r0")
-        ((_ call "uf.ppc.memrr_base")
-         memref))
-       #x00000000
-       ((_ call "uf.ppc.memrr_base")
-        memref))
-      ((_ call "uf.ppc.memrr_offset")
-       memref)))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with
+    ()
+    ((_ sign_extend 16)
+     (call
+      uf.read_mem.16
+      loc.Mem
+      (bvadd
+       (ite
+        (call
+         uf.ppc.is_r0
+         (call uf.ppc.memrr_base op.memref))
+        #x00000000
+        (call uf.ppc.memrr_base op.memref))
+       (call uf.ppc.memrr_offset op.memref))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

@@ -20,3 +20,4 @@ t32OpcodeInfo = $(DT.captureInfo (const True) ''T32.Opcode)
 -- | All opcodes known for the architecture
 t32Opcodes :: [Some (T32.Opcode T32.Operand)]
 t32Opcodes = map (mapSome DT.capturedOpcode) t32OpcodeInfo
+  

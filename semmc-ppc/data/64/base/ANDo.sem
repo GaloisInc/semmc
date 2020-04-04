@@ -1,23 +1,30 @@
 ;; AND (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rB . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rB Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS rB 'IP))
+  (loc.XER loc.CR op.rS op.rB loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     (bvand rS rB)
-     #x0000000000000000)
-    (bvsgt
-     (bvand rS rB)
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    (bvand rS rB))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvand op.rS op.rB)
+      #x0000000000000000)
+     (bvsgt
+      (bvand op.rS op.rB)
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
+     (bvand op.rS op.rB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))
