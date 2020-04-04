@@ -19,9 +19,9 @@
 module SemMC.Architecture.ARM.ASL
   ( encodingToFormula
   , symFnToFunFormula
+  , ASLSemanticsOpts(..)
   , ASLSemantics(..)
   , loadSemantics
-  , attachSemantics
   ) where
 
 import           GHC.TypeLits
@@ -553,8 +553,30 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
        -> return symFn
       _ -> fail $ "mkUFBundle: missing uninterpreted function: " ++ nm
 
-loadSemantics :: IO ASLSemantics
-loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
+data ASLSemanticsOpts =
+  ASLSemanticsOpts { aslOptTrimRegs :: Bool 
+                   -- ^ only emit a single register 'Location' update
+                   }
+
+postProcess :: forall sym sh
+             . ASLSemanticsOpts
+            -> SF.ParameterizedFormula sym AArch32 sh
+            -> SF.ParameterizedFormula sym AArch32 sh
+postProcess opts pf =
+  case aslOptTrimRegs opts of
+    True ->
+      let
+        filt :: Pair (SF.Parameter AArch32 sh) (WI.SymExpr sym) -> Bool
+        filt (Pair (SF.LiteralParameter (ARM.Location ref)) expr) = case ref of
+          ASL.GPRRef _ | Just Refl <- testEquality ref (ASL.knownGlobalRef @"_R0") -> True
+          ASL.GPRRef _ -> False
+          _ -> True
+          
+        defs' = MapF.fromList $ filter filt $ MapF.toList $ SF.pfDefs pf
+      in pf { SF.pfDefs = defs' }
+
+loadSemantics :: ASLSemanticsOpts -> IO ASLSemantics
+loadSemantics opts = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   Some ng <- PN.newIONonceGenerator
   sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
 
@@ -577,14 +599,14 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   T.hPutStrLn handle "A32 Instructions"
   a32Bytes <- forM a32pfs $ \(Pair opcode pformula) -> do
     let
-      t = SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) pformula
+      t = SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) (postProcess opts pformula)
       bs = T.encodeUtf8 $ t
     T.hPutStrLn handle t
     return (Some opcode, bs)
   T.hPutStrLn handle "T32 Instructions"
   t32Bytes <- forM t32pfs $ \(Pair opcode pformula) -> do
     let
-      t = SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) pformula
+      t = SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) (postProcess opts pformula)
       bs = T.encodeUtf8 $ t
     T.hPutStrLn handle t
     return (Some opcode, bs)
@@ -605,9 +627,9 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
 
   return $ ASLSemantics a32Bytes t32Bytes defBytes
 
-attachSemantics :: TH.ExpQ
-attachSemantics = do
-  ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics
-  [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
-                  $(TH.listE (map toOpcodePair t32sem))
-                  $(TH.listE (map toFunctionPair funsem)) |]
+-- attachSemantics :: TH.ExpQ
+-- attachSemantics = do
+--   ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics
+--   [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
+--                   $(TH.listE (map toOpcodePair t32sem))
+--                   $(TH.listE (map toFunctionPair funsem)) |]

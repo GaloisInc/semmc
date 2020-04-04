@@ -83,6 +83,7 @@ mkLibrary :: [(String, BS.ByteString)] -> IO SomeLib
 mkLibrary dfs = do
   Some ng <- PN.newIONonceGenerator
   sym <- S.newSimpleBackend S.FloatIEEERepr ng
+  WB.startCaching sym
   env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
   lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env dfs
   return $ SomeLib sym lib env
