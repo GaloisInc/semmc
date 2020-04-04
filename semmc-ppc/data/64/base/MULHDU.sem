@@ -1,17 +1,21 @@
 ;; Multiply High Doubleword Unsigned (XO-form, RC=0)
 ((operands
- ((rT . 'Gprc)
-  (rB . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rB Gprc)
+  (rA Gprc)))
  (in
-  (rA rB 'IP))
+  (op.rA op.rB loc.IP))
  (defs
-  ((rT
-   ((_ extract 127 64)
-    (bvmul
-     ((_ zero_extend 64)
-      rA)
-     ((_ zero_extend 64)
-      rB))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rT
+   (with
+    ()
+    ((_ extract 127 64)
+     (bvmul
+      ((_ zero_extend 64)
+       op.rA)
+      ((_ zero_extend 64)
+       op.rB)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

@@ -1,8 +1,11 @@
 ((operands
- ((rA . 'Gprc)))
+ ((rA Gprc)))
  (in
-  ('LNK 'IP))
+  (loc.LNK loc.IP))
  (defs
-  ((rA 'LNK)
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rA
+   (with () loc.LNK))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

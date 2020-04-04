@@ -1,82 +1,83 @@
 ;; Move To Condition Register Fields (XFX-form)
-(let
- ((var1
-  (defs
-   (('CR
+((operands
+ ((rS Gprc)
+  (FXM I32imm)))
+ (in
+  (loc.CR op.rS loc.IP))
+ (defs
+  ((loc.CR
+   (with
+    ()
     (bvor
      (bvand
       ((_ extract 31 0)
-       rS)
+       op.rS)
       (concat
        ((_ sign_extend 3)
         ((_ extract 7 7)
-         FXM))
+         op.FXM))
        (concat
         ((_ sign_extend 3)
          ((_ extract 6 6)
-          FXM))
+          op.FXM))
         (concat
          ((_ sign_extend 3)
           ((_ extract 5 5)
-           FXM))
+           op.FXM))
          (concat
           ((_ sign_extend 3)
            ((_ extract 4 4)
-            FXM))
+            op.FXM))
           (concat
            ((_ sign_extend 3)
             ((_ extract 3 3)
-             FXM))
+             op.FXM))
            (concat
             ((_ sign_extend 3)
              ((_ extract 2 2)
-              FXM))
+              op.FXM))
             (concat
              ((_ sign_extend 3)
               ((_ extract 1 1)
-               FXM))
+               op.FXM))
              ((_ sign_extend 3)
               ((_ extract 0 0)
-               FXM))))))))))
+               op.FXM))))))))))
      (bvand
-      'CR
+      loc.CR
       (bvnot
        (concat
         ((_ sign_extend 3)
          ((_ extract 7 7)
-          FXM))
+          op.FXM))
         (concat
          ((_ sign_extend 3)
           ((_ extract 6 6)
-           FXM))
+           op.FXM))
          (concat
           ((_ sign_extend 3)
            ((_ extract 5 5)
-            FXM))
+            op.FXM))
           (concat
            ((_ sign_extend 3)
             ((_ extract 4 4)
-             FXM))
+             op.FXM))
            (concat
             ((_ sign_extend 3)
              ((_ extract 3 3)
-              FXM))
+              op.FXM))
             (concat
              ((_ sign_extend 3)
               ((_ extract 2 2)
-               FXM))
+               op.FXM))
              (concat
               ((_ sign_extend 3)
                ((_ extract 1 1)
-                FXM))
+                op.FXM))
               ((_ sign_extend 3)
                ((_ extract 0 0)
-                FXM)))))))))))))
-    ('IP
-     (bvadd 'IP #x0000000000000004))))))
- ((operands
-  ((rS . 'Gprc)
-   (FXM . 'I32imm)))
-  (in
-   ('CR rS 'IP))
-  (var1)))
+                op.FXM))))))))))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

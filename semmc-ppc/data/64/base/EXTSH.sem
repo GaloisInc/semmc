@@ -1,13 +1,17 @@
 ;; Extend Sign Halfword (X-form, RC=0)
 ((operands
- ((rA . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rS Gprc)))
  (in
-  (rS 'IP))
+  (op.rS loc.IP))
  (defs
-  ((rA
-   ((_ sign_extend 48)
-    ((_ extract 15 0)
-     rS)))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.rA
+   (with
+    ()
+    ((_ sign_extend 48)
+     ((_ extract 15 0)
+      op.rS))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

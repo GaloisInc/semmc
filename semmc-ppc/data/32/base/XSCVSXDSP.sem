@@ -1,21 +1,21 @@
 ;; VSX Scalar Convert Signed Integer Doubleword to Floating-Point Format and Round to Single-Precision (XX2-form)
 ((operands
- ((xT . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (xB Vsrc)))
  (in
-  ('FPSCR xB 'IP))
+  (loc.FPSCR op.xB loc.IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec1")
-     "XSCVSXDSP"
-     xB
-     'FPSCR)))
-   (xT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec1")
-      "XSCVSXDSP"
-      xB
-      'FPSCR)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((loc.FPSCR
+   (with
+    ()
+    ((_ extract 31 0)
+     (call uf.ppc.vec1 const.XSCVSXDSP op.xB loc.FPSCR))))
+   (op.xT
+    (with
+     ()
+     ((_ extract 159 32)
+      (call uf.ppc.vec1 const.XSCVSXDSP op.xB loc.FPSCR))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

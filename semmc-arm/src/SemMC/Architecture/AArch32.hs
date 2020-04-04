@@ -72,7 +72,7 @@ import qualified SemMC.Architecture.ARM.OperandComponents as AOC
 import qualified SemMC.Architecture.ARM.UF as UF
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
-import qualified SemMC.Synthesis.Template as T
+import qualified SemMC.Template as T
 import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P

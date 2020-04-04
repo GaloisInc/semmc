@@ -22,6 +22,7 @@ library
                        SemMC.Architecture.Concrete
                        SemMC.Architecture.Evaluate
                        SemMC.Architecture.Location
+                       SemMC.Architecture.Pseudo
                        SemMC.Architecture.Value
                        SemMC.Architecture.View
                        SemMC.BoundVar
@@ -37,41 +38,10 @@ library
                        SemMC.Formula.Load
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
-                       SemMC.Formula.SETokens
                        SemMC.Log
                        SemMC.Log.Tests
-                       SemMC.Stochastic.CandidateProgram
-                       SemMC.Stochastic.Constraints
-                       SemMC.Stochastic.Classify
-                       SemMC.Stochastic.Extract
-                       SemMC.Stochastic.Generalize
-                       SemMC.Stochastic.IORelation
-                       SemMC.Stochastic.IORelation.Explicit
-                       SemMC.Stochastic.IORelation.Implicit
-                       SemMC.Stochastic.IORelation.Parser
-                       SemMC.Stochastic.IORelation.Shared
-                       SemMC.Stochastic.IORelation.Types
-                       SemMC.Stochastic.Initialize
-                       SemMC.Stochastic.Instantiate
-                       SemMC.Stochastic.Monad
-                       SemMC.Stochastic.Pseudo
-                       SemMC.Stochastic.RvwpOptimization
-                       SemMC.Stochastic.Statistics
-                       SemMC.Stochastic.Strata
-                       SemMC.Stochastic.Synthesize
-                       SemMC.Synthesis
-                       SemMC.Synthesis.Cegis
-                       SemMC.Synthesis.Cegis.Types
-                       SemMC.Synthesis.Cegis.EvalFormula
-                       SemMC.Synthesis.Cegis.ReadWriteEval
-                       SemMC.Synthesis.Cegis.LLVMMem
-                       SemMC.Synthesis.Cegis.MemAccesses
-                       SemMC.Synthesis.Cegis.Tests
-                       SemMC.Synthesis.Core
-                       SemMC.Synthesis.DivideAndConquer
-                       SemMC.Synthesis.Template
-                       SemMC.Synthesis.Testing
                        SemMC.Symbolic
+                       SemMC.Template
                        SemMC.TH
                        SemMC.Util
                        SemMC.Util.Tests
@@ -100,7 +70,6 @@ library
                        BoundedChan,
                        located-base,
                        text >= 1 && < 2,
-                       mwc-random >= 0.13 && < 0.15,
                        exceptions >= 0.8 && < 0.11,
                        s-cargot >= 0.1.4.0 && < 0.2,
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
@@ -115,13 +84,15 @@ library
                        mtl >= 2.2 && < 2.3,
                        hashtables >= 1.2 && < 1.3,
                        transformers >= 0.5.2 && < 0.6,
-                       sqlite-simple >= 0.4 && < 0.5,
                        directory,
                        unliftio-core < 0.2.0.0,
                        unliftio,
                        what4 >= 0.4,
                        crucible-llvm,
+                       what4-serialize,
+                       ordered-containers,
                        ansi-wl-pprint
+
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
@@ -138,6 +109,7 @@ executable cmpsem
   build-depends:   base
                  , optparse-applicative
                  , semmc
+                 , what4-serialize
                  , text
 
 
@@ -188,4 +160,5 @@ test-suite semmc-semstore-tests
                , tasty-hedgehog
                , text
                , transformers
+               , what4-serialize
                , what4

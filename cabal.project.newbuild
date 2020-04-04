@@ -7,6 +7,9 @@ packages:
   semmc-asl/
   semmc-toy/
   semmc-coverage/
+  semmc-synthesis/
+  semmc-learning/
+  submodules/what4-serialize
   submodules/dismantle/dismantle-tablegen/
   submodules/dismantle/dismantle-arm/
   submodules/dismantle/dismantle-arm-xml/
@@ -18,7 +21,6 @@ optional-packages:
   submodules/asl-translator
   submodules/crucible/crucible
   submodules/what4/what4
-  submodules/what4-serialize
   submodules/crucible/crucible-llvm
   submodules/llvm-pretty
   submodules/parameterized-utils

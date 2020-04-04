@@ -1,34 +1,40 @@
 ;; Subtract From Immediate Carrying (D-form)
 ((operands
- ((rT . 'Gprc)
-  (si . 'S16imm)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (si S16imm)
+  (rA Gprc)))
  (in
-  ('XER rA si 'IP))
+  (loc.XER op.rA op.si loc.IP))
  (defs
-  (('XER
-   (concat
-    ((_ extract 63 30)
-     'XER)
+  ((loc.XER
+   (with
+    ()
     (concat
-     ((_ extract 64 64)
+     ((_ extract 63 30)
+      loc.XER)
+     (concat
+      ((_ extract 64 64)
+       (bvsub
+        ((_ zero_extend 1)
+         op.rA)
+        (concat
+         #b0
+         ((_ sign_extend 48)
+          op.si))))
+      ((_ extract 28 0)
+       loc.XER)))))
+   (op.rT
+    (with
+     ()
+     ((_ extract 63 0)
       (bvsub
        ((_ zero_extend 1)
-        rA)
+        op.rA)
        (concat
         #b0
         ((_ sign_extend 48)
-         si))))
-     ((_ extract 28 0)
-      'XER))))
-   (rT
-    ((_ extract 63 0)
-     (bvsub
-      ((_ zero_extend 1)
-       rA)
-      (concat
-       #b0
-       ((_ sign_extend 48)
-        si)))))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+         op.si))))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

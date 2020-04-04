@@ -1,67 +1,85 @@
 ;; SUB immediate, T32, encoding T3 (F7.1.234, F7-2914)
-(let
- ((res_nzcv
-  ((_ call "df.addWithCarry")
-   rN
-   (bvnot
-    (thumbExpandImm))
-   #x00000001))
-  (thumbExpandImm
-   ((_ extract 32 1)
-    (imm32_carry_out)))
-  (imm32_carry_out
-   ((_ call "df.thumbexpandimm_c")
-    ((_ call "uf.t32.t2soimm_imm")
-     imm)
-    #b0)))
- ((operands
-  ((rD . 'GPRnopc)
-   (setcc . 'Cc_out)
-   (imm . 'T2_so_imm)
-   (rN . 'GPRnopc)))
-  (in
-   (imm rN 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000002))
-    ('CPSR
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+((operands
+ ((rD GPRnopc)
+  (setcc Cc_out)
+  (imm T2_so_imm)
+  (rN GPRnopc)))
+ (in
+  (op.imm op.rN loc.CPSR loc.PC))
+ (defs
+  ((loc.PC
+   (with
+    ()
+    (bvadd loc.PC #x00000002)))
+   (loc.CPSR
+    (with
+     ()
+     (let
+      ((imm32_carry_out
+       (call
+        df.thumbexpandimm_c
+        (call uf.t32.t2soimm_imm op.imm)
+        #b0))
+       (thumbExpandImm
+        ((_ extract 32 1)
+         imm32_carry_out))
+       (res_nzcv
+        (call
+         df.addWithCarry
+         op.rN
+         (bvnot thumbExpandImm)
+         #x00000001)))
       (ite
-       (andp
-        (orp
-         (andp
-          ((_ call "uf.arm.is_r15")
-           rD)
-          (notp
-           (bveq setcc #b1)))
-         ((_ call "uf.arm.is_r15")
-          rN))
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
         (andp
-         (notp
-          ((_ call "uf.arm.is_r15")
-           rD))
-         (notp
-          (bveq setcc #b1))))
-       (concat
-        ((_ extract 3 0)
-         (res_nzcv))
-        ((_ extract 31 4)
-         'CPSR))
-       'CPSR)
-      'CPSR))
-    (rD
-     (ite
-      ((_ call "df.testCondition")
-       ((_ call "df.ITState")
-        'CPSR)
-       'CPSR)
+         (orp
+          (andp
+           (call uf.arm.is_r15 op.rD)
+           (notp
+            (bveq op.setcc #b1)))
+          (call uf.arm.is_r15 op.rN))
+         (andp
+          (notp
+           (call uf.arm.is_r15 op.rD))
+          (notp
+           (bveq op.setcc #b1))))
+        (concat
+         ((_ extract 3 0)
+          res_nzcv)
+         ((_ extract 31 4)
+          loc.CPSR))
+        loc.CPSR)
+       loc.CPSR))))
+   (op.rD
+    (with
+     ()
+     (let
+      ((imm32_carry_out
+       (call
+        df.thumbexpandimm_c
+        (call uf.t32.t2soimm_imm op.imm)
+        #b0))
+       (thumbExpandImm
+        ((_ extract 32 1)
+         imm32_carry_out))
+       (res_nzcv
+        (call
+         df.addWithCarry
+         op.rN
+         (bvnot thumbExpandImm)
+         #x00000001)))
       (ite
-       (bveq setcc #b1)
-       rD
-       ((_ extract 35 4)
-        (res_nzcv)))
-      rD))))))
+       (call
+        df.testCondition
+        (call df.ITState loc.CPSR)
+        loc.CPSR)
+       (ite
+        (bveq op.setcc #b1)
+        op.rD
+        ((_ extract 35 4)
+         res_nzcv))
+       op.rD)))))))

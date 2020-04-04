@@ -1,28 +1,35 @@
 ;; Extend Sign Byte (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS 'IP))
+  (loc.XER loc.CR op.rS loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      ((_ sign_extend 24)
+       ((_ extract 7 0)
+        op.rS))
+      #x00000000)
+     (bvsgt
+      ((_ sign_extend 24)
+       ((_ extract 7 0)
+        op.rS))
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
      ((_ sign_extend 24)
       ((_ extract 7 0)
-       rS))
-     #x00000000)
-    (bvsgt
-     ((_ sign_extend 24)
-      ((_ extract 7 0)
-       rS))
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    ((_ sign_extend 24)
-     ((_ extract 7 0)
-      rS)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+       op.rS))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

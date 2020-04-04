@@ -1,12 +1,16 @@
 ;; Vector Logical XOR (VX-form)
 ((operands
- ((vrT . 'Vrrc)
-  (vrA . 'Vrrc)
-  (vrB . 'Vrrc)))
+ ((vrT Vrrc)
+  (vrA Vrrc)
+  (vrB Vrrc)))
  (in
-  (vrB vrA 'IP))
+  (op.vrB op.vrA loc.IP))
  (defs
-  ((vrT
-   (bvxor vrA vrB))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.vrT
+   (with
+    ()
+    (bvxor op.vrA op.vrB)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

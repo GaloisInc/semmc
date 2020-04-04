@@ -2,19 +2,22 @@
 ;; Like 'ADDI', we hand wrote this formula because it is one of the few that
 ;; have special treatment of r0
 ((operands
- ((rT . 'Gprc)
-  (si . 'S17imm)
-  (rA . 'Gprc_nor0)))
+ ((rT Gprc)
+  (si S17imm)
+  (rA Gprc_nor0)))
  (in
-  (si rA 'IP))
+  (op.si op.rA loc.IP))
  (defs
-  ((rT
-   (bvadd
-    (ite
-     ((_ call "uf.ppc.is_r0")
-      rA)
-     #x00000000
-     rA)
-    (concat si #x0000)))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.rT
+   (with
+    ()
+    (bvadd
+     (ite
+      (call uf.ppc.is_r0 op.rA)
+      #x00000000
+      op.rA)
+     (concat op.si #x0000))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

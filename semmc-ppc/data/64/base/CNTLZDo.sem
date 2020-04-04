@@ -1,25 +1,29 @@
 ;; Count Leading Zeros Doubleword (X-form, RC=1)
 ((operands
- ((rA . 'Gprc)
-  (rS . 'Gprc)))
+ ((rA Gprc)
+  (rS Gprc)))
  (in
-  ('XER 'CR rS 'IP))
+  (loc.XER loc.CR op.rS loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
-     ((_ call "uf.clz.64")
-      rS)
-     #x0000000000000000)
-    (bvsgt
-     ((_ call "uf.clz.64")
-      rS)
-     #x0000000000000000)
-    #b000
-    'XER
-    'CR))
-   (rA
-    ((_ call "uf.clz.64")
-     rS))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (call uf.clz.64 op.rS)
+      #x0000000000000000)
+     (bvsgt
+      (call uf.clz.64 op.rS)
+      #x0000000000000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rA
+    (with
+     ()
+     (call uf.clz.64 op.rS)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

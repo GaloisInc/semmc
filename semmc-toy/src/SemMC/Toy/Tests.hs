@@ -43,6 +43,7 @@ import qualified Lang.Crucible.Backend.Online as CBO
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Pseudo as AP
 import           SemMC.Formula
 import qualified SemMC.Concrete.Execution as CE
 import           SemMC.Stochastic.Strata
@@ -253,7 +254,7 @@ data RunSynToyCfg =
   RunSynToyCfg
   { rstOpcodes :: [ Some (Opcode Operand) ]
     -- ^ Known opcodes. Use 'Toy.allOpcodes' if you want them all.
-  , rstPseudoOpcodes :: [ Some (P.Pseudo Toy Operand) ]
+  , rstPseudoOpcodes :: [ Some (AP.Pseudo Toy Operand) ]
     -- ^ Psuedo opcodes. Use 'Toy.allPseudoOpcodes' if you want them all.
   , rstTargetOpcodes :: [ Some (Opcode Operand) ]
     -- ^ Opcodes to learn semantics for.
@@ -351,7 +352,7 @@ runSynToy rstCfg dataRoot action = do
 -- significantly from run to run. Interpreted it usually finishes in
 -- under a minute, and compiled in under 5 seconds.
 test_synthesizeCandidate :: (U.HasLogCfg)
-                         => IO (Maybe [P.SynthInstruction Toy])
+                         => IO (Maybe [AP.SynthInstruction Toy])
 test_synthesizeCandidate = do
   let ops = (R32 Reg1 SL.:< R32 Reg2 SL.:< SL.Nil)
   let instruction = AC.RI { AC.riInstruction = D.Instruction SubRr ops
@@ -387,7 +388,7 @@ test_rvwpOptimizationDoesntApply = do
     let expectedNumberOfPlaces = 0
     return (doesOptApply, howManyPlaces, expectedNumberOfPlaces)
   where
-    candidate :: S.Seq (Maybe (P.SynthInstruction Toy))
+    candidate :: S.Seq (Maybe (AP.SynthInstruction Toy))
     candidate = S.fromList $ map (Just . P.actualInsnToSynth) $
       -- Zero out the result register, r1. The target program stores
       -- r1+r2 in r1, and it's very unlikely that all randomly
@@ -431,7 +432,7 @@ test_rightValueWrongPlace = do
 -- Add r1 and r2 and store the result in *r3*, and then set r1 to
 -- a value as different as possible from r3, i.e. the complement.
 -- rvwpCandidate :: [Maybe (P.SynthInstruction Toy)]
-rvwpCandidate :: S.Seq (Maybe (P.SynthInstruction Toy))
+rvwpCandidate :: S.Seq (Maybe (AP.SynthInstruction Toy))
 rvwpCandidate = S.fromList $ map (Just . P.actualInsnToSynth) $
   -- Add r1 and r2 and store in r3.
   [ D.Instruction SubRr (R32 Reg3 SL.:< R32 Reg3 SL.:< SL.Nil)

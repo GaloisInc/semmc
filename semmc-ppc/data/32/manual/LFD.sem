@@ -1,25 +1,28 @@
 ;; Load Floating-Point Double (D-form)
 ((operands
- ((frT . 'Fprc)
-  (memref . 'Memri)))
+ ((frT Fprc)
+  (memref Memri)))
  (in
-  ('Mem memref 'IP))
+  (loc.Mem op.memref loc.IP))
  (defs
-  ((frT
-   (concat
-    ((_ call "uf.read_mem.64")
-     'Mem
-     (bvadd
-      (ite
-       ((_ call "uf.ppc.is_r0")
-        ((_ call "uf.ppc.memri_reg")
-         memref))
-       #x00000000
-       ((_ call "uf.ppc.memri_reg")
-        memref))
-      ((_ sign_extend 16)
-       ((_ call "uf.ppc.memri_offset")
-        memref))))
-    #x0000000000000000))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+  ((op.frT
+   (with
+    ()
+    (concat
+     (call
+      uf.read_mem.64
+      loc.Mem
+      (bvadd
+       (ite
+        (call
+         uf.ppc.is_r0
+         (call uf.ppc.memri_reg op.memref))
+        #x00000000
+        (call uf.ppc.memri_reg op.memref))
+       ((_ sign_extend 16)
+        (call uf.ppc.memri_offset op.memref))))
+     #x0000000000000000)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

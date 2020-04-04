@@ -1,28 +1,35 @@
 ;; Negate (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR rA 'IP))
+  (loc.XER loc.CR op.rA loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvadd
+       (bvnot op.rA)
+       #x00000001)
+      #x00000000)
+     (bvsgt
+      (bvadd
+       (bvnot op.rA)
+       #x00000001)
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
      (bvadd
-      (bvnot rA)
-      #x00000001)
-     #x00000000)
-    (bvsgt
-     (bvadd
-      (bvnot rA)
-      #x00000001)
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    (bvadd
-     (bvnot rA)
-     #x00000001))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+      (bvnot op.rA)
+      #x00000001)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

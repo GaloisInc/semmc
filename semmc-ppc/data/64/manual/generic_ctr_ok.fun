@@ -1,32 +1,29 @@
-(let
- ((false
-  (bvne #b0 #b0))
-  (true
-   (bveq #b0 #b0)))
- ((function generic_ctr_ok)
-  (arguments
-   ((bo
-    ('bv 5))
-    (newCtr
-     ('bv 64))))
-  (return 'bool)
-  (body
+((function generic_ctr_ok)
+ (arguments
+  ((bo
+   (BV 5))
+   (newCtr
+    (BV 64))))
+ (return Bool)
+ (body
+  (with
+   ()
    (ite
     (bveq
      #b1
      ((_ extract 0 0)
-      (bvlshr bo #b00010)))
-    (true)
+      (bvlshr op.bo #b00010)))
+    #true
     (ite
      (bveq
       #b1
       ((_ extract 0 0)
-       (bvlshr bo #b00001)))
+       (bvlshr op.bo #b00001)))
      (xorp
       (notp
-       (bveq newCtr #x0000000000000000))
-      (true))
+       (bveq op.newCtr #x0000000000000000))
+      #true)
      (xorp
       (notp
-       (bveq newCtr #x0000000000000000))
-      (false)))))))
+       (bveq op.newCtr #x0000000000000000))
+      #false))))))

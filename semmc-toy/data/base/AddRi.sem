@@ -1,4 +1,6 @@
-((operands ((r1 . 'R32)
-            (imm . 'I32)))
- (in (r1))
- (defs ((r1 (bvadd r1 imm)))))
+((operands ((r1 R32)
+            (imm I32)))
+ (in (op.r1))
+ (defs ((op.r1
+         (with ((x op.r1))
+          (bvadd x op.imm)))))

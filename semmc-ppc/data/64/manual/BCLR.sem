@@ -1,20 +1,22 @@
 ;; BCLR (XL-form, LK=0)
 ((operands
- ((bi . 'Crbitrc)))
+ ((bi Crbitrc)))
  (in
-  ('CR 'IP 'LNK))
+  (loc.CR loc.IP loc.LNK))
  (defs
-  (('IP
-   (ite
-    (bveq
-     #b1
-     ((_ extract 0 0)
-      (bvlshr
-       'CR
-       ((_ zero_extend 27)
-        (bvsub #b11111 bi)))))
-    (concat
-     ((_ extract 63 2)
-      'LNK)
-     #b00)
-    (bvadd 'IP #x0000000000000004))))))
+  ((loc.IP
+   (with
+    ()
+    (ite
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (bvlshr
+        loc.CR
+        ((_ zero_extend 27)
+         (bvsub #b11111 op.bi)))))
+     (concat
+      ((_ extract 63 2)
+       loc.LNK)
+      #b00)
+     (bvadd loc.IP #x0000000000000004)))))))

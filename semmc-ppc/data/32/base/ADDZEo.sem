@@ -1,34 +1,41 @@
 ;; Add to Zero Extended (XO-form, RC=1)
 ((operands
- ((rT . 'Gprc)
-  (rA . 'Gprc)))
+ ((rT Gprc)
+  (rA Gprc)))
  (in
-  ('XER 'CR 'XER rA 'IP))
+  (loc.XER loc.CR loc.XER op.rA loc.IP))
  (defs
-  (('CR
-   ((_ call "df.cmpImm")
-    (bvslt
+  ((loc.CR
+   (with
+    ()
+    (call
+     df.cmpImm
+     (bvslt
+      (bvadd
+       op.rA
+       ((_ zero_extend 31)
+        ((_ extract 29 29)
+         loc.XER)))
+      #x00000000)
+     (bvsgt
+      (bvadd
+       op.rA
+       ((_ zero_extend 31)
+        ((_ extract 29 29)
+         loc.XER)))
+      #x00000000)
+     #b000
+     loc.XER
+     loc.CR)))
+   (op.rT
+    (with
+     ()
      (bvadd
-      rA
+      op.rA
       ((_ zero_extend 31)
        ((_ extract 29 29)
-        'XER)))
-     #x00000000)
-    (bvsgt
-     (bvadd
-      rA
-      ((_ zero_extend 31)
-       ((_ extract 29 29)
-        'XER)))
-     #x00000000)
-    #b000
-    'XER
-    'CR))
-   (rT
-    (bvadd
-     rA
-     ((_ zero_extend 31)
-      ((_ extract 29 29)
-       'XER))))
-   ('IP
-    (bvadd 'IP #x00000004)))))
+        loc.XER)))))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x00000004))))))

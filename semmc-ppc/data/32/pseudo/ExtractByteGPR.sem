@@ -1,17 +1,19 @@
 ((operands
- ((target . 'Gprc)
-  (source . 'Gprc)
-  (n . 'U2imm)))
+ ((target Gprc)
+  (source Gprc)
+  (n U2imm)))
  (in
-  (n source))
+  (op.n op.source))
  (defs
-  ((target
-   (concat
-    #x000000
-    ((_ extract 7 0)
-     (bvlshr
-      source
-      (bvshl
-       ((_ zero_extend 30)
-        n)
-       #x00000003))))))))
+  ((op.target
+   (with
+    ()
+    (concat
+     #x000000
+     ((_ extract 7 0)
+      (bvlshr
+       op.source
+       (bvshl
+        ((_ zero_extend 30)
+         op.n)
+        #x00000003)))))))))

@@ -1,14 +1,17 @@
 ;; VSX Shift Left Double by Word Immediate (XX3-form)
 ((operands
- ((xT . 'Vsrc)
-  (SHW . 'U2imm)
-  (xA . 'Vsrc)
-  (xB . 'Vsrc)))
+ ((xT Vsrc)
+  (SHW U2imm)
+  (xA Vsrc)
+  (xB Vsrc)))
  (in
-  (xB xA SHW 'IP))
+  (op.xB op.xA op.SHW loc.IP))
  (defs
-  ((xT
-   ((_ call "uf.undefined")
-    #x00000080))
-   ('IP
-    (bvadd 'IP #x0000000000000004)))))
+  ((op.xT
+   (with
+    ()
+    (call uf.undefinedBV.128)))
+   (loc.IP
+    (with
+     ()
+     (bvadd loc.IP #x0000000000000004))))))

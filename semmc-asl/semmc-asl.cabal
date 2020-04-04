@@ -44,6 +44,7 @@ library
                        template-haskell,
                        text,
                        semmc,
+                       semmc-synthesis,
                        vector-sized,
                        what4,
                        what4-serialize
