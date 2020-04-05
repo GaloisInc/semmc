@@ -4,7 +4,7 @@ packages:
   semmc-ppc/
   semmc-x86_64/
   semmc-arm/
-  semmc-asl/
+  semmc-aarch32/
   semmc-toy/
   semmc-coverage/
   semmc-synthesis/
