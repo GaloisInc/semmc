@@ -213,6 +213,7 @@ data UFBundle sym =
 
             , initGPRs :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "GPRS")
             , initSIMDs :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "SIMDS")
+            , initMemory :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "__Memory")
             }
 
 encodingToFormula :: forall sym t st fs sh
@@ -298,7 +299,7 @@ symFnToParamFormula :: forall sym t st fs sh
                     -> ARM.ARMOpcode ARM.ARMOperand sh
                     -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.StructGlobalsCtx)
                     -> IO (SF.ParameterizedFormula sym AArch32 sh)
-symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMDs }) opcode symFn = do
+symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMDs, initMemory }) opcode symFn = do
   opvars <- mkOperandVars sym opcode
   gbvars <- mkGlobalVars sym
   (gbPreStructBvs, allGPRVars, allSIMDVars) <- getGlobalStruct sym gbvars
@@ -311,10 +312,11 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
 
   iGPRs <- WI.applySymFn sym initGPRs Ctx.empty
   iSIMDs <- WI.applySymFn sym initSIMDs Ctx.empty
+  iMemory <- WI.applySymFn sym initMemory Ctx.empty
 
   expr <- WB.evalBoundVars sym exprRaw
-            (Ctx.empty Ctx.:> ASL.sGPRs gbPreStructBvs Ctx.:> ASL.sSIMDs gbPreStructBvs)
-            (Ctx.empty Ctx.:> iGPRs Ctx.:> iSIMDs)
+            (Ctx.empty Ctx.:> ASL.sGPRs gbPreStructBvs Ctx.:> ASL.sSIMDs gbPreStructBvs Ctx.:> ASL.sMem gbPreStructBvs)
+            (Ctx.empty Ctx.:> iGPRs Ctx.:> iSIMDs Ctx.:> iMemory)
 
   let WI.BaseStructRepr structRepr = WI.exprType expr
   structExprs <- Ctx.traverseWithIndex (\idx _ -> WI.structField sym expr idx) structRepr
@@ -328,7 +330,7 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
     (\ref expr' -> ASL.withSIMDRef ref $ \n -> do
         simdExpr <- getSIMD n expr' allSIMDVars
         return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SIMDRef ref))) simdExpr)
-    (\expr' ->
+    (\expr' -> do
        return $ GlobalParameter (SF.LiteralParameter (ARM.Location ASL.MemoryRef)) expr')
 
   defs <- MapF.fromList . catMaybes . FC.toListFC (\(Const c) -> c) <$> Ctx.zipWithM filterTrivial gbvars glbParams
@@ -504,6 +506,7 @@ mkUFBundle :: forall sym t st fs arch
 mkUFBundle sym (SF.FormulaEnv env _) = do
   initGPRs <- getUF "uf.init_gprs" knownRepr knownRepr
   initSIMDs <- getUF "uf.init_simds" knownRepr knownRepr
+  initMemory <- getUF "uf.init_memory" knownRepr knownRepr
 
   getGPRBase <- getUF "uf.gpr_get"
     (knownRepr :: Ctx.Assignment WI.BaseTypeRepr (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "GPRS" Ctx.::> WI.BaseBVType 4))
@@ -543,7 +546,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       idxBv <- WI.bvLit sym (NR.knownNat @8) (NR.intValue n)
       WI.applySymFn sym getSIMDBase (Ctx.empty Ctx.:> expr Ctx.:> idxBv)
 
-  return $ UFBundle getGPR getSIMD initGPRs initSIMDs
+  return $ UFBundle getGPR getSIMD initGPRs initSIMDs initMemory
   where
     getUF :: String -> Ctx.Assignment WI.BaseTypeRepr args -> WI.BaseTypeRepr ret -> IO (WI.SymFn sym args ret)
     getUF nm argsT retT = case Map.lookup nm env of
