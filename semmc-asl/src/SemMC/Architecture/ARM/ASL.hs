@@ -19,9 +19,9 @@
 module SemMC.Architecture.ARM.ASL
   ( encodingToFormula
   , symFnToFunFormula
+  , ASLSemanticsOpts(..)
   , ASLSemantics(..)
   , loadSemantics
-  , attachSemantics
   ) where
 
 import           GHC.TypeLits
@@ -213,6 +213,7 @@ data UFBundle sym =
 
             , initGPRs :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "GPRS")
             , initSIMDs :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "SIMDS")
+            , initMemory :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "__Memory")
             }
 
 encodingToFormula :: forall sym t st fs sh
@@ -298,7 +299,7 @@ symFnToParamFormula :: forall sym t st fs sh
                     -> ARM.ARMOpcode ARM.ARMOperand sh
                     -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.StructGlobalsCtx)
                     -> IO (SF.ParameterizedFormula sym AArch32 sh)
-symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMDs }) opcode symFn = do
+symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMDs, initMemory }) opcode symFn = do
   opvars <- mkOperandVars sym opcode
   gbvars <- mkGlobalVars sym
   (gbPreStructBvs, allGPRVars, allSIMDVars) <- getGlobalStruct sym gbvars
@@ -311,10 +312,11 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
 
   iGPRs <- WI.applySymFn sym initGPRs Ctx.empty
   iSIMDs <- WI.applySymFn sym initSIMDs Ctx.empty
+  iMemory <- WI.applySymFn sym initMemory Ctx.empty
 
   expr <- WB.evalBoundVars sym exprRaw
-            (Ctx.empty Ctx.:> ASL.sGPRs gbPreStructBvs Ctx.:> ASL.sSIMDs gbPreStructBvs)
-            (Ctx.empty Ctx.:> iGPRs Ctx.:> iSIMDs)
+            (Ctx.empty Ctx.:> ASL.sGPRs gbPreStructBvs Ctx.:> ASL.sSIMDs gbPreStructBvs Ctx.:> ASL.sMem gbPreStructBvs)
+            (Ctx.empty Ctx.:> iGPRs Ctx.:> iSIMDs Ctx.:> iMemory)
 
   let WI.BaseStructRepr structRepr = WI.exprType expr
   structExprs <- Ctx.traverseWithIndex (\idx _ -> WI.structField sym expr idx) structRepr
@@ -328,7 +330,7 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
     (\ref expr' -> ASL.withSIMDRef ref $ \n -> do
         simdExpr <- getSIMD n expr' allSIMDVars
         return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SIMDRef ref))) simdExpr)
-    (\expr' ->
+    (\expr' -> do
        return $ GlobalParameter (SF.LiteralParameter (ARM.Location ASL.MemoryRef)) expr')
 
   defs <- MapF.fromList . catMaybes . FC.toListFC (\(Const c) -> c) <$> Ctx.zipWithM filterTrivial gbvars glbParams
@@ -504,6 +506,7 @@ mkUFBundle :: forall sym t st fs arch
 mkUFBundle sym (SF.FormulaEnv env _) = do
   initGPRs <- getUF "uf.init_gprs" knownRepr knownRepr
   initSIMDs <- getUF "uf.init_simds" knownRepr knownRepr
+  initMemory <- getUF "uf.init_memory" knownRepr knownRepr
 
   getGPRBase <- getUF "uf.gpr_get"
     (knownRepr :: Ctx.Assignment WI.BaseTypeRepr (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "GPRS" Ctx.::> WI.BaseBVType 4))
@@ -543,7 +546,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       idxBv <- WI.bvLit sym (NR.knownNat @8) (NR.intValue n)
       WI.applySymFn sym getSIMDBase (Ctx.empty Ctx.:> expr Ctx.:> idxBv)
 
-  return $ UFBundle getGPR getSIMD initGPRs initSIMDs
+  return $ UFBundle getGPR getSIMD initGPRs initSIMDs initMemory
   where
     getUF :: String -> Ctx.Assignment WI.BaseTypeRepr args -> WI.BaseTypeRepr ret -> IO (WI.SymFn sym args ret)
     getUF nm argsT retT = case Map.lookup nm env of
@@ -553,8 +556,30 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
        -> return symFn
       _ -> fail $ "mkUFBundle: missing uninterpreted function: " ++ nm
 
-loadSemantics :: IO ASLSemantics
-loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
+data ASLSemanticsOpts =
+  ASLSemanticsOpts { aslOptTrimRegs :: Bool 
+                   -- ^ only emit a single register 'Location' update
+                   }
+
+postProcess :: forall sym sh
+             . ASLSemanticsOpts
+            -> SF.ParameterizedFormula sym AArch32 sh
+            -> SF.ParameterizedFormula sym AArch32 sh
+postProcess opts pf =
+  case aslOptTrimRegs opts of
+    True ->
+      let
+        filt :: Pair (SF.Parameter AArch32 sh) (WI.SymExpr sym) -> Bool
+        filt (Pair (SF.LiteralParameter (ARM.Location ref)) expr) = case ref of
+          ASL.GPRRef _ | Just Refl <- testEquality ref (ASL.knownGlobalRef @"_R0") -> True
+          ASL.GPRRef _ -> False
+          _ -> True
+          
+        defs' = MapF.fromList $ filter filt $ MapF.toList $ SF.pfDefs pf
+      in pf { SF.pfDefs = defs' }
+
+loadSemantics :: ASLSemanticsOpts -> IO ASLSemantics
+loadSemantics opts = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   Some ng <- PN.newIONonceGenerator
   sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
 
@@ -577,14 +602,14 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
   T.hPutStrLn handle "A32 Instructions"
   a32Bytes <- forM a32pfs $ \(Pair opcode pformula) -> do
     let
-      t = SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) pformula
+      t = SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) (postProcess opts pformula)
       bs = T.encodeUtf8 $ t
     T.hPutStrLn handle t
     return (Some opcode, bs)
   T.hPutStrLn handle "T32 Instructions"
   t32Bytes <- forM t32pfs $ \(Pair opcode pformula) -> do
     let
-      t = SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) pformula
+      t = SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) (postProcess opts pformula)
       bs = T.encodeUtf8 $ t
     T.hPutStrLn handle t
     return (Some opcode, bs)
@@ -605,9 +630,9 @@ loadSemantics = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
 
   return $ ASLSemantics a32Bytes t32Bytes defBytes
 
-attachSemantics :: TH.ExpQ
-attachSemantics = do
-  ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics
-  [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
-                  $(TH.listE (map toOpcodePair t32sem))
-                  $(TH.listE (map toFunctionPair funsem)) |]
+-- attachSemantics :: TH.ExpQ
+-- attachSemantics = do
+--   ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics
+--   [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
+--                   $(TH.listE (map toOpcodePair t32sem))
+--                   $(TH.listE (map toFunctionPair funsem)) |]

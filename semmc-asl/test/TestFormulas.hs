@@ -13,15 +13,18 @@ import qualified Data.ByteString as BS
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
-import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some
 import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup
+import qualified Dismantle.ARM.A32 as A32
+import qualified Dismantle.ARM.T32 as T32
+
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
 import qualified SemMC.Architecture.AArch32 as ARM
 import           SemMC.Architecture.ARM.Combined
-import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics
-                                                , allDefinedFunctions )
+import           SemMC.Architecture.ARM.Opcodes ( loadSemantics, ASLSemantics(..)
+                                                , ASLSemanticsOpts(..))
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Formula.Env as FE
@@ -61,49 +64,22 @@ logVarEventConsumer logOut logPred =
 
 
 tests :: TestTree
-tests = withResource (mkLibrary allDefinedFunctions) (\_ -> return ()) $ \sl -> do
-          testGroup "Read Formulas"
-            [ testCase "warmup test" $ 1 + 1 @?= (2::Int)
-            , testA32Formulas sl
-            , testT32Formulas sl
-            ]
+tests = do testGroup "Read Formulas" [ testAll ]
 
-testA32Formulas :: IO SomeLib -> TestTree
-testA32Formulas sl = testGroup "A32 Formulas" $
-                  fmap (testFormula sl) allA32Semantics
-
-testT32Formulas :: IO SomeLib -> TestTree
-testT32Formulas sl = testGroup "T32 Formulas" $
-                  fmap (testFormula sl) allT32Semantics
-
-data SomeLib where
-  SomeLib :: (sym ~ WB.ExprBuilder a b (WB.Flags S.FloatIEEE), CRUB.IsBoolSolver sym) => sym -> F.Library sym -> FE.FormulaEnv sym ARM.AArch32 -> SomeLib
-
-mkLibrary :: [(String, BS.ByteString)] -> IO SomeLib
-mkLibrary dfs = do
+testAll :: TestTree
+testAll = testCase "testAll" $ withTestLogging $ do
   Some ng <- PN.newIONonceGenerator
   sym <- S.newSimpleBackend S.FloatIEEERepr ng
+  WB.startCaching sym
   env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
-  lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env dfs
-  return $ SomeLib sym lib env
-  
+  sem <- loadSemantics (ASLSemanticsOpts { aslOptTrimRegs = True })
+  lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env (funSemantics sem)
+  let
+    aconv :: (Some (A32.Opcode A32.Operand), BS.ByteString) -> (Some (ARMOpcode ARMOperand), BS.ByteString)
+    aconv (o,b) = (mapSome A32Opcode o, b)
 
-testFormula :: IO SomeLib -> (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
-testFormula getSomeLib a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
-  do 
-     SomeLib sym lib env <- getSomeLib
-     fm <- withTestLogging $ loadFormula sym env lib a
-     -- The Main test is loadFormula doesn't generate an exception.
-     -- The result should be a MapF with a valid entry in it.
-     MapF.size fm @?= 1
-    where opname (Some op) = showF op
-
-loadFormula :: ( CRUB.IsSymInterface sym
-               , ShowF (CRU.SymExpr sym)
-               , U.HasLogCfg) =>
-               sym
-            -> FE.FormulaEnv sym ARM.AArch32
-            -> F.Library sym
-            -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-            -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.AArch32))
-loadFormula sym env lib a = FL.loadFormulas sym env lib [a]
+    tconv :: (Some (T32.Opcode T32.Operand), BS.ByteString) -> (Some (ARMOpcode ARMOperand), BS.ByteString)
+    tconv (o,b) = (mapSome T32Opcode o, b)
+  _ <- FL.loadFormulas sym env lib (map aconv $ a32Semantics sem)
+  _ <- FL.loadFormulas sym env lib (map tconv $ t32Semantics sem)
+  return ()

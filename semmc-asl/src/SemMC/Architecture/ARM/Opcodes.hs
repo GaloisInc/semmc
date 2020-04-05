@@ -1,17 +1,15 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module SemMC.Architecture.ARM.Opcodes
-    ( allA32Semantics
-    , allDefinedFunctions
-    , a32Semantics
-    , allA32OpcodeInfo
+    ( allA32OpcodeInfo
     , allA32Opcodes
     , a32Opcodes
-    , allT32Semantics
-    , t32Semantics
     , allT32OpcodeInfo
     , allT32Opcodes
     , t32Opcodes
+    , ASL.loadSemantics
+    , ASL.ASLSemantics(..)
+    , ASL.ASLSemanticsOpts(..)
     )
     where
 
@@ -29,21 +27,6 @@ import           SemMC.Architecture.ARM.Opcodes.InternalT32 ( t32Opcodes, t32Opc
 import qualified SemMC.Architecture.ARM.ASL as ASL
 
 
-allASLSemantics :: ASL.ASLSemantics
-allASLSemantics = $(ASL.attachSemantics)
-
-allDefinedFunctions :: [(String, BS.ByteString)]
-allDefinedFunctions = ASL.funSemantics allASLSemantics
-
--- | Every A32 opcode with a defined semantics from the ASL specification
-a32Semantics :: [(Some (A32.Opcode A32.Operand), BS.ByteString)]
-a32Semantics = ASL.a32Semantics allASLSemantics
-
-allA32Semantics :: [(Some (ARMOpcode ARMOperand), BS.ByteString)]
-allA32Semantics = fmap aconv a32Semantics
-    where aconv :: (Some (A32.Opcode A32.Operand), BS.ByteString) -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-          aconv (o,b) = (mapSome A32Opcode o, b)
-
 allA32OpcodeInfo :: [Some (DT.CaptureInfo (ARMOpcode ARMOperand))]
 allA32OpcodeInfo = map (mapSome intoARMOpcode) a32OpcodeInfo
     where intoARMOpcode :: DT.CaptureInfo (A32.Opcode A32.Operand) a ->
@@ -55,16 +38,6 @@ allA32Opcodes :: [Some (ARMOpcode ARMOperand)]
 allA32Opcodes = map (mapSome A32Opcode) a32Opcodes
 
 -- ----------------------------------------------------------------------
-
--- | Every T32 opcode with a defined semantics from the ASL specification
-t32Semantics :: [(Some (T32.Opcode T32.Operand), BS.ByteString)]
-t32Semantics = ASL.t32Semantics allASLSemantics
-
-
-allT32Semantics :: [(Some (ARMOpcode ARMOperand), BS.ByteString)]
-allT32Semantics = fmap tconv t32Semantics
-    where tconv :: (Some (T32.Opcode T32.Operand), BS.ByteString) -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-          tconv (o,b) = (mapSome T32Opcode o, b)
 
 allT32OpcodeInfo :: [Some (DT.CaptureInfo (ARMOpcode ARMOperand))]
 allT32OpcodeInfo = map (mapSome intoARMOpcode) t32OpcodeInfo
