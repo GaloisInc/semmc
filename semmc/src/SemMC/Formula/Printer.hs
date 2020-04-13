@@ -105,6 +105,7 @@ import           What4.Serialize.Printer ( serializeExprWithConfig
                                          , ident
                                          , pattern L
                                          )
+
 import qualified What4.BaseTypes as WT
 import qualified What4.Interface as WI
 
@@ -365,8 +366,6 @@ convertOperandVars x y = L $  go x y
               let nameExpr = ident (varName var)
                   typeExpr = ident $ T.pack (A.operandTypeReprSymbol (Proxy @arch) r)
               in (L [nameExpr, typeExpr]):(go rep' rest)
-
-
 
 convertArgumentVars :: forall sh t st fs
                      . SL.List WT.BaseTypeRepr sh

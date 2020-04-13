@@ -199,7 +199,7 @@ parser = do
         return (arch, op, strat, ll, url, fs)
 
     when (not $ arch `elem` allArchNames) $
-        fail $ "Invalid architecture name: " <> arch
+        error $ "Invalid architecture name: " <> arch
 
     let hostSection = T.stripPrefix hostSectionPrefix
     hosts <- CI.sectionsOf hostSection $ \hostname -> do
