@@ -31,6 +31,7 @@ library
   build-depends:       base >=4.10.0.0 && < 5,
                        asl-translator,
                        binary,
+                       bv-sized,
                        bytestring,
                        containers,
                        crucible,

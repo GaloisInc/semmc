@@ -52,6 +52,7 @@ import qualified Control.Monad.ST as ST
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
+import qualified Data.BitVector.Sized as BVS
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Type.List as TL
 import qualified Data.Parameterized.TyMap as TM
@@ -397,14 +398,14 @@ natToGPRIdx :: n <= ASL.MaxGPR
             => sym
             -> NR.NatRepr n
             -> IO (WI.SymExpr sym (WI.BaseBVType 4))
-natToGPRIdx sym n = WI.bvLit sym WI.knownNat (NR.intValue n)
+natToGPRIdx sym n = WI.bvLit sym WI.knownNat (BVS.mkBV WI.knownNat (NR.intValue n))
 
 natToSIMDIdx :: n <= ASL.MaxSIMD
              => WI.IsSymExprBuilder sym
              => sym
              -> NR.NatRepr n
              -> IO (WI.SymExpr sym (WI.BaseBVType 8))
-natToSIMDIdx sym n = WI.bvLit sym WI.knownNat (NR.intValue n)
+natToSIMDIdx sym n = WI.bvLit sym WI.knownNat (BVS.mkBV WI.knownNat (NR.intValue n))
 
 unsafeSymbol :: String -> WI.SolverSymbol
 unsafeSymbol nm = case WI.userSymbol nm of
@@ -535,7 +536,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       , idx <- natReplicatedIndex ASL.maxGPRRepr n (Ctx.size allGPRs)
       = return $ allGPRs Ctx.! idx
     getGPR n expr _ = do
-      idxBv <- WI.bvLit sym (NR.knownNat @4) (NR.intValue n)
+      idxBv <- WI.bvLit sym (NR.knownNat @4) (BVS.mkBV NR.knownNat (NR.intValue n))
       expr' <- WI.applySymFn sym updateGPRs (Ctx.singleton expr)
       WI.applySymFn sym getGPRBase (Ctx.empty Ctx.:> expr' Ctx.:> idxBv)
 
@@ -551,7 +552,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       , idx <- natReplicatedIndex ASL.maxSIMDRepr n (Ctx.size allSIMDs)
       = return $ allSIMDs Ctx.! idx
     getSIMD n expr _ = do
-      idxBv <- WI.bvLit sym (NR.knownNat @8) (NR.intValue n)
+      idxBv <- WI.bvLit sym (NR.knownNat @8) (BVS.mkBV NR.knownNat (NR.intValue n))
       expr' <- WI.applySymFn sym updateSIMDs (Ctx.singleton expr)
       WI.applySymFn sym getSIMDBase (Ctx.empty Ctx.:> expr' Ctx.:> idxBv)
 
