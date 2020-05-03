@@ -27,6 +27,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import           Data.Maybe (catMaybes)
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Classes as P
@@ -77,7 +78,7 @@ liveMemConst :: forall arch t st fs.
 liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMemAddresses f)
   where
     exprToInt :: WE.Expr t (S.BaseBVType (A.RegWidth arch)) -> Maybe Integer
-    exprToInt e | Just (WC.ConcreteBV _ i)    <- S.asConcrete e = Just i
+    exprToInt e | Just (WC.ConcreteBV _ bv)    <- S.asConcrete e = Just (BV.asUnsigned bv)
     exprToInt _ | otherwise = Nothing
 
 
