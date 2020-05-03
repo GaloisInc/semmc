@@ -24,6 +24,7 @@ module SemMC.Architecture.PPC64
   , PPCP.PseudoOpcode(..)
   ) where
 
+import qualified Data.BitVector.Sized as BV
 import qualified Data.Int.Indexed as I
 import qualified Data.List.NonEmpty as NEL
 import           Data.Parameterized.Classes
@@ -173,7 +174,7 @@ instance T.TemplatableOperand PPC where
                             base <- locLookup baseLoc
                             offset <- S.freshConstant sym (U.makeSymbol "Memrix_off") knownRepr
                             let recover evalFn = do
-                                  offsetVal <- fromInteger <$> evalFn offset
+                                  offsetVal <- fromInteger <$> BV.asUnsigned <$> evalFn offset
                                   let gpr
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
@@ -191,7 +192,7 @@ instance T.TemplatableOperand PPC where
                             base <- locLookup baseLoc
                             offset <- S.freshConstant sym (U.makeSymbol "Memrix16_off") knownRepr
                             let recover evalFn = do
-                                  offsetVal <- fromInteger <$> evalFn offset
+                                  offsetVal <- fromInteger <$> BV.asUnsigned <$> evalFn offset
                                   let gpr
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
@@ -214,7 +215,7 @@ instance T.TemplatableOperand PPC where
                     mkDirect sym _ = do
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscondbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
                       let recover evalFn =
-                            PPC.Abscondbrtarget . PPC.mkAbsCondBranchTarget . fromInteger <$> evalFn offsetRaw
+                            PPC.Abscondbrtarget . PPC.mkAbsCondBranchTarget . fromInteger . BV.asUnsigned <$> evalFn offsetRaw
                       return ( A.ValueOperand offsetRaw
                              , T.RecoverOperandFn recover
                              )
@@ -224,7 +225,7 @@ instance T.TemplatableOperand PPC where
                     mkDirect sym _locLookup = do
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Condbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
                       let recover evalFn =
-                            PPC.Condbrtarget . PPC.mkCondBranchTarget . fromInteger <$> evalFn offsetRaw
+                            PPC.Condbrtarget . PPC.mkCondBranchTarget . fromInteger . BV.asUnsigned <$> evalFn offsetRaw
                       return ( A.ValueOperand offsetRaw
                              , T.RecoverOperandFn recover
                              )
@@ -235,7 +236,7 @@ instance T.TemplatableOperand PPC where
                      mkDirect sym _ = do
                        crrc <- S.freshConstant sym (U.makeSymbol "Crbitm") (knownRepr :: BaseTypeRepr (BaseBVType 8))
                        let recover evalFn =
-                             PPC.Crbitm . PPC.CRBitM . fromInteger <$> evalFn crrc
+                             PPC.Crbitm . PPC.CRBitM . fromInteger . BV.asUnsigned <$> evalFn crrc
                        return ( A.ValueOperand crrc
                               , T.RecoverOperandFn recover
                               )
@@ -257,7 +258,7 @@ instance T.TemplatableOperand PPC where
                             base <- locLookup baseLoc
                             offset <- S.freshConstant sym (U.makeSymbol "Memri_off") knownRepr
                             let recover evalFn = do
-                                  offsetVal <- fromInteger <$> evalFn offset
+                                  offsetVal <- fromInteger . BV.asUnsigned <$> evalFn offset
                                   let gpr
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
@@ -271,7 +272,7 @@ instance T.TemplatableOperand PPC where
                     mkDirect sym _locLookup = do
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Directbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
-                            PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
+                            PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger . BV.asUnsigned <$> evalFn offsetRaw
                       return ( A.ValueOperand offsetRaw
                              , T.RecoverOperandFn recover
                              )
@@ -282,7 +283,7 @@ instance T.TemplatableOperand PPC where
               where mkImm :: T.TemplatedOperandFn PPC "S17imm"
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
-                      let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
+                      let recover evalFn = PPC.S17imm . fromInteger . BV.asUnsigned <$> evalFn v
                       return ( A.ValueOperand v
                              , T.RecoverOperandFn recover
                              )
@@ -292,7 +293,7 @@ instance T.TemplatableOperand PPC where
                     mkDirect sym _ = do
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Absdirectbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
-                            PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
+                            PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger . BV.asUnsigned <$> evalFn offsetRaw
                       return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.CalltargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
@@ -300,7 +301,7 @@ instance T.TemplatableOperand PPC where
                     mkDirect sym _locLookup = do
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Calltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
-                            PPC.Calltarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
+                            PPC.Calltarget . PPC.mkBranchTarget . fromInteger . BV.asUnsigned <$> evalFn offsetRaw
                       return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.AbscalltargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
@@ -308,7 +309,7 @@ instance T.TemplatableOperand PPC where
                      mkDirect sym _ = do
                        offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscalltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                        let recover evalFn =
-                             PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
+                             PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger . BV.asUnsigned <$> evalFn offsetRaw
                        return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.CrrcRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
@@ -316,7 +317,7 @@ instance T.TemplatableOperand PPC where
                     mkDirect sym _ = do
                       crrc <- S.freshConstant sym (U.makeSymbol "Crrc") (knownRepr :: BaseTypeRepr (BaseBVType 3))
                       let recover evalFn =
-                            PPC.Crrc . PPC.CRRC . fromInteger <$> evalFn crrc
+                            PPC.Crrc . PPC.CRRC . fromInteger . BV.asUnsigned <$> evalFn crrc
                       return (A.ValueOperand crrc, T.RecoverOperandFn recover)
       PPC.CrbitrcRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
@@ -324,14 +325,14 @@ instance T.TemplatableOperand PPC where
                      mkDirect sym _ = do
                        crrc <- S.freshConstant sym (U.makeSymbol "Crbitrc") (knownRepr :: BaseTypeRepr (BaseBVType 5))
                        let recover evalFn =
-                             PPC.Crbitrc . PPC.CRBitRC . fromInteger <$> evalFn crrc
+                             PPC.Crbitrc . PPC.CRBitRC . fromInteger . BV.asUnsigned <$> evalFn crrc
                        return (A.ValueOperand crrc, T.RecoverOperandFn recover)
       PPC.I32immRepr ->
             [T.TemplatedOperand Nothing Set.empty mkImm]
               where mkImm :: T.TemplatedOperandFn PPC "I32imm"
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "I32imm") knownRepr
-                      let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
+                      let recover evalFn = PPC.I32imm . fromInteger . BV.asUnsigned <$> evalFn v
                       return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 operandValue :: forall sym s.
@@ -344,23 +345,23 @@ operandValue :: forall sym s.
 operandValue sym locLookup op = TaggedExpr <$> operandValue' op
   where operandValue' :: PPC.Operand s -> IO (A.AllocatedOperand PPC sym s)
         operandValue' (PPC.Abscalltarget (PPC.ABT absTarget)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger absTarget)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.word32 absTarget))
         operandValue' (PPC.Abscondbrtarget (PPC.ACBT absTarget)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger absTarget)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.word32 absTarget))
         operandValue' (PPC.Absdirectbrtarget (PPC.ABT absTarget)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger absTarget)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.word32 absTarget))
         operandValue' (PPC.Calltarget (PPC.BT off)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger off)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.int32 off))
         operandValue' (PPC.Condbrtarget (PPC.CBT target)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger target)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.int32 target))
         operandValue' (PPC.Crbitm (PPC.CRBitM n)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger n)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.word8 n)
         operandValue' (PPC.Crbitrc (PPC.CRBitRC n)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger n)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.word8 n))
         operandValue' (PPC.Crrc (PPC.CRRC n)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger n)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.word8 n))
         operandValue' (PPC.Directbrtarget (PPC.BT off)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger off)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.int32 off))
         operandValue' (PPC.Fprc (PPC.FR fr)) =
           let loc = LocVSR (PPC.VSReg fr)
           in A.LocationOperand loc <$> locLookup loc
@@ -371,56 +372,56 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           if gpr /= 0
           then let loc = LocGPR (PPC.GPR gpr)
                in A.LocationOperand loc <$> locLookup loc
-          else A.ValueOperand <$> S.bvLit sym knownNat 0
-        operandValue' (PPC.I1imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger x)
-        operandValue' (PPC.I32imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger x)
+          else A.ValueOperand <$> S.bvLit sym knownNat (BV.zero knownNat)
+        operandValue' (PPC.I1imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat (toInteger x))
+        operandValue' (PPC.I32imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat (toInteger x))
         operandValue' (PPC.Memri (PPC.MemRI gpr offset)) = do
           base <- PPCS.fromMaybeGPRBase sym gpr locLookup
-          offset' <- S.bvLit sym knownNat (toInteger offset)
+          offset' <- S.bvLit sym knownNat (BV.int16 offset)
           return (A.CompoundOperand (POC.OCMemri (PPCS.fromMaybeGPRLoc gpr) base offset'))
         operandValue' (PPC.Memrix (PPC.MemRIX gpr offset)) = do
           base <- PPCS.fromMaybeGPRBase sym gpr locLookup
-          offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
+          offset' <- S.bvLit sym knownNat (BV.mkBV knownNat (toInteger (I.unI offset)))
           return (A.CompoundOperand (POC.OCMemrix (PPCS.fromMaybeGPRLoc gpr) base offset'))
         operandValue' (PPC.Memrix16 (PPC.MemRIX gpr offset)) = do
           base <- PPCS.fromMaybeGPRBase sym gpr locLookup
-          offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
+          offset' <- S.bvLit sym knownNat (BV.mkBV knownNat (toInteger (I.unI offset)))
           return (A.CompoundOperand (POC.OCMemrix (PPCS.fromMaybeGPRLoc gpr) base offset'))
         operandValue' (PPC.Memrr (PPC.MemRR gpr1 gpr2)) = do
           gpr1Val <- PPCS.fromMaybeGPRBase sym gpr1 locLookup
           gpr2Val <- locLookup (LocGPR gpr2)
           return (A.CompoundOperand (POC.OCMemrr (PPCS.fromMaybeGPRLoc gpr1) gpr1Val (LocGPR gpr2) gpr2Val))
-        operandValue' (PPC.S16imm i16) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
-        operandValue' (PPC.S16imm64 i16) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
+        operandValue' (PPC.S16imm i16) = A.ValueOperand <$> S.bvLit sym knownNat (BV.int16 i16)
+        operandValue' (PPC.S16imm64 i16) = A.ValueOperand <$> S.bvLit sym knownNat (BV.int16 i16)
         operandValue' (PPC.S17imm i16) =
           -- The s17 imm type is a bit strange.  It is actually represented as
           -- 16 bits in the instruction, but is interpreted as shifted left by
           -- 16 bits.  We handle that correction in the semantics, so we just
           -- treat s17imm as a plain 16 bit value.
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.int16 i16)
         operandValue' (PPC.S17imm64 i16) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
-        operandValue' (PPC.S5imm (I.I i5)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i5)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.int16 i16)
+        operandValue' (PPC.S5imm (I.I i5)) = A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat (toInteger i5))
         operandValue' (PPC.U10imm (W.unW ->  w10)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w10)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w10)
         operandValue' (PPC.U16imm (W.unW ->  w16)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w16)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w16)
         operandValue' (PPC.U16imm64 (W.unW ->  w16)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w16)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w16)
         operandValue' (PPC.U1imm (W.unW ->  w1)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w1)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w1)
         operandValue' (PPC.U2imm (W.unW ->  w2)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w2)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w2)
         operandValue' (PPC.U4imm (W.unW ->  w4)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w4)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w4)
         operandValue' (PPC.U5imm (W.unW ->  w5)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w5)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w5)
         operandValue' (PPC.U6imm (W.unW ->  w6)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w6)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w6)
         operandValue' (PPC.U7imm (W.unW ->  w7)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w7)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w7)
         operandValue' (PPC.U8imm (W.unW ->  w8)) =
-          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w8)
+          A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat w8)
         operandValue' (PPC.Vrrc (PPC.VR vr)) =
           let loc = LocVSR (PPC.VSReg (vr + 32))
           in A.LocationOperand loc <$> locLookup loc
@@ -652,18 +653,18 @@ instance A.IsLocation (Location PPC) where
   locationType LocVSCR = knownRepr
   locationType LocMem = knownRepr
 
-  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocIP = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocMSR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocCTR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocLNK = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocVSR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocVSCR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocIP = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocMSR = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocCTR = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocLNK = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocXER = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocCR = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym (LocVSR _) = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat (BV.zero knownNat)
+  defaultLocationExpr sym LocVSCR = S.bvLit sym knownNat (BV.zero knownNat)
   defaultLocationExpr sym LocMem =
-    S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
+    S.constantArray sym knownRepr =<< S.bvLit sym knownNat (BV.zero knownNat)
 
   nonMemLocations = concat
     [ map (Some . LocGPR . PPC.GPR) [0..31]

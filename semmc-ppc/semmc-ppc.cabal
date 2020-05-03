@@ -72,6 +72,7 @@ library
                      , located-base
                      , filepath
                      , megaparsec >= 7 && < 8
+                     , bv-sized
                      , what4 >= 0.4
 
   hs-source-dirs:      src
