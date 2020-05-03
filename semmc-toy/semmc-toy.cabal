@@ -21,6 +21,7 @@ library
   ghc-options: -Wall
   build-depends:       base >= 4.7 && < 5
                      , async >= 2 && < 3
+                     , bv-sized
                      , containers >= 0.5.8
                      , filepath
                      , located-base
