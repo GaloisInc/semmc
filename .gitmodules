@@ -28,3 +28,6 @@
 [submodule "submodules/what4"]
 	path = submodules/what4
 	url = https://github.com/GaloisInc/what4
+[submodule "submodules/bv-sized"]
+	path = submodules/bv-sized
+	url = git@github.com:/GaloisInc/bv-sized.git
