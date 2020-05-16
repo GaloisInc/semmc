@@ -29,28 +29,21 @@ import           GHC.TypeLits
 import           Data.Kind
 import           Data.Maybe ( catMaybes )
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.IO as T
 import qualified Data.List as List
 import           Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Control.Applicative ( Const(..) )
-import           Control.Monad.Identity
 import qualified Control.Monad.Except as ME
 import           Control.Monad ( liftM, forM )
 import           Data.Proxy
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
-import qualified System.IO as IO
 import qualified System.IO.Unsafe as IO
 import qualified Data.HashTable.Class as H
 import qualified Control.Monad.ST as ST
 
-
-
 import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as TH
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Type.List as TL
@@ -62,7 +55,6 @@ import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as NR
-import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
 import           Data.Parameterized.Pair
 import           Data.Parameterized.HasRepr
@@ -71,13 +63,12 @@ import           Data.Parameterized.Lift ( LiftF(..) )
 -- from asl translator
 import           Data.Parameterized.CtxFuns
 
-import qualified Lang.Crucible.Backend.Simple as CB
-import qualified SemMC.BoundVar as BV
+import qualified Lang.Crucible.Backend.Simple as CBS
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
-import qualified SemMC.Formula.Formula as SF
+import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Env as SF
-import qualified SemMC.Formula.Printer as SF
+import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Util as U
 
 import qualified Dismantle.ARM.T32 as T32
@@ -88,7 +79,6 @@ import           SemMC.Architecture.AArch32 ( AArch32 )
 import qualified SemMC.Architecture.AArch32 as ARM
 import qualified SemMC.Architecture.ARM.Location as ARM
 import           SemMC.Architecture.ARM.Combined ( ARMOperandRepr )
-import qualified SemMC.Architecture.ARM.Combined as ARM
 
 import qualified Language.ASL.Globals as ASL
 import qualified Language.ASL.Formulas as ASL
@@ -97,7 +87,6 @@ import qualified What4.Interface as WI
 import qualified What4.Symbol as WI
 import qualified What4.Expr.Builder as WB
 import           What4.Utils.Util ( SomeSome(..) )
-import qualified What4.Utils.Log as Log
 
 data OperandTypeWrapper (arch :: Type) :: TL.TyFun Symbol WI.BaseType -> Type
 type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
@@ -412,7 +401,7 @@ unsafeSymbol nm = case WI.userSymbol nm of
   Right s -> s
 
 dropUFPrefix :: String -> String
-dropUFPrefix nm = case List.stripPrefix "uf." nm of
+dropUFPrefix nm = case List.stripPrefix "uf_" nm of
   Just nm' -> nm'
   Nothing -> nm
 
@@ -425,8 +414,8 @@ symFnToFunFormula :: forall sym args ret
 symFnToFunFormula sym name symFn
   | (argtps, argvars) <- mkArgLists symFn
   , Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn)
-  = ((dropUFPrefix $ T.unpack name), SF.FunctionFormula
-        { SF.ffName = dropUFPrefix $ T.unpack name
+  = (T.unpack name, SF.FunctionFormula
+        { SF.ffName = T.unpack name
         , SF.ffArgTypes = argtps
         , SF.ffArgVars = argvars
         , SF.ffRetType = WI.fnReturnType symFn
@@ -460,8 +449,9 @@ formulaEnv proxy sym = do
     toUF :: A.UninterpFn arch
          -> IO (String, (SF.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr))
     toUF (A.MkUninterpFn name args ret _) = do
-      uf <- SF.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol name) args ret
-      return (("uf." ++ sanitizedName name), (uf, Some ret))
+      let ufname = "uf_" ++ name
+      uf <- SF.SomeSome <$> WI.freshTotalUninterpFn sym (U.makeSymbol ufname) args ret
+      return (sanitizedName ufname, (uf, Some ret))
 
 getParserEnv :: forall sym. SF.FormulaEnv sym AArch32 -> Map.Map T.Text (SomeSome (WI.SymFn sym))
 getParserEnv (SF.FormulaEnv env _) = Map.fromList $ map reshape $ Map.assocs env
@@ -491,10 +481,10 @@ mkFormula sym (nm, SomeSome symFn) =
   let (nm', formula) = symFnToFunFormula sym nm symFn
   in (nm', Some formula)
 
-data ASLSemantics = ASLSemantics
-  { a32Semantics :: [(Some (A32.Opcode A32.Operand), BS.ByteString)]
-  , t32Semantics :: [(Some (T32.Opcode T32.Operand), BS.ByteString)]
-  , funSemantics :: [(String, BS.ByteString)]
+data ASLSemantics sym = ASLSemantics
+  { a32Semantics :: MapF.MapF (A32.Opcode A32.Operand) (SF.ParameterizedFormula sym AArch32)
+  , t32Semantics :: MapF.MapF (T32.Opcode T32.Operand) (SF.ParameterizedFormula sym AArch32)
+  , funSemantics :: SF.Library sym
   }
 
 testEqualitySymFn :: WB.ExprSymFn t args ret
@@ -508,17 +498,17 @@ mkUFBundle :: forall sym t st fs arch
            -> SF.FormulaEnv sym arch
            -> IO (UFBundle sym)
 mkUFBundle sym (SF.FormulaEnv env _) = do
-  initGPRs <- getUF "uf.init_gprs" knownRepr knownRepr
-  initSIMDs <- getUF "uf.init_simds" knownRepr knownRepr
-  initMemory <- getUF "uf.init_memory" knownRepr knownRepr
-  updateGPRs <- getUF "uf.update_gprs" knownRepr knownRepr
-  updateSIMDs <- getUF "uf.update_simds" knownRepr knownRepr
-  updateMemory <- getUF "uf.update_memory" knownRepr knownRepr
+  initGPRs <- getUF "uf_init_gprs" knownRepr knownRepr
+  initSIMDs <- getUF "uf_init_simds" knownRepr knownRepr
+  initMemory <- getUF "uf_init_memory" knownRepr knownRepr
+  updateGPRs <- getUF "uf_update_gprs" knownRepr knownRepr
+  updateSIMDs <- getUF "uf_update_simds" knownRepr knownRepr
+  updateMemory <- getUF "uf_update_memory" knownRepr knownRepr
 
-  getGPRBase <- getUF "uf.gpr_get"
+  getGPRBase <- getUF "uf_gpr_get"
     (knownRepr :: Ctx.Assignment WI.BaseTypeRepr (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "GPRS" Ctx.::> WI.BaseBVType 4))
     (knownRepr :: WI.BaseTypeRepr (WI.BaseBVType 32))
-  getSIMDBase <- getUF "uf.simd_get"
+  getSIMDBase <- getUF "uf_simd_get"
     (knownRepr :: Ctx.Assignment WI.BaseTypeRepr (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "SIMDS" Ctx.::> WI.BaseBVType 8))
     (knownRepr :: WI.BaseTypeRepr (WI.BaseBVType 128))
 
@@ -587,11 +577,11 @@ postProcess opts pf =
         defs' = MapF.fromList $ filter filt $ MapF.toList $ SF.pfDefs pf
       in pf { SF.pfDefs = defs' }
 
-loadSemantics :: ASLSemanticsOpts -> IO ASLSemantics
-loadSemantics opts = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
-  Some ng <- PN.newIONonceGenerator
-  sym <- CB.newSimpleBackend CB.FloatIEEERepr ng
-
+loadSemantics :: forall t fs
+               . CBS.SimpleBackend t fs
+              -> ASLSemanticsOpts
+              -> IO (ASLSemantics (CBS.SimpleBackend t fs))
+loadSemantics sym opts = do
   initenv <- formulaEnv (Proxy @ARM.AArch32) sym
   ufBundle <- mkUFBundle sym initenv
 
@@ -603,25 +593,11 @@ loadSemantics opts = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
 
   a32pfs <- liftM catMaybes $ forM (Map.assocs A32.aslEncodingMap) $ \(Some a32opcode, enc) -> do
     result <- encodingToFormula sym ufBundle instrEnv (ARM.A32Opcode a32opcode) enc
-    return $ fmap (\pf -> (Pair a32opcode pf)) result
+    return $ fmap (\pf -> (Pair a32opcode (postProcess opts pf))) result
   t32pfs <- liftM catMaybes $ forM (Map.assocs T32.aslEncodingMap) $ \(Some t32opcode, enc) -> do
     result <- encodingToFormula sym ufBundle instrEnv (ARM.T32Opcode t32opcode) enc
-    return $ fmap (\pf -> (Pair t32opcode pf)) result
+    return $ fmap (\pf -> (Pair t32opcode (postProcess opts pf))) result
 
-  T.hPutStrLn handle "A32 Instructions"
-  a32Bytes <- forM a32pfs $ \(Pair opcode pformula) -> do
-    let
-      t = SF.printParameterizedFormula (typeRepr (ARM.A32Opcode opcode)) (postProcess opts pformula)
-      bs = T.encodeUtf8 $ t
-    T.hPutStrLn handle t
-    return (Some opcode, bs)
-  T.hPutStrLn handle "T32 Instructions"
-  t32Bytes <- forM t32pfs $ \(Pair opcode pformula) -> do
-    let
-      t = SF.printParameterizedFormula (typeRepr (ARM.T32Opcode opcode)) (postProcess opts pformula)
-      bs = T.encodeUtf8 $ t
-    T.hPutStrLn handle t
-    return (Some opcode, bs)
   let
     a32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems A32.aslEncodingMap
     t32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems T32.aslEncodingMap
@@ -629,19 +605,14 @@ loadSemantics opts = IO.withFile "ASL.log" IO.WriteMode $ \handle -> do
     instrProxies = Map.assocs $ Map.withoutKeys instrEnv (Set.fromList (a32Names ++ t32Names))
 
   let fformulas = map (mkFormula sym) (funcFormulas ++ instrProxies)
-  T.hPutStrLn handle "Function Library"
-  defBytes <- forM fformulas $ \(nm, Some fformula) -> do
-    let
-      t = SF.printFunctionFormula fformula
-      bs = T.encodeUtf8 $ t
-    T.hPutStrLn handle t
-    return (nm, bs)
 
-  return $ ASLSemantics a32Bytes t32Bytes defBytes
-
--- attachSemantics :: TH.ExpQ
--- attachSemantics = do
---   ASLSemantics a32sem t32sem funsem <- TH.runIO $ loadSemantics
---   [| ASLSemantics $(TH.listE (map toOpcodePair a32sem))
---                   $(TH.listE (map toOpcodePair t32sem))
---                   $(TH.listE (map toFunctionPair funsem)) |]
+  let addFunctionFormula :: (String, Some (SF.FunctionFormula (CBS.SimpleBackend t fs)))
+                         -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
+                         -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
+      addFunctionFormula (nm, Some (f@SF.FunctionFormula { SF.ffName = realName })) l =
+        MapF.insert (SF.functionRef f) f l
+  let lib = foldr addFunctionFormula SF.emptyLibrary fformulas
+  return $ ASLSemantics { a32Semantics = MapF.fromList a32pfs
+                        , t32Semantics = MapF.fromList t32pfs
+                        , funSemantics = lib
+                        }

@@ -49,7 +49,7 @@ import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
 import           Data.Kind
-import           Data.Map ( Map )
+import qualified Data.HashMap.Lazy as HM
 import qualified Data.Map as Map
 import           Data.Text ( Text )
 import qualified Data.Text as T
@@ -78,9 +78,9 @@ import           What4.Serialize.Parser ( deserializeExprWithConfig
                                         , WellFormedSExpr(..)
                                         , SomeSymFn(..)
                                         , Config(..)
-                                        , parseSExpr
                                         , printSExpr
                                         )
+import           What4.Serialize.FastSExpr ( parseSExpr )
 
 import qualified Data.Type.List as TL -- in this package
 import qualified SemMC.Architecture as A
@@ -355,7 +355,7 @@ readWithBindings ::
   -> m FreshNameEnv
 readWithBindings bindings = do
   namePairs <- mapM go bindings
-  return $ FreshNameEnv $ Map.fromList namePairs
+  return $ FreshNameEnv $ HM.fromList namePairs
   where go :: SExpr -> m (Text, Text)
         go (WFSList [WFSAtom (AId freshName), WFSAtom (AId oldName)]) = do
           return (freshName, oldName)
@@ -494,10 +494,10 @@ splitId t = (prefix, T.concat rest)
 -- other formal names appearing in the emitted
 -- s-expression. This mapping is used to lookup what a fresh
 -- name is referring to when needed.
-newtype FreshNameEnv = FreshNameEnv (Map Text Text)
+newtype FreshNameEnv = FreshNameEnv (HM.HashMap Text Text)
 
 lookupOrigName :: Text -> FreshNameEnv -> Maybe Text
-lookupOrigName nm (FreshNameEnv e) = Map.lookup nm e
+lookupOrigName nm (FreshNameEnv e) = HM.lookup nm e
 
 -- | Lookup function for parsing names to SymExprs. Names of
 -- the form `const.foo` are assumed to be opaque constants
