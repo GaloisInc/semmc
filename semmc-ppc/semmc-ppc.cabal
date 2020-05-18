@@ -59,7 +59,7 @@ library
                        SemMC.Architecture.PPC.UF
   build-depends:       base >= 4.9 && < 5
                      , mtl
-                     , parameterized-utils >= 1 && < 2.1
+                     , parameterized-utils >= 1 && < 2.2
                      , crucible >= 0.4
                      , semmc
                      , dismantle-tablegen
