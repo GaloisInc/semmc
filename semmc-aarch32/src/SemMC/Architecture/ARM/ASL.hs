@@ -36,18 +36,12 @@ import           Control.Applicative ( Const(..) )
 import qualified Control.Monad.Except as ME
 import           Control.Monad ( liftM, forM )
 import           Data.Proxy
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Unsafe as UBS
-import qualified System.IO.Unsafe as IO
 import qualified Data.HashTable.Class as H
 import qualified Control.Monad.ST as ST
-
-import qualified Language.Haskell.TH as TH
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Type.List as TL
 import qualified Data.Parameterized.TyMap as TM
-import           Data.Parameterized.SymbolRepr ( Symbol )
 import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Classes
 import           Data.Parameterized.List as SL
@@ -57,7 +51,6 @@ import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some
 import           Data.Parameterized.Pair
 import           Data.Parameterized.HasRepr
-import           Data.Parameterized.Lift ( LiftF(..) )
 
 -- from asl translator
 import           Data.Parameterized.CtxFuns
@@ -83,7 +76,6 @@ import qualified Language.ASL.Globals as ASL
 import qualified Language.ASL.Formulas as ASL
 
 import qualified What4.Interface as WI
-import qualified What4.Symbol as WI
 import qualified What4.Expr.Builder as WB
 import           What4.Utils.Util ( SomeSome(..) )
 
@@ -94,8 +86,6 @@ type OperandTypesCtx arch sh = TL.ToContextFwd (TL.Map (OperandTypeWrapper arch)
 
 data GlobalsTypeWrapper :: TL.TyFun Symbol WI.BaseType -> Type
 type instance TL.Apply GlobalsTypeWrapper s = ASL.GlobalsType s
-
-type AllGlobalsCtx = TM.MapContext GlobalsTypeWrapper ASL.GlobalSymsCtx
 
 shapeOfOperands :: SL.List ARMOperandRepr sh -> SL.List WI.BaseTypeRepr (OperandTypes AArch32 sh)
 shapeOfOperands SL.Nil = SL.Nil
@@ -177,13 +167,11 @@ mkOpParams bvs =
 
 class WI.IsSymExprBuilder sym => SymFnsHaveBVs sym where
   fnBoundVars :: sym -> WI.SymFn sym args ret -> Maybe (Ctx.Assignment (WI.BoundVar sym) args)
-  showSymFn :: sym -> WI.SymFn sym args ret -> String
 
 instance SymFnsHaveBVs (WB.ExprBuilder t st fs) where
   fnBoundVars _sym symFn = case WB.symFnInfo symFn of
       WB.DefinedFnInfo vars _ _ -> Just vars
       _ -> Nothing
-  showSymFn _sym symFn = show symFn
 
 data UFBundle sym =
    UFBundle { getGPR :: forall n
@@ -202,8 +190,8 @@ data UFBundle sym =
             , initGPRs :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "GPRS")
             , initSIMDs :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "SIMDS")
             , initMemory :: WI.SymFn sym Ctx.EmptyCtx (ASL.GlobalsType "__Memory")
-            , updateGPRs :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "GPRS") (ASL.GlobalsType "GPRS")
-            , updateSIMDs :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "SIMDS") (ASL.GlobalsType "SIMDS")
+            , _updateGPRs :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "GPRS") (ASL.GlobalsType "GPRS")
+            , _updateSIMDs :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "SIMDS") (ASL.GlobalsType "SIMDS")
             , updateMemory :: WI.SymFn sym (Ctx.EmptyCtx Ctx.::> ASL.GlobalsType "__Memory") (ASL.GlobalsType "__Memory")
             }
 
@@ -256,7 +244,6 @@ wrapInSymFn :: WI.IsSymExprBuilder sym
             -> IO (WI.SymExpr sym tp)
 wrapInSymFn sym expr args = do
   freshBvs <- FC.traverseFC (\arg -> WI.freshBoundVar sym WI.emptySymbol (WI.exprType arg)) args
-  let freshBVExprs = FC.fmapFC (WI.varExpr sym) freshBvs
   symFn <- WI.definedFn sym WI.emptySymbol freshBvs expr (\_ -> False)
   WI.applySymFn sym symFn args
 
@@ -271,16 +258,9 @@ unfoldSymFn sym symFn args = case WB.symFnInfo symFn of
   _ -> fail "unfoldSymFn: unexpected function kind"
 
 getUsedBvsOfExpr :: (sym ~ WB.ExprBuilder t st fs)
-                 => sym
-                 -> WI.SymExpr sym tp
+                 => WI.SymExpr sym tp
                  -> IO (Set (Some (WI.BoundVar sym)))
-getUsedBvsOfExpr sym expr = liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
-
-appendToSymbol ::  WI.SolverSymbol -> String -> WI.SolverSymbol
-appendToSymbol symbol str =
-  let
-    symbolstr = T.unpack $ WI.solverSymbolAsText symbol
-  in unsafeSymbol (symbolstr ++ str)
+getUsedBvsOfExpr expr = liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
 
 -- | Extract a parameterized formula from a given function.
 symFnToParamFormula :: forall sym t st fs sh
@@ -290,7 +270,7 @@ symFnToParamFormula :: forall sym t st fs sh
                     -> ARM.ARMOpcode ARM.ARMOperand sh
                     -> WI.SymFn sym (FnArgSig sh) (WI.BaseStructType ASL.StructGlobalsCtx)
                     -> IO (SF.ParameterizedFormula sym AArch32 sh)
-symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMDs, initMemory, updateMemory }) opcode symFn = do
+symFnToParamFormula sym (UFBundle { getGPR, getSIMD, initGPRs, initSIMDs, initMemory, updateMemory }) opcode symFn = do
   opvars <- mkOperandVars sym opcode
   gbvars <- mkGlobalVars sym
   (gbPreStructBvs, allGPRVars, allSIMDVars) <- getGlobalStruct sym gbvars
@@ -348,7 +328,7 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
                    . GlobalBoundVar sym s
                   -> GlobalParameter sym sh s
                   -> IO (Const (Maybe (Pair (SF.Parameter AArch32 sh) (WI.SymExpr sym))) s)
-    filterTrivial (GlobalBoundVar bv _) gbparam@(GlobalParameter param expr) =
+    filterTrivial (GlobalBoundVar bv _) (GlobalParameter param expr) =
       case WI.varExpr sym bv == expr of
         True -> return $ Const $ Nothing
         False -> return $ Const $ Just $ (Pair param expr)
@@ -368,7 +348,7 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
       expr' <- WB.evalBoundVars sym expr
                  (Ctx.empty Ctx.:> ASL.sGPRs preBvs Ctx.:> ASL.sSIMDs preBvs)
                  (Ctx.empty Ctx.:> allGPRs Ctx.:> allSIMDs)
-      usedBvs <- getUsedBvsOfExpr sym expr'
+      usedBvs <- getUsedBvsOfExpr expr'
 
       let
         filterUsed :: forall s. GlobalBoundVar sym s -> Maybe (Some (SF.Parameter AArch32 sh))
@@ -379,26 +359,6 @@ symFnToParamFormula sym ufBundle@(UFBundle { getGPR, getSIMD, initGPRs, initSIMD
 
       return $ Set.fromList $ catMaybes $ FC.toListFC filterUsed gbvars
 
-
-natToGPRIdx :: n <= ASL.MaxGPR
-            => WI.IsSymExprBuilder sym
-            => sym
-            -> NR.NatRepr n
-            -> IO (WI.SymExpr sym (WI.BaseBVType 4))
-natToGPRIdx sym n = WI.bvLit sym WI.knownNat (NR.intValue n)
-
-natToSIMDIdx :: n <= ASL.MaxSIMD
-             => WI.IsSymExprBuilder sym
-             => sym
-             -> NR.NatRepr n
-             -> IO (WI.SymExpr sym (WI.BaseBVType 8))
-natToSIMDIdx sym n = WI.bvLit sym WI.knownNat (NR.intValue n)
-
-unsafeSymbol :: String -> WI.SolverSymbol
-unsafeSymbol nm = case WI.userSymbol nm of
-  Left err -> error (show err)
-  Right s -> s
-
 symFnToFunFormula :: forall sym args ret
                  . SymFnsHaveBVs sym
                 => sym
@@ -406,7 +366,7 @@ symFnToFunFormula :: forall sym args ret
                 -> WI.SymFn sym args ret
                 -> (String, SF.FunctionFormula sym '(TL.FromContextFwd args, ret))
 symFnToFunFormula sym name symFn
-  | (argtps, argvars) <- mkArgLists symFn
+  | (argtps, argvars) <- mkArgLists
   , Refl <- TL.toFromCtxFwd (WI.fnArgTypes symFn)
   = (T.unpack name, SF.FunctionFormula
         { SF.ffName = T.unpack name
@@ -416,11 +376,10 @@ symFnToFunFormula sym name symFn
         , SF.ffDef = symFn
         })
   where
-    mkArgLists :: WI.SymFn sym args ret
-               -> ( SL.List WI.BaseTypeRepr (TL.FromContextFwd args)
+    mkArgLists :: ( SL.List WI.BaseTypeRepr (TL.FromContextFwd args)
                   , SL.List (WI.BoundVar sym) (TL.FromContextFwd args)
                   )
-    mkArgLists symFn = case fnBoundVars sym symFn of
+    mkArgLists = case fnBoundVars sym symFn of
       Just vars -> (TL.fromAssignmentFwd (WI.fnArgTypes symFn), TL.fromAssignmentFwd vars)
       _ -> error $ "mkArgLists: unexpected function: " ++ T.unpack name
 
@@ -452,19 +411,6 @@ getParserEnv (SF.FormulaEnv env _) = Map.fromList $ map reshape $ Map.assocs env
   where
     reshape :: (String, (SF.SomeSome (WI.SymFn sym), Some WI.BaseTypeRepr)) -> (T.Text, (SomeSome (WI.SymFn sym)))
     reshape (nm, (SF.SomeSome symfn, _)) = (T.pack $ nm, SomeSome symfn)
-
-toOpcodePair :: (LiftF a) => (Some a, BS.ByteString) -> TH.ExpQ
-toOpcodePair (Some o, bs) = TH.tupE [ [| Some $(liftF o) |], embedByteString bs ]
-
-toFunctionPair :: (String, BS.ByteString) -> TH.ExpQ
-toFunctionPair (name, bs) = TH.tupE [ [| $(TH.litE (TH.StringL name)) |], embedByteString bs ]
-
-embedByteString :: BS.ByteString -> TH.ExpQ
-embedByteString bs =
-  [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(TH.litE (TH.StringPrimL (BS.unpack bs)))) |]
-  where
-    len = BS.length bs
-
 
 mkFormula :: forall sym t st fs
            . (sym ~ WB.ExprBuilder t st fs)
@@ -563,13 +509,14 @@ postProcess opts pf =
     True ->
       let
         filt :: Pair (SF.Parameter AArch32 sh) (WI.SymExpr sym) -> Bool
-        filt (Pair (SF.LiteralParameter (ARM.Location ref)) expr) = case ref of
+        filt (Pair (SF.LiteralParameter (ARM.Location ref)) _expr) = case ref of
           ASL.GPRRef _ | Just Refl <- testEquality ref (ASL.knownGlobalRef @"_R0") -> True
           ASL.GPRRef _ -> False
           _ -> True
-          
+
         defs' = MapF.fromList $ filter filt $ MapF.toList $ SF.pfDefs pf
       in pf { SF.pfDefs = defs' }
+    False -> pf
 
 loadSemantics :: forall t fs
                . CBS.SimpleBackend t fs
@@ -603,7 +550,7 @@ loadSemantics sym opts = do
   let addFunctionFormula :: (String, Some (SF.FunctionFormula (CBS.SimpleBackend t fs)))
                          -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
                          -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
-      addFunctionFormula (nm, Some (f@SF.FunctionFormula { SF.ffName = realName })) l =
+      addFunctionFormula (_nm, Some f) l =
         MapF.insert (SF.functionRef f) f l
   let lib = foldr addFunctionFormula SF.emptyLibrary fformulas
   return $ ASLSemantics { a32Semantics = MapF.fromList a32pfs
