@@ -29,7 +29,6 @@ import           GHC.TypeLits
 import           Data.Kind
 import           Data.Maybe ( catMaybes )
 import qualified Data.Text as T
-import qualified Data.List as List
 import           Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -399,11 +398,6 @@ unsafeSymbol :: String -> WI.SolverSymbol
 unsafeSymbol nm = case WI.userSymbol nm of
   Left err -> error (show err)
   Right s -> s
-
-dropUFPrefix :: String -> String
-dropUFPrefix nm = case List.stripPrefix "uf_" nm of
-  Just nm' -> nm'
-  Nothing -> nm
 
 symFnToFunFormula :: forall sym args ret
                  . SymFnsHaveBVs sym
