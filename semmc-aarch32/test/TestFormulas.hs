@@ -57,15 +57,5 @@ testAll = testCase "testAll" $ withTestLogging $ do
   Some ng <- PN.newIONonceGenerator
   sym <- S.newSimpleBackend S.FloatIEEERepr ng
   WB.startCaching sym
-  env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
-  sem <- loadSemantics (ASLSemanticsOpts { aslOptTrimRegs = True })
-  lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env (funSemantics sem)
-  let
-    aconv :: (Some (A32.Opcode A32.Operand), BS.ByteString) -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-    aconv (o,b) = (mapSome A32Opcode o, b)
-
-    tconv :: (Some (T32.Opcode T32.Operand), BS.ByteString) -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-    tconv (o,b) = (mapSome T32Opcode o, b)
-  _ <- FL.loadFormulas sym env lib (map aconv $ a32Semantics sem)
-  _ <- FL.loadFormulas sym env lib (map tconv $ t32Semantics sem)
+  _sem <- loadSemantics sym (ASLSemanticsOpts { aslOptTrimRegs = True })
   return ()
