@@ -9,30 +9,16 @@
 
 import           Control.Concurrent
 import           Control.Exception
-import qualified Data.ByteString as BS
-import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
-import           Data.Proxy ( Proxy(..) )
-import           Data.Semigroup
-import qualified Dismantle.ARM.A32 as A32
-import qualified Dismantle.ARM.T32 as T32
 
-import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
-import qualified SemMC.Architecture.AArch32 as ARM
-import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes ( loadSemantics, ASLSemantics(..)
                                                 , ASLSemanticsOpts(..))
-import qualified SemMC.Formula.Formula as F
-import qualified SemMC.Formula.Load as FL
-import qualified SemMC.Formula.Env as FE
 import qualified SemMC.Util as U
 import           System.IO
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import qualified What4.Interface as CRU
 import qualified What4.Expr.Builder as WB
 
 main :: IO ()
