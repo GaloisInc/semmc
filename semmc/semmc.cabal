@@ -62,6 +62,7 @@ library
                        template-haskell,
                        ghc-prim,
                        containers >= 0.5.8,
+                       unordered-containers,
                        ordered-containers,
                        bytestring,
                        binary,
