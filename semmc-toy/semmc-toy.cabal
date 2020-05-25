@@ -28,7 +28,7 @@ library
                      , text >= 1 && < 2
                      , crucible >= 0.4
                      , dismantle-tablegen
-                     , parameterized-utils >= 1 && < 2.1
+                     , parameterized-utils >= 2.1.0 && < 2.2
                      , semmc
                      , semmc-learning
                      , semmc-synthesis
