@@ -72,7 +72,7 @@ reverseReverse xs | Refl <- reverseAccReverse SL.Nil xs = Refl
 -- application of 'Map'. Tricky because doing case analysis on such a list does
 -- not provide much, since GHC does not infer from, say, @Map f xs ~ '[]@ that
 -- @xs ~ '[]@.
-mapFromMapped :: forall (f :: TyFun k1 k2 -> Type) (xs :: [k1])
+mapFromMapped :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: [k1])
                         (g :: k2 -> Type) (h :: k1 -> Type) w
                . Proxy f -> (forall (x :: k1). g (Apply f x) -> h x)
               -> SL.List w xs -- ^ Needed to do case analysis on @xs@

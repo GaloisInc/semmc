@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 -- | This module is an internal implementation detail and is just here to break
 -- an import cycle around a few definitions that were formerly in Architecture.
 module SemMC.Architecture.Internal (
