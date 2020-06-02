@@ -3,6 +3,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -33,7 +34,7 @@ type family Map (f :: TyFun k1 k2 -> Type) (xs :: [k1]) :: [k2] where
   Map f (x ': xs) = Apply f x ': Map f xs
 
 -- | Apply a type-modifying 'Map' to each element of an 'SL.List' 
-applyMapList :: forall (f :: TyFun k1 k2 -> Type) (xs :: [k1])
+applyMapList :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: [k1])
                         (g :: k2 -> Type) (h :: k1 -> Type)
                . Proxy f -> (forall (x :: k1). h x -> g (Apply f x))
               -> SL.List h xs
@@ -47,7 +48,7 @@ type family MapContext (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx 
 
 
 -- | Apply a type-modifying 'MapContext' to each element of an 'Ctx.Assignment' 
-applyMapContext :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
+applyMapContext :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
                         (g :: k2 -> Type) (h :: k1 -> Type)
                . Proxy f -> (forall (x :: k1). h x -> g (Apply f x))
               -> Ctx.Assignment h xs
