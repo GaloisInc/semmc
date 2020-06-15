@@ -244,7 +244,7 @@ exprToGroundVal :: forall sym tp.
                 -> S.SymExpr sym tp
                 -> Maybe (GE.GroundValue tp)
 exprToGroundVal BaseBoolRepr                 e = S.asConstantPred e
-exprToGroundVal (BaseBVRepr w)               e = S.asBV e
+exprToGroundVal (BaseBVRepr _w)              e = S.asBV e
 exprToGroundVal BaseNatRepr                  e = S.asNat e 
 exprToGroundVal BaseIntegerRepr              e = S.asInteger e
 exprToGroundVal BaseRealRepr                _e = Nothing

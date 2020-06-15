@@ -336,6 +336,12 @@ operandValue :: forall sym s.
              -> IO (A.TaggedExpr PPC sym s)
 operandValue sym locLookup op = TaggedExpr <$> operandValue' op
   where operandValue' :: PPC.Operand s -> IO (A.AllocatedOperand PPC sym s)
+        -- Many of the operands are stored as Word32/Int32 and the like. We use
+        -- the bv-sized smart constructors for those types to convert to BV 32,
+        -- and truncate or extend to the required width. This has the advantage
+        -- of making it more obvious that we are performing a truncation or an
+        -- extension, and might catch subtle bugs that might arise later if the
+        -- underlying representations are changed.
         operandValue' (PPC.Abscalltarget (PPC.ABT absTarget)) =
           A.ValueOperand <$> S.bvLit sym knownNat (BV.trunc knownNat (BV.word32 absTarget))
         operandValue' (PPC.Abscondbrtarget (PPC.ACBT absTarget)) =

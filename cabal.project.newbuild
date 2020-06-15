@@ -19,7 +19,6 @@ packages:
 optional-packages:
   submodules/arm-asl-parser
   submodules/asl-translator
-  submodules/bv-sized
   submodules/crucible/crucible
   submodules/what4/what4
   submodules/crucible/crucible-llvm
