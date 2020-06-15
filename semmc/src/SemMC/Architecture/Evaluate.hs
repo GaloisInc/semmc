@@ -8,6 +8,7 @@ module SemMC.Architecture.Evaluate (
   evaluateInstruction
   ) where
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Monoid ((<>))
 import           Data.Parameterized.Classes (ShowF(showF))
 import           Data.Parameterized.Some (Some(Some))
@@ -89,8 +90,7 @@ evaluateFormula sb formula initialState =
                         AV.ValueMem _ -> error "ValueMem not supported by valueToCrucibleElt"
                         AV.ValueBV (wordValue :: W.W n) ->
                             let w = W.unW wordValue
-                            in SI.bvLit sb (W.rep wordValue) w
-
+                            in SI.bvLit sb (W.rep wordValue) (BV.mkBV (W.rep wordValue) w)
             substitutions <- traverseFC bindMatchingLocation assignment0'
 
             newFormDefs <- traverseF
@@ -101,7 +101,7 @@ evaluateFormula sb formula initialState =
                 f loc expr m =
                     case A.locationType loc of
                         BT.BaseBVRepr (repr::BT.NatRepr n) ->
-                            case SI.asUnsignedBV expr of
+                            case BV.asUnsigned <$> SI.asBV expr of
                                 Nothing -> m
                                 Just val ->
                                     let wVal :: W.W n

@@ -39,6 +39,7 @@ module SemMC.Util
 import           Control.Monad.ST ( runST )
 import qualified Data.HashTable.Class as H
 import           Data.Maybe ( fromMaybe )
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Context
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
@@ -228,10 +229,10 @@ allGroundAssign :: Assignment BaseTypeRepr idx
                 -> [Integer]
                 -> [Assignment GE.GroundValueWrapper idx]
 allGroundAssign Empty                 _ = [Empty]
-allGroundAssign (idx :> BaseBVRepr _) indices = do
+allGroundAssign (idx :> BaseBVRepr w) indices = do
   vs <- allGroundAssign idx indices
   i <- indices
-  return $ vs :> GE.GVW i
+  return $ vs :> GE.GVW (BV.mkBV w i)
 allGroundAssign _ _ = error "allGroundAssign is only defined for bit vectors"
 
 
@@ -243,7 +244,7 @@ exprToGroundVal :: forall sym tp.
                 -> S.SymExpr sym tp
                 -> Maybe (GE.GroundValue tp)
 exprToGroundVal BaseBoolRepr                 e = S.asConstantPred e
-exprToGroundVal (BaseBVRepr _w)              e = S.asSignedBV e
+exprToGroundVal (BaseBVRepr _w)              e = S.asBV e
 exprToGroundVal BaseNatRepr                  e = S.asNat e 
 exprToGroundVal BaseIntegerRepr              e = S.asInteger e
 exprToGroundVal BaseRealRepr                _e = Nothing
@@ -359,7 +360,7 @@ withRounding sym r action = do
  where
   roundingCond :: S.RoundingMode -> IO (S.Pred sym)
   roundingCond rm =
-    S.bvEq sym r =<< S.bvLit sym knownNat (roundingModeToBits rm)
+    S.bvEq sym r =<< S.bvLit sym knownNat (BV.mkBV knownNat (roundingModeToBits rm))
 
 roundingModeToBits :: S.RoundingMode -> Integer
 roundingModeToBits = \case

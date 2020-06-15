@@ -39,6 +39,7 @@ module SemMC.Architecture.PPC.Shared (
   fromMaybeGPRBase
   ) where
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Bits ( shiftR, shiftL, (.|.), (.&.) )
 import qualified Data.ByteString.Builder as B
 import           Data.Int ( Int16 )
@@ -192,7 +193,7 @@ symbolicTemplatedOperand Proxy _signed name constr =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          let recover evalFn = constr <$> evalFn v
+          let recover evalFn = constr <$> BV.asUnsigned <$> evalFn v
           return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 isR0 :: forall t st fs sh u tp arch sym
@@ -309,4 +310,4 @@ fromMaybeGPRBase :: forall arch sym.
                  -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                  -> IO (S.SymBV sym (A.RegWidth arch))
 fromMaybeGPRBase _sym (Just gpr) locLookup  = locLookup (LocGPR gpr)
-fromMaybeGPRBase sym  Nothing    _locLookup = S.bvLit sym knownNat 0
+fromMaybeGPRBase sym  Nothing    _locLookup = S.bvLit sym knownNat (BV.zero knownNat)

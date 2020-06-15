@@ -23,6 +23,7 @@ module SemMC.Architecture.AArch32
 
 import           Control.Monad ( replicateM )
 
+import qualified Data.BitVector.Sized as BV
 import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as PL
@@ -135,12 +136,12 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
 
         opVa :: A32.Operand s -> IO (A.AllocatedOperand AArch32 sym s)
         opVa o = case o of
-          A32.Bv1 v -> A.ValueOperand <$> S.bvLit sym knownNat (toInteger $ W.unW v)
+          A32.Bv1 v -> A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat (W.unW v))
           unhandled -> error $ "operandValue not implemented for " <> show unhandled
 
         opVt :: T32.Operand s -> IO (A.AllocatedOperand AArch32 sym s)
         opVt o = case o of
-          T32.Bv1 v -> A.ValueOperand <$> S.bvLit sym knownNat (toInteger $ W.unW v)
+          T32.Bv1 v -> A.ValueOperand <$> S.bvLit sym knownNat (BV.mkBV knownNat (W.unW v))
           unhandled -> error $ "operandValue not implemented for " <> show unhandled
  
 -- In the ASL-translated semantics, operands never correspond to locations

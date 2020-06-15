@@ -26,6 +26,7 @@ import           Control.Monad.State
 -- import qualified Text.PrettyPrint.ANSI.Leijen as PP
 -- import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Context as Ctx
 import qualified Lang.Crucible.Backend as B
@@ -234,7 +235,7 @@ readMemOF :: forall arch sym bits.
         -> S.SymBV sym (A.RegWidth arch)
         -- ^ The address in memory at which to read
         -> MemM sym arch (S.SymBV sym bits)
-readMemOF bits addr = case S.asUnsignedBV addr of
+readMemOF bits addr = case BV.asUnsigned <$> S.asBV addr of
   Nothing  -> readMemNoOF bits addr
   Just off -> S.withDivModNat bits (S.knownNat @8) $
     \bytes m -> -- bytes is the number of bytes corresponding to bits
@@ -269,7 +270,7 @@ readMemOF bits addr = case S.asUnsignedBV addr of
       -- first read to the end of the address space
       xs <- readMemNoOF (toBits bytes1) addr
       -- then read from the beginning of the address space
-      z <- liftIO $ S.bvLit sym (S.knownNat @(A.RegWidth arch)) 0
+      z <- liftIO $ S.bvLit sym (S.knownNat @(A.RegWidth arch)) (BV.zero S.knownNat)
       ys <- readMemNoOF (toBits bytes2) z
       xys <- liftIO $ S.bvConcat sym xs ys
       -- 8*bytes1 + 8*bytes2 ~ 8*(bytes1 + bytes2)

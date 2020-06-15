@@ -27,6 +27,7 @@ import           System.FilePath
 
 import qualified GHC.Err.Located as L
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.List as SL
@@ -100,7 +101,7 @@ doThing = do
 fooFormula :: (ShowF (S.SymExpr sym)) => (SB.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 fooFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
-  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
+  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) (BV.mkBV knownNat 2)
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg2Def <- S.bvAdd sym reg1TimesTwo twoLit
   return $ Formula { formParamVars = MapF.insert (RegLoc Reg1) reg1
@@ -113,7 +114,7 @@ independentFormula :: (ShowF (S.SymExpr sym)) => (SB.IsSymInterface sym, S.IsExp
 independentFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
   reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (A.locationType (RegLoc Reg2))
-  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
+  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) (BV.mkBV knownNat 2)
   -- reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg1Def <- S.bvMul sym (S.varExpr sym reg1) twoLit
   -- reg2TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg2)
@@ -130,7 +131,7 @@ dependentFormula :: (ShowF (S.SymExpr sym)) => (SB.IsSymInterface sym, S.IsExprB
 dependentFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
   -- reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (A.locationType (RegLoc Reg2))
-  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
+  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) (BV.mkBV knownNat 2)
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg1Def <- S.bvAdd sym reg1TimesTwo twoLit
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)

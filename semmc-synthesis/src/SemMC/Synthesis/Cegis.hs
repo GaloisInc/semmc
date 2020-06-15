@@ -24,6 +24,7 @@ module SemMC.Synthesis.Cegis
   ) where
 
 import           Control.Monad.IO.Class ( liftIO )
+import qualified Data.BitVector.Sized as BV
 import qualified Data.Parameterized.Map as MapF
 
 import qualified Lang.Crucible.Backend.Online as CBO
@@ -161,8 +162,8 @@ checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
   where
     -- 0 < i < 2^64-1 - 2^12
     inBounds i = do
-      bv0 <- S.bvLit sym rw 0
-      bv4096 <- S.bvLit sym rw (-4096)
+      bv0 <- S.bvLit sym rw (BV.zero rw)
+      bv4096 <- S.bvLit sym rw (BV.mkBV rw (-4096))
       iGt0 <-S.bvUlt sym bv0 i
       iLtMinus4096 <- S.bvUlt sym i bv4096
       S.andPred sym iGt0 iLtMinus4096

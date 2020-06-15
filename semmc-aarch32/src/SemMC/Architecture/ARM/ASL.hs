@@ -39,6 +39,7 @@ import           Data.Proxy
 import qualified Data.HashTable.Class as H
 import qualified Control.Monad.ST as ST
 
+import qualified Data.BitVector.Sized as BVS
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Type.List as TL
 import qualified Data.Parameterized.TyMap as TM
@@ -465,7 +466,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       , idx <- natReplicatedIndex ASL.maxGPRRepr n (Ctx.size allGPRs)
       = return $ allGPRs Ctx.! idx
     getGPR n expr _ = do
-      idxBv <- WI.bvLit sym (NR.knownNat @4) (NR.intValue n)
+      idxBv <- WI.bvLit sym (NR.knownNat @4) (BVS.mkBV NR.knownNat (NR.intValue n))
       expr' <- WI.applySymFn sym updateGPRs (Ctx.singleton expr)
       WI.applySymFn sym getGPRBase (Ctx.empty Ctx.:> expr' Ctx.:> idxBv)
 
@@ -481,7 +482,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       , idx <- natReplicatedIndex ASL.maxSIMDRepr n (Ctx.size allSIMDs)
       = return $ allSIMDs Ctx.! idx
     getSIMD n expr _ = do
-      idxBv <- WI.bvLit sym (NR.knownNat @8) (NR.intValue n)
+      idxBv <- WI.bvLit sym (NR.knownNat @8) (BVS.mkBV NR.knownNat (NR.intValue n))
       expr' <- WI.applySymFn sym updateSIMDs (Ctx.singleton expr)
       WI.applySymFn sym getSIMDBase (Ctx.empty Ctx.:> expr' Ctx.:> idxBv)
 

@@ -59,7 +59,7 @@ library
                        SemMC.Architecture.PPC.UF
   build-depends:       base >= 4.9 && < 5
                      , mtl
-                     , parameterized-utils >= 1 && < 2.2
+                     , parameterized-utils >= 2.1.0 && < 2.2
                      , crucible >= 0.4
                      , semmc
                      , dismantle-tablegen
@@ -72,6 +72,7 @@ library
                      , located-base
                      , filepath
                      , megaparsec >= 7 && < 8
+                     , bv-sized
                      , what4 >= 0.4
 
   hs-source-dirs:      src

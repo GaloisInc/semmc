@@ -76,7 +76,7 @@ library
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
                        dismantle-tablegen,
                        crucible >= 0.4,
-                       parameterized-utils >= 1 && < 2.2,
+                       parameterized-utils >= 2.1.0 && < 2.2,
                        process >= 1.4 && < 1.7,
                        async >= 2.2 && < 2.3,
                        time,
@@ -92,7 +92,8 @@ library
                        crucible-llvm,
                        what4-serialize,
                        ordered-containers,
-                       ansi-wl-pprint
+                       ansi-wl-pprint,
+                       bv-sized >= 1.0.0 && < 1.1
 
   hs-source-dirs:      src
   default-language:    Haskell2010

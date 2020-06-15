@@ -41,6 +41,7 @@ import           Data.Word ( Word32 )
 import qualified GHC.Err.Located as L
 import           GHC.TypeLits ( KnownSymbol, Nat, Symbol, sameSymbol )
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import qualified Data.Parameterized.List as SL
@@ -304,7 +305,7 @@ instance TemplatableOperand Toy where
               where mkConst :: TemplatedOperandFn Toy "I32"
                     mkConst sym _ = do
                       v <- S.freshConstant sym (makeSymbol "I32") knownRepr
-                      let recover evalFn = I32 . fromInteger <$> evalFn v
+                      let recover evalFn = I32 . fromInteger . BV.asUnsigned <$> evalFn v
                       return (A.ValueOperand v, RecoverOperandFn recover)
       r -> error $ "opTemplates: unexpected symbolRepr: "++show r
 
@@ -318,7 +319,7 @@ type instance A.Location Toy = Location
 
 valueToOperand :: forall s. (KnownSymbol s) => GroundValue (A.OperandType Toy s) -> Operand s
 valueToOperand val
-  | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "I32") = I32 (fromInteger val)
+  | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "I32") = I32 (fromInteger (BV.asUnsigned val))
   | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "R32") =
       L.error "can't get register operand from value"
   | otherwise = undefined
@@ -355,7 +356,7 @@ instance A.Architecture Toy where
   allocateSymExprsForOperand _ _ newVars (R32 reg) =
     let loc = RegLoc reg
     in TaggedExpr <$> A.LocationOperand loc <$> newVars loc
-  allocateSymExprsForOperand _ sym _     (I32 imm) = TaggedExpr <$> A.ValueOperand <$> S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
+  allocateSymExprsForOperand _ sym _     (I32 imm) = TaggedExpr <$> A.ValueOperand <$> S.bvLit sym (knownNat :: NatRepr 32) (BV.word32 imm)
 
   operandToLocation _ (R32 reg) = Just (RegLoc reg)
   operandToLocation _ (I32 _) = Nothing
@@ -395,7 +396,7 @@ instance A.IsLocation Location where
 
   locationType RegLoc{} = knownRepr :: BaseTypeRepr (BaseBVType 32)
 
-  defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
+  defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) (BV.zero knownNat)
 
   registerizationLocations = A.allLocations
 

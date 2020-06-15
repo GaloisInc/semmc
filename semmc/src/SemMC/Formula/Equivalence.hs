@@ -19,6 +19,7 @@ module SemMC.Formula.Equivalence
   , formulasEquivConcrete
   ) where
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Foldable ( foldrM )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
@@ -110,7 +111,7 @@ formulasEquivConcrete =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (V.Value tp)
       eval (GroundEvalFn evalFn) e =
         case S.exprType e of
-          BaseBVRepr w -> V.ValueBV . W.wRep w <$> evalFn e
+          BaseBVRepr w -> V.ValueBV . W.wRep w <$> BV.asUnsigned <$> evalFn e
           _ -> error "formulasEquivConcrete: only BVs supported"
   in formulasEquiv eval
 
