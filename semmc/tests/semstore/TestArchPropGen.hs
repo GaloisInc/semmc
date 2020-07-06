@@ -16,6 +16,7 @@ module TestArchPropGen
 where
 
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
+import qualified Data.BitVector.Sized as BVS
 import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
 import qualified Data.List as L
@@ -401,7 +402,7 @@ genBV32SymExpr sym params opvars litvars = do
       nonrecursive =
         [ -- non-recursive
           do i <- toInteger <$> HG.int32 linearBounded
-             expr <- liftIO $ WI.bvLit sym knownNat i
+             expr <- liftIO $ WI.bvLit sym knownNat (BVS.mkBV knownNat i)
              return ("bvLit32=" <> show i, expr)
         ] <> optional
 
