@@ -148,6 +148,7 @@ test-suite semmc-semstore-tests
   hs-source-dirs: tests/semstore
   build-depends: base
                , bytestring
+               , bv-sized
                , containers
                , crucible
                , directory

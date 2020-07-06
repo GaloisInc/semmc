@@ -51,6 +51,7 @@ library
                      , mtl
                      , binary
                      , bytestring
+                     , bv-sized
                      , containers
                      , crucible
                      , dismantle-arm
