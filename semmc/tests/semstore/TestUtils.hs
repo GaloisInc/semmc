@@ -115,7 +115,7 @@ compareParameterizedFormulasSymbolically
      , SA.Architecture arch
      , SA.Location arch ~ TestLocation
      , sym ~ CBO.OnlineBackend t solver fs
-     , WPO.OnlineSolver t solver
+     , WPO.OnlineSolver solver
      ) =>
      sym
   -> PL.List (SA.Operand arch) sh

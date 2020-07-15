@@ -62,7 +62,7 @@ deriving instance (ShowF (A.Location arch), ShowF ex) => Show (EquivalenceResult
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Elt's.
 formulasEquivSym :: forall arch t solver fs .
-                    (A.Architecture arch, WPO.OnlineSolver t solver)
+                    (A.Architecture arch, WPO.OnlineSolver solver)
                  => CBO.OnlineBackend t solver fs
                  -> [Integer]
                  -- ^ Only check equivalence of memory at these addresses.
@@ -79,7 +79,7 @@ formulasEquivSym sym indices =
 -- | Check the equivalence of two formulas, under some condition of the final
 -- predicate. The counterexample values are 'Elt's.
 formulasEquivSymWithCondition :: forall arch t solver fs .
-                    (A.Architecture arch, WPO.OnlineSolver t solver)
+                    (A.Architecture arch, WPO.OnlineSolver solver)
                  => CBO.OnlineBackend t solver fs
                  -> (Expr t BaseBoolType -> IO (Expr t BaseBoolType))
                  -- ^ This predicate must hold of the resulting equation
@@ -102,7 +102,7 @@ formulasEquivSymWithCondition sym resCheck locCheck indices =
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Value's.
 formulasEquivConcrete :: forall arch t solver fs .
-                         (A.Architecture arch, WPO.OnlineSolver t solver)
+                         (A.Architecture arch, WPO.OnlineSolver solver)
                       => CBO.OnlineBackend t solver fs
                       -> F.Formula (CBO.OnlineBackend t solver fs) arch
                       -> F.Formula (CBO.OnlineBackend t solver fs) arch
@@ -130,7 +130,7 @@ allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
 -- to the formula @f2@. The second output is a map from locations used in @f1@
 -- or @f2@ to the symbolic variables representing them in the predicate.
 formulasEquivPred :: forall t solver fs arch.
-                 (A.Architecture arch, WPO.OnlineSolver t solver)
+                 (A.Architecture arch, WPO.OnlineSolver solver)
               => CBO.OnlineBackend t solver fs
               -> F.Formula (CBO.OnlineBackend t solver fs) arch
               -> F.Formula (CBO.OnlineBackend t solver fs) arch
@@ -196,7 +196,7 @@ formulasEquivPred
 -- | Check the equivalence of two formulas, using the first parameter to extract
 -- expression values for the counterexample.
 formulasEquiv :: forall t solver fs arch ex.
-                 (A.Architecture arch, WPO.OnlineSolver t solver)
+                 (A.Architecture arch, WPO.OnlineSolver solver)
               => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
               -> CBO.OnlineBackend t solver fs
               -> F.Formula (CBO.OnlineBackend t solver fs) arch
@@ -210,7 +210,7 @@ formulasEquiv eval sym f1 f2 = do
 -- expression values for the counterexample. Also assert that the resulting
 -- predicate satisfies the condition given.
 formulasEquivWithCondition :: forall t solver fs arch ex sym.
-                 (A.Architecture arch, WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs)
+                 (A.Architecture arch, WPO.OnlineSolver solver, sym ~ CBO.OnlineBackend t solver fs)
               => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
               -> sym
               -> (Expr t BaseBoolType -> IO (Expr t BaseBoolType))
@@ -233,7 +233,7 @@ formulasEquivWithCondition eval sym checkRes checkLoc f1 f2 = do
 --
 -- We are requiring the online solver here, as most of this library requires
 -- lots of small queries.
-checkSat :: (WPO.OnlineSolver t solver)
+checkSat :: (WPO.OnlineSolver solver)
          => CBO.OnlineBackend t solver fs
          -> WE.BoolExpr t
          -> (SatResult (GroundEvalFn t) () -> IO a)
@@ -247,7 +247,7 @@ checkSat sym testExpr handler = do
       res <- WPO.checkAndGetModel sp "semmc equivalence formula"
       handler res
 
-checkSatEvalFn :: (WPO.OnlineSolver t solver)
+checkSatEvalFn :: (WPO.OnlineSolver solver)
           => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
           -> CBO.OnlineBackend t solver fs
           -> MapF.MapF (L.Location arch) (Expr t)
