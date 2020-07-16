@@ -142,7 +142,7 @@ addMergableClass ix = RWS.modify' $ \s -> s { mergableClasses = ix : mergableCla
 -- This function returns 'Nothing' if the new program generates a counterexample
 -- that invalidates all of the previous programs.
 classify :: forall arch t solver fs
-          . (SynC arch, WPO.OnlineSolver t solver)
+          . (SynC arch, WPO.OnlineSolver solver)
          => AC.RegisterizedInstruction arch
          -- ^ The instruction whose semantics we are trying to learn
          -> CP.CandidateProgram t solver fs arch
@@ -188,7 +188,7 @@ numberItem n itm = (n + 1, (n, itm))
 -- Note that this function never adds equivalence classes, so iterating by index
 -- is safe.
 classifyByClass :: forall arch t solver fs sh
-                 . (SynC arch, WPO.OnlineSolver t solver)
+                 . (SynC arch, WPO.OnlineSolver solver)
                 => AC.RegisterizedInstruction arch
                 -- ^ The target instruction
                 -> CP.CandidateProgram t solver fs arch
@@ -536,7 +536,7 @@ mergeClasses = F.foldr mappend Seq.empty
 --
 -- We pass in the environment so that we can access the IORelation for the
 -- current target instruction
-testEquivalence :: (AP.ArchitectureWithPseudo arch, AC.ConcreteArchitecture arch, WPO.OnlineSolver t solver)
+testEquivalence :: (AP.ArchitectureWithPseudo arch, AC.ConcreteArchitecture arch, WPO.OnlineSolver solver)
                 => ClassifyEnv arch sh
                 -> CP.CandidateProgram t solver fs arch
                 -> CP.CandidateProgram t solver fs arch

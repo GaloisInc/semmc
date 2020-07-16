@@ -127,7 +127,7 @@ withInitialState :: forall arch a
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
-                 -> (forall t solver fs . (WPO.OnlineSolver t solver) => SynEnv t solver fs arch -> IO a)
+                 -> (forall t solver fs . (WPO.OnlineSolver solver) => SynEnv t solver fs arch -> IO a)
                  -- ^ Computation to pass run with access to the 'SynEnv'
                  -> IO a
 withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
@@ -155,7 +155,7 @@ withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
 -- bound param which is explicit here.
 loadInitialStateExplicit :: forall arch t solver fs
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
-                     WPO.OnlineSolver t solver,
+                     WPO.OnlineSolver solver,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
                     HR.HasRepr (AP.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
                  => Config arch
