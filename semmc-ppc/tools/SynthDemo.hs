@@ -120,7 +120,7 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver t solver)
+loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver solver)
             => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
             -> CBO.OnlineBackend t solver fs
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC),

@@ -64,7 +64,7 @@ executeTests progsToTest = do
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv progsToTest)
 
-allTests :: ( WPO.OnlineSolver t solver
+allTests :: ( WPO.OnlineSolver solver
             , WIF.IsInterpretedFloatExprBuilder (WEB.ExprBuilder t (CBO.OnlineBackendState solver) fs)
             )
          => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
@@ -150,7 +150,7 @@ mkMemRIX n i = D.Memrix (D.MemRIX (Just (D.GPR n)) (i :: I.I 14))
 mkMemRI :: Word8 -> Int16 -> D.Operand "Memri"
 mkMemRI n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 
-toSynthesisTest :: ( WPO.OnlineSolver t solver
+toSynthesisTest :: ( WPO.OnlineSolver solver
                    , CB.IsSymInterface sym
                    , sym ~ CBO.OnlineBackend t solver fs
                    )
@@ -168,7 +168,7 @@ matchInsn :: D.Instruction
 matchInsn (D.Instruction opc operands) k = k opc operands
 
 loadBaseSet :: forall sym t solver fs.
-               (WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)
+               (WPO.OnlineSolver solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)
             => [(String, BS8.ByteString)]
             -> [(Some (D.Opcode D.Operand), BS8.ByteString)]
             -> sym
