@@ -33,7 +33,7 @@ synthesizeAndCheck :: forall proxy arch t solver fs
                     . ( A.Architecture arch
                       , A.Architecture (SS.TemplatedArch arch)
                       , A.ArchRepr arch
-                      , WPO.OnlineSolver t solver
+                      , WPO.OnlineSolver solver
                       , SS.TemplatableOperand arch
                       , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                       )
@@ -71,7 +71,7 @@ synthesizeAndCheck proxy env sem matchInsn p = do
 
 symbolicallySimulateProgram :: forall proxy t solver fs arch
                              . ( A.Architecture arch
-                               , WPO.OnlineSolver t solver
+                               , WPO.OnlineSolver solver
                                )
                             => proxy arch
                             -> CBO.OnlineBackend t solver fs

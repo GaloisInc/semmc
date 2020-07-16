@@ -65,7 +65,7 @@ splits [] = [(Set.empty, Set.empty)]
 splits (x:xs) = [ s' | (left, right) <- splits xs
                      , s' <- [(Set.insert x left, right), (left, Set.insert x right)]]
 
-enumerateSplits :: (OrdF (Location arch), WPO.OnlineSolver t solver)
+enumerateSplits :: (OrdF (Location arch), WPO.OnlineSolver solver)
                 => Formula (CBO.OnlineBackend t solver fs) arch
                 -> [(Formula (CBO.OnlineBackend t solver fs) arch, Formula (CBO.OnlineBackend t solver fs) arch)]
 enumerateSplits form = mapMaybe (makeSplit form)
@@ -76,7 +76,7 @@ divideAndConquer :: (Architecture arch,
                      ArchRepr arch,
                      Architecture (TemplatedArch arch),
                      Typeable arch,
-                     WPO.OnlineSolver t solver,
+                     WPO.OnlineSolver solver,
                      CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                      )
                  => SynthesisParams (CBO.OnlineBackend t solver fs) arch

@@ -64,7 +64,7 @@ setupEnvironment sym baseSet =
 -- TODO: Restore divide and conquer passes that are currently commented out
 mcSynth :: (TemplateConstraints arch,
             ArchRepr arch,
-            WPO.OnlineSolver t solver,
+            WPO.OnlineSolver solver,
             CB.IsSymInterface (CBO.OnlineBackend t solver fs)
            )
         => SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
@@ -102,7 +102,7 @@ mcSynth env target = do
 -- timeout limit.
 mcSynthTimeout :: (TemplateConstraints arch,
                    ArchRepr arch,
-                   WPO.OnlineSolver t solver,
+                   WPO.OnlineSolver solver,
                    CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                   )
                => Int 
