@@ -514,6 +514,7 @@ postProcess opts pf =
           ASL.GPRRef _ | Just Refl <- testEquality ref (ASL.knownGlobalRef @"_R0") -> True
           ASL.GPRRef _ -> False
           _ -> True
+        filt _ = error "postProcess: filt: invalid arguments"
 
         defs' = MapF.fromList $ filter filt $ MapF.toList $ SF.pfDefs pf
       in pf { SF.pfDefs = defs' }

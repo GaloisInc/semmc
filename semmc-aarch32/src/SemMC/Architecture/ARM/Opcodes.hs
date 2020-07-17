@@ -13,7 +13,6 @@ module SemMC.Architecture.ARM.Opcodes
     )
     where
 
-import qualified Data.ByteString as BS
 import           Data.Parameterized.Some
 
 import qualified Dismantle.ARM.A32 as A32
