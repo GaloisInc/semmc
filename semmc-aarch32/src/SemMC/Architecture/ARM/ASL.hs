@@ -541,13 +541,7 @@ loadSemantics sym opts = do
     result <- encodingToFormula sym ufBundle instrEnv (ARM.T32Opcode t32opcode) enc
     return $ fmap (\pf -> (Pair t32opcode (postProcess opts pf))) result
 
-  let
-    a32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems A32.aslEncodingMap
-    t32Names = map (\enc -> T.pack $ (ASL.encName enc)) $ Map.elems T32.aslEncodingMap
-    -- individual functions representing the projection of each global for every instruction
-    instrProxies = Map.assocs $ Map.withoutKeys instrEnv (Set.fromList (a32Names ++ t32Names))
-
-  let fformulas = map (mkFormula sym) (funcFormulas ++ instrProxies)
+  let fformulas = map (mkFormula sym) funcFormulas
 
   let addFunctionFormula :: (String, Some (SF.FunctionFormula (CBS.SimpleBackend t fs)))
                          -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
