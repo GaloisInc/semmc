@@ -94,7 +94,7 @@ footprintFilter target candidate =
 
 
 
-instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
+instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
             => CegisParams (CBO.OnlineBackend t solver fs) arch
             -> Formula (CBO.OnlineBackend t solver fs) arch
             -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver fs) arch)]
@@ -139,7 +139,7 @@ synthesizeFormula' :: (Architecture arch,
                        TemplatableOperand arch,
                        ArchRepr arch,
                        Architecture (TemplatedArch arch),
-                       WPO.OnlineSolver t solver,
+                       WPO.OnlineSolver solver,
                        CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                        )
                    => CegisParams (CBO.OnlineBackend t solver fs) arch
@@ -171,7 +171,7 @@ synthesizeFormula :: forall t solver fs arch .
                       ArchRepr arch,
                       Architecture (TemplatedArch arch),
                       Typeable arch,
-                      WPO.OnlineSolver t solver,
+                      WPO.OnlineSolver solver,
                       CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                      )
                   => SynthesisParams (CBO.OnlineBackend t solver fs) arch

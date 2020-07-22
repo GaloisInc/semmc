@@ -56,7 +56,7 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
 
 cegis' :: forall arch t solver fs.
           (A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
-          , WPO.OnlineSolver t solver
+          , WPO.OnlineSolver solver
           , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
           )
        => [T.TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
@@ -121,7 +121,7 @@ cegis' trial trialFormula = do
 
 cegis :: forall arch sym t solver fs.
         ( A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
-        , WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs
+        , WPO.OnlineSolver solver, sym ~ CBO.OnlineBackend t solver fs
         , CB.IsSymInterface sym
         )
       => CegisParams sym arch
