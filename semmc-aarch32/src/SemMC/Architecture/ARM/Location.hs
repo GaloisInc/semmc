@@ -43,7 +43,7 @@ class ArchRepr arch where
 
 -- ----------------------------------------------------------------------
 
--- | A location is simply an index into the globals
+-- | A location is simply an index int o the globals
 data Location arm :: BaseType -> * where
   Location :: ASL.GlobalRef s -> Location arm (ASL.GlobalsType s)
 
