@@ -39,7 +39,6 @@ import           Control.Monad ( liftM, forM )
 import           Data.Proxy
 import qualified Data.HashTable.Class as H
 import qualified Control.Monad.ST as ST
-import           Data.Maybe ( fromMaybe )
 
 import qualified Data.BitVector.Sized as BVS
 import qualified Data.Parameterized.Context as Ctx
@@ -300,61 +299,39 @@ symFnToParamFormula sym (UFBundle {..}) opcode symFn = do
 
   let WI.BaseStructRepr structRepr = WI.exprType expr
   structExprs <- ASL.toGlobalsStruct <$> Ctx.traverseWithIndex (\idx _ -> WI.structField sym expr idx) structRepr
-
-  glbParams <- ASL.flattenGlobalsStruct structExprs
-    (\ref expr' -> do
-       expr'' <- case ref of
-         _ | Just Refl <- testEquality ref (ASL.knownSimpleGlobalRef @"__AssertionFailure") ->
-               WI.applySymFn sym updateAssert (Ctx.singleton expr')
-         _ | Just Refl <- testEquality ref (ASL.knownSimpleGlobalRef @"__UndefinedBehavior") ->
-               WI.applySymFn sym updateUndefB (Ctx.singleton expr')
-         _ | Just Refl <- testEquality ref (ASL.knownSimpleGlobalRef @"__UnpredictableBehavior") ->
-               WI.applySymFn sym updateUnpredB (Ctx.singleton expr')
-         _ -> return expr'
-       return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SimpleGlobalRef ref))) expr'')
-    (\ref expr' -> ASL.withGPRRef ref $ \n -> do
-        gprExpr <- getGPR n expr' allGPRVars
-        return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.GPRRef ref))) gprExpr)
-    (\ref expr' -> ASL.withSIMDRef ref $ \n -> do
-        simdExpr <- getSIMD n expr' allSIMDVars
-        return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SIMDRef ref))) simdExpr)
-    (\expr' -> do
-        expr'' <- WI.applySymFn sym updateMemory (Ctx.singleton expr') 
-        return $ GlobalParameter (SF.LiteralParameter (ARM.Location ASL.MemoryRef)) expr'')
+ 
+  -- Expand out the register updates as individual global update expressions
+  glbParams <- ASL.flattenGlobalsStruct structExprs resolveSimpleRef (resolveGPRRef allGPRVars) (resolveSIMDRef allSIMDVars) resolveMemRef
 
   defs' <- MapF.fromList . catMaybes . FC.toListFC (\(Const c) -> c) <$> Ctx.zipWithM filterTrivial gbvars glbParams
 
-  gprsExpr' <- do
-    gprsExpr <- return $ ASL.sGPRs structExprs
-    case gprsExpr of
-      WB.NonceAppExpr nae
-        | WB.FnApp symFn' _args <- WB.nonceExprApp nae
-        , Just Refl <- testEqualitySymFn symFn' initGPRs
-        -> return Nothing
-      _ -> Just <$> WI.applySymFn sym updateGPRs (Ctx.singleton gprsExpr)
+  -- Additionally, create a dummy expression that contains the entire register
+  -- update, wrapped in a unit-valued uninterpreted function, if any register updates have occurred.
+  -- This is the expression that is actually used by macaw for translation, since we only want
+  -- to execute the register state update once, rather than once for each indiviual register.
+  gprsExpr' <- case ASL.sGPRs structExprs of
+   WB.NonceAppExpr nae
+     | WB.FnApp symFn' _args <- WB.nonceExprApp nae
+     , Just Refl <- testEqualitySymFn symFn' initGPRs
+     -> return Nothing
+   e -> Just <$> WI.applySymFn sym updateGPRs (Ctx.singleton e)
 
-  simdsExpr' <- do
-    simdsExpr <- return $ ASL.sSIMDs structExprs
-    case simdsExpr of
-      WB.NonceAppExpr nae
-        | WB.FnApp symFn' _args <- WB.nonceExprApp nae
-        , Just Refl <- testEqualitySymFn symFn' initSIMDs
-        -> return Nothing
-      _ -> Just <$> WI.applySymFn sym updateSIMDs (Ctx.singleton simdsExpr)
+  simdsExpr' <- case ASL.sSIMDs structExprs of
+    WB.NonceAppExpr nae
+      | WB.FnApp symFn' _args <- WB.nonceExprApp nae
+      , Just Refl <- testEqualitySymFn symFn' initSIMDs
+      -> return Nothing
+    e -> Just <$> WI.applySymFn sym updateSIMDs (Ctx.singleton e)
 
-  let statefulOp = case (gprsExpr', simdsExpr') of
-        (Nothing, Nothing) -> False
-        _ -> True
+  let addDummy e =
+        MapF.insert (SF.LiteralParameter (ARM.Location (ASL.knownGlobalRef @"__DummyValue"))) e defs'
 
-  noopApplied <- WI.applySymFn sym noop Ctx.empty
-  let gprsExpr = fromMaybe noopApplied gprsExpr'
-  let simdsExpr = fromMaybe noopApplied simdsExpr'
-
-  dummyExpr <- WI.applySymFn sym joinUnits (Ctx.empty Ctx.:> gprsExpr Ctx.:> simdsExpr)
-
-  let defs = case statefulOp of
-        True ->  MapF.insert (SF.LiteralParameter (ARM.Location (ASL.knownGlobalRef @"__DummyValue"))) dummyExpr defs'
-        False -> defs'
+  defs <- case (gprsExpr', simdsExpr') of
+    (Nothing, Nothing) -> return defs'
+    (Just gprsExpr, Nothing) -> return $ addDummy gprsExpr
+    (Nothing, Just simdsExpr) -> return $ addDummy simdsExpr
+    (Just gprsExpr, Just simdsExpr) ->
+      addDummy <$> WI.applySymFn sym joinUnits (Ctx.empty Ctx.:> gprsExpr Ctx.:> simdsExpr)
 
   let litVarMap = getLiteralVarMap gbvars
 
@@ -381,6 +358,46 @@ symFnToParamFormula sym (UFBundle {..}) opcode symFn = do
       case asBoundVar expr of
         Just bv' | bv == bv' -> return $ Const $ Nothing
         _ -> return $ Const $ Just $ (Pair param expr)
+
+    -- | Resolve return values, but wrap meta-state flags in an uninterpreted function
+    -- so they can be treated specially by macaw
+    resolveSimpleRef :: forall s. ASL.SimpleGlobalRef s
+                     -> WB.Expr t (ASL.GlobalsType s)
+                     -> IO (GlobalParameter sym sh s)
+    resolveSimpleRef ref expr' = do
+      expr'' <- case ref of
+        _ | Just Refl <- testEquality ref (ASL.knownSimpleGlobalRef @"__AssertionFailure") ->
+              WI.applySymFn sym updateAssert (Ctx.singleton expr')
+        _ | Just Refl <- testEquality ref (ASL.knownSimpleGlobalRef @"__UndefinedBehavior") ->
+              WI.applySymFn sym updateUndefB (Ctx.singleton expr')
+        _ | Just Refl <- testEquality ref (ASL.knownSimpleGlobalRef @"__UnpredictableBehavior") ->
+              WI.applySymFn sym updateUnpredB (Ctx.singleton expr')
+        _ -> return expr'
+      return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SimpleGlobalRef ref))) expr''
+      
+    resolveGPRRef :: forall n
+                   . Ctx.Assignment (WI.SymExpr sym) ASL.GPRCtx
+                  -> ASL.GPRRef n
+                  -> WB.Expr t (ASL.GlobalsType "GPRS")
+                  -> IO (GlobalParameter sym sh (IndexedSymbol "_R" n))
+    resolveGPRRef allGPRVars ref expr' = ASL.withGPRRef ref $ \n -> do
+      gprExpr <- getGPR n expr' allGPRVars
+      return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.GPRRef ref))) gprExpr
+
+    resolveSIMDRef :: forall n
+                    . Ctx.Assignment (WI.SymExpr sym) ASL.SIMDCtx
+                   -> ASL.SIMDRef n
+                   -> WB.Expr t (ASL.GlobalsType "SIMDS")
+                   -> IO (GlobalParameter sym sh (IndexedSymbol "_V" n))
+    resolveSIMDRef allSIMDVars ref expr' = ASL.withSIMDRef ref $ \n -> do
+      simdExpr <- getSIMD n expr' allSIMDVars
+      return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SIMDRef ref))) simdExpr
+
+    resolveMemRef :: WB.Expr t (ASL.GlobalsType "__Memory")
+                  -> IO (GlobalParameter sym sh "__Memory")
+    resolveMemRef expr' = do
+      expr'' <- WI.applySymFn sym updateMemory (Ctx.singleton expr') 
+      return $ GlobalParameter (SF.LiteralParameter (ARM.Location ASL.MemoryRef)) expr''
 
     -- | Here we rewrite the each initial register state bound variable
     -- into a dummy expression that forces a dependency on all the corresponding
