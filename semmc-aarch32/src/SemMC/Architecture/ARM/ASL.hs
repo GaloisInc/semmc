@@ -61,6 +61,7 @@ import           Data.Parameterized.CtxFuns
 import qualified Lang.Crucible.Backend.Simple as CBS
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
+import           Language.ASL.Globals ( UnitType )
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Env as SF
 import qualified SemMC.Formula.Formula as SF
@@ -175,8 +176,6 @@ instance SymFnsHaveBVs (WB.ExprBuilder t st fs) where
   fnBoundVars _sym symFn = case WB.symFnInfo symFn of
       WB.DefinedFnInfo vars _ _ -> Just vars
       _ -> Nothing
-
-type UnitType = WI.BaseBoolType
 
 data UFBundle sym =
    UFBundle { getGPR :: forall n

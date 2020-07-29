@@ -30,6 +30,7 @@ import Data.Parameterized.Context
 import GHC.TypeLits
 import qualified SemMC.Architecture as A
 import qualified Language.ASL.Globals as G
+import           Language.ASL.Globals ( UnitType )
 
 import What4.BaseTypes
 import Data.Proxy
@@ -39,8 +40,6 @@ type BaseIdxType arch = BaseBVType (A.RegWidth arch)
 -- | The type of the memory array
 --type BaseMemType arch = BaseArrayType (SingleCtx (BaseIdxType arch)) (BaseBVType 8)
 type BaseMemType arch = G.MemoryBaseType
-
-type UnitType = BaseBoolType
 
 uninterpretedFunctions :: forall proxy arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
                          proxy arm
