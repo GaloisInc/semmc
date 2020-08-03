@@ -19,11 +19,9 @@ module SemMC.Architecture.ARM.UF
     )
     where
 
-import           Data.Parameterized.WithRepr
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some
-import           Control.Applicative ( Const(..) )
 import qualified Data.Text as T
 import           Data.Maybe ( catMaybes )
 
@@ -32,6 +30,7 @@ import Data.Parameterized.Context
 import GHC.TypeLits
 import qualified SemMC.Architecture as A
 import qualified Language.ASL.Globals as G
+import           Language.ASL.Globals ( UnitType )
 
 import What4.BaseTypes
 import Data.Proxy
@@ -83,16 +82,36 @@ uninterpretedFunctions _ =
                    ("init_memory")
                    (\_ -> [])
   , A.mkUninterpFn @(EmptyCtx ::> G.GlobalsType "GPRS")
-                   @(G.GlobalsType "GPRS")
+                   @(UnitType)
                    ("update_gprs")
                    (\_ -> [])
   , A.mkUninterpFn @(EmptyCtx ::> G.GlobalsType "SIMDS")
-                   @(G.GlobalsType "SIMDS")
+                   @(UnitType)
                    ("update_simds")
                    (\_ -> [])
   , A.mkUninterpFn @(EmptyCtx ::> G.GlobalsType "__Memory")
                    @(G.GlobalsType "__Memory")
                    ("update_memory")
+                   (\_ -> [])
+  , A.mkUninterpFn @(EmptyCtx ::> G.GlobalsType "__AssertionFailure")
+                   @(G.GlobalsType "__AssertionFailure")
+                   ("update_assert")
+                   (\_ -> [])
+  , A.mkUninterpFn @(EmptyCtx ::> G.GlobalsType "__UndefinedBehavior")
+                   @(G.GlobalsType "__UndefinedBehavior")
+                   ("update_undefB")
+                   (\_ -> [])
+  , A.mkUninterpFn @(EmptyCtx ::> G.GlobalsType "__UnpredictableBehavior")
+                   @(G.GlobalsType "__UnpredictableBehavior")
+                   ("update_unpredB")
+                   (\_ -> [])
+  , A.mkUninterpFn @(EmptyCtx ::> UnitType ::> UnitType)
+                   @(UnitType)
+                   ("join_units")
+                   (\_ -> [])
+  , A.mkUninterpFn @(EmptyCtx)
+                   @(UnitType)
+                   ("noop")
                    (\_ -> [])
   , A.mkUninterpFn @(EmptyCtx ::> BaseBVType 64 ::> BaseBVType 32 ::> BaseBoolType)
                    @(BaseBVType 32)
@@ -167,6 +186,7 @@ mkAssertBVUF n
   | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
   , Just NR.LeqProof <- NR.isPosNat (knownNat @n)
   = A.mkUninterpFn @(EmptyCtx ::> BaseBoolType ::> BaseBVType n) @(BaseBVType n) ("assertBV_" ++ show n) (\_ -> [])
+mkAssertBVUF _ = error "mkAssertBVUF: invalid arguments"
 
 
 mkGlobalUF :: G.Global tp -> Maybe (A.UninterpFn arm)
@@ -209,7 +229,7 @@ bvUnOp name args sizes =
 
 mkAllBV1 :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
          => String
-         -> (forall n m. 1 <= n => NR.NatRepr n -> (Some (Assignment BaseTypeRepr), Some BaseTypeRepr))
+         -> (forall n. 1 <= n => NR.NatRepr n -> (Some (Assignment BaseTypeRepr), Some BaseTypeRepr))
          -> [Integer]
          -> [A.UninterpFn arm]
 mkAllBV1 name mksig sizes = [ mkBV1UF name mksig sz | sz <- sizes ]
@@ -233,6 +253,7 @@ mkBV1UF name mksig bvsz
   , Just NR.LeqProof <- NR.isPosNat nr
   , (Some args, Some ret) <- mksig nr
   = A.MkUninterpFn (name ++ "_" ++ show bvsz) args ret (\_ -> [])
+mkBV1UF _ _ _ = error "mkBV1UF: invalid arguments"
 
 mkBV2UF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
        => String
@@ -247,6 +268,7 @@ mkBV2UF name mksig bvsz1 bvsz2
   , Just NR.LeqProof <- NR.isPosNat bvszRep2
   , (Some args, Some ret) <- mksig bvszRep1 bvszRep2
   = A.MkUninterpFn (name ++ "_" ++ show bvsz1 ++ "_" ++ show bvsz2) args ret (\_ -> [])
+mkBV2UF _ _ _ _ = error "mkBV2UF: invalid arguments"
 
 mkReadMemUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
             => Integer

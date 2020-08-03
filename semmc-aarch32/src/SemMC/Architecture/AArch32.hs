@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module SemMC.Architecture.AArch32
     ( AArch32
@@ -21,36 +22,19 @@ module SemMC.Architecture.AArch32
     )
     where
 
-import           Control.Monad ( replicateM )
 
 import qualified Data.BitVector.Sized as BV
-import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup ((<>))
-import qualified Data.Set as Set
-import qualified Data.Vector.Sized as V
-import           Data.Word ( Word8, Word32 )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits
-import           Language.Haskell.TH hiding ( recover )
-
-import qualified Text.Megaparsec as P
-import qualified Text.Megaparsec.Char as P
-import qualified Text.Megaparsec.Char.Lexer as P
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as AL
 
-import qualified SemMC.Formula as F
-import qualified SemMC.Synthesis.Template as T
-import qualified SemMC.Util as U
-
 import           What4.BaseTypes
-import qualified What4.Expr as WE
 import qualified What4.Interface as S
 
 import qualified Dismantle.ARM.A32 as A32
@@ -63,8 +47,6 @@ import           SemMC.Architecture.ARM.Combined -- A32 + T32
 import           SemMC.Architecture.ARM.Location
 
 data AArch32  -- arch type
-
-type Parser = P.Parsec String String
 
 type instance A.Opcode   AArch32 = ARMOpcode
 type instance A.Operand  AArch32 = ARMOperand
@@ -129,7 +111,7 @@ operandValue :: forall sym s.
              -> (forall tp. Location AArch32 tp -> IO (S.SymExpr sym tp))
              -> ARMOperand s
              -> IO (A.TaggedExpr AArch32 sym s)
-operandValue sym locLookup op = TaggedExpr <$> opV op
+operandValue sym _locLookup op = TaggedExpr <$> opV op
   where opV :: ARMOperand s -> IO (A.AllocatedOperand AArch32 sym s)
         opV (A32Operand o) = opVa o
         opV (T32Operand o) = opVt o
@@ -211,12 +193,6 @@ instance (S.IsExpr (S.SymExpr sym), ShowF (A.Location arch)) => Show (OperandCom
                 
 operandComponentsImmediate :: proxy sym -> OperandComponents arch sym s -> Maybe (Some (S.SymExpr sym))
 operandComponentsImmediate _ (OCBv e) = Just . Some $ e
-
-noLocation :: PL.List (A.AllocatedOperand arch sym) sh
-           -> F.WrappedOperand arch sh s
-           -> BaseTypeRepr tp
-           -> Maybe (Location arch tp)
-noLocation _ _ _ = Nothing
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t st fs AArch32)]
 locationFuncInterpretation = []
