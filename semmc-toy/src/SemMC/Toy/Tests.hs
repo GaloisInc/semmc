@@ -40,6 +40,7 @@ import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
 import qualified Lang.Crucible.Backend as SB
 import qualified What4.Interface as S
+import qualified What4.ProblemFeatures as WPF
 import qualified Lang.Crucible.Backend.Online as CBO
 
 import qualified SemMC.Architecture as A
@@ -78,7 +79,7 @@ readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semanti
 doThing :: (U.HasLogCfg) => IO ()
 doThing = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -146,7 +147,7 @@ dependentFormula sym = do
 doThing2 :: (U.HasLogCfg) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -165,14 +166,14 @@ doThing2 = do
 doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: (U.HasLogCfg) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   print add
   Right sub <- readBinOpc sym SubRr
