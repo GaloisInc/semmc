@@ -34,6 +34,7 @@ import qualified Dismantle.Arbitrary as DA
 
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Protocol.Online as WPO
+import qualified What4.ProblemFeatures as WPF
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -132,7 +133,7 @@ withInitialState :: forall arch a
                  -> IO a
 withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
   Some ng <- N.newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
 
     rng <- DA.createGen
     let genTest = AC.randomState (Proxy @arch) rng

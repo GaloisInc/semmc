@@ -23,7 +23,7 @@ updateXEROVSOForAdd :: (?bitSize :: BitSize)
                     -> Expr 'TBV
                     -> Expr 'TBV
                     -> Expr 'TBV
-updateXEROVSOForAdd xer in1 in2 =
+updateXEROVSOForAdd xer0 in1 in2 =
   let out = bvadd in1 in2
       zero = naturalLitBV 0
       -- Check for signed overflow. Note that grouping numbers into
@@ -43,8 +43,8 @@ updateXEROVSOForAdd xer in1 in2 =
         , ( bvsge in1 zero `andp` bvsge in2 zero
           , notp (bvsge out zero) ) ]
         (LitBool False)
-      so = xerBit SO xer `bvor` ov
-  in updateXER SO (updateXER OV xer ov) so
+      so = xerBit SO xer0 `bvor` ov
+  in updateXER SO (updateXER OV xer0 ov) so
 
 baseArithmetic :: (?bitSize :: BitSize) => SemM 'Top ()
 baseArithmetic = do

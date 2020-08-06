@@ -214,8 +214,8 @@ cmpImmExplicitXer :: (HasCallStack, ?bitSize :: BitSize)
                   -> Expr 'TBV
                   -- ^ The input value for XER
                   -> Expr 'TBV
-cmpImmExplicitXer lt gt fld ximm reg xer =
-  lf cmpImmLF (lt reg ximm :< gt reg ximm :< fld :< xer :< (Loc cr) :< Nil)
+cmpImmExplicitXer lt gt fld ximm reg xerval =
+  lf cmpImmLF (lt reg ximm :< gt reg ximm :< fld :< xerval :< (Loc cr) :< Nil)
 
 cmpImmLF :: (?bitSize :: BitSize)
          => LibraryFunctionDef '(['TBool, 'TBool, 'TBV, 'TBV, 'TBV], 'TBV)

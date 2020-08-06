@@ -25,6 +25,7 @@ import qualified Data.Int.Indexed as I
 import qualified Dismantle.PPC as D
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
 import qualified What4.Expr.Builder as WEB
 import qualified What4.InterpretedFloatingPoint as WIF
@@ -59,7 +60,7 @@ longtest = executeTests [longProg]
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
   PN.withIONonceGenerator $ \ng ->
-    CBO.withZ3OnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
+    CBO.withZ3OnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv progsToTest)
