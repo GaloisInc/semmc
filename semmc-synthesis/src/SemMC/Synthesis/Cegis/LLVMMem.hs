@@ -92,6 +92,8 @@ withMem :: forall arch sym a.
         -> (LLVM.HasPtrWidth (A.RegWidth arch) => MemM sym arch a)
         -> IO a
 withMem sym memExp op = do
+  bbmap <- liftIO $ newIORef mempty
+  let ?badBehaviorMap = bbmap
   let w = A.regWidth @arch in LLVM.withPtrWidth w $ do
 
     -- 1) Construct an LLVM memory implelementation with no blocks
