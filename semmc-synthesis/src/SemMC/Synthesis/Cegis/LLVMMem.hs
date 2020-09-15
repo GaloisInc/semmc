@@ -93,6 +93,7 @@ withMem :: forall arch sym a.
         -> IO a
 withMem sym memExp op = do
   let w = A.regWidth @arch in LLVM.withPtrWidth w $ do
+    let ?recordLLVMAnnotation = \_ _ -> pure ()
 
     -- 1) Construct an LLVM memory implelementation with no blocks
     initMem <- LLVM.emptyMem (A.archEndianForm (Proxy @arch))
@@ -217,8 +218,7 @@ readMemIO :: forall arch sym bits.
           -> IO (S.SymBV sym bits)
 readMemIO sym bits i mem = do
   withMem @arch sym mem $ do
-    bbMapRef <- askAnn
-    let ?badBehaviorMap = bbMapRef
+    let ?recordLLVMAnnotation = \_ _ -> pure ()
     readMem bits i
 
 
@@ -379,15 +379,13 @@ instantiateMemOps mem
   | Just (mem', A.WriteData idx val) <- isUpdateArray @arch mem =
   LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
     instantiateMemOps mem'
-    bbMapRef <- askAnn
-    let ?badBehaviorMap = bbMapRef
+    let ?recordLLVMAnnotation = \_ _ -> pure ()
     writeMem idx val
 instantiateMemOps mem
   | Just (mem', A.WriteData idx val) <- MA.isWriteMem @arch mem = do
   LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
     instantiateMemOps mem'
-    bbMapRef <- askAnn
-    let ?badBehaviorMap = bbMapRef
+    let ?recordLLVMAnnotation = \_ _ -> pure ()
     writeMem idx val
 instantiateMemOps _ | otherwise = return ()
 
