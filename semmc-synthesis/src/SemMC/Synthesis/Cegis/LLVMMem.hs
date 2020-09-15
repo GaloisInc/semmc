@@ -102,12 +102,13 @@ withMem sym memExp op = do
     (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
                                 initMem LLVM.noAlignment
 
-    -- 3) Write the initial memory expression array to the allocated block
+    -- 3) Create a map for LLVM annotations
+    ann <- newIORef mempty
+    let ?badBehaviorMap = ann
+
+    -- 4) Write the initial memory expression array to the allocated block
     mem' <- LLVM.doArrayStoreUnbounded sym mem base LLVM.noAlignment memExp
 
-    -- 4) Create a map for LLVM annotations
-    ann <- newIORef mempty
-    
     -- 5) Execute the operation with these starting conditions
     evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp ann)
 

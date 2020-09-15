@@ -31,6 +31,7 @@ import           Data.Parameterized.Some ( Some (..) )
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Expr.Builder as SB
+import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
 
 import qualified Dismantle.PPC as DPPC
@@ -195,7 +196,7 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
 
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
     (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
     -- Turn it into a formula
