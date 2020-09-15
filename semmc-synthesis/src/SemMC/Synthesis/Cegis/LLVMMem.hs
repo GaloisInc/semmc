@@ -9,7 +9,6 @@ module SemMC.Synthesis.Cegis.LLVMMem
   , withMem
   , askImpl
   , askBase
-  , askAnn
   -- * Memory operations
   , readMem
   , readMemIO
@@ -20,7 +19,6 @@ module SemMC.Synthesis.Cegis.LLVMMem
   ) where
 
 import           Data.Proxy (Proxy(..))
-import           Data.IORef
 import qualified Control.Monad.Fail as MF
 import           Control.Monad.State
 -- import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -48,7 +46,6 @@ data MemData sym arch = MemData { memSym :: sym
                                 , memBase :: LLVM.LLVMPtr sym (A.RegWidth arch)
                                 , memAlignment :: LLVM.Alignment
                                 , memExpr :: S.SymExpr sym (A.MemType arch)
-                                , memAnn  :: IORef (LLVM.LLVMAnnMap sym)
                                 }
 
 -- | This monad has an underlying 'LLMV.MemImpl' that holds the current state of
@@ -73,9 +70,6 @@ askBase = MemM $ memBase <$> get
 
 askAlignment :: MemM sym arch (LLVM.Alignment)
 askAlignment = MemM $ memAlignment <$> get
-
-askAnn :: MemM sym arch (IORef (LLVM.LLVMAnnMap sym))
-askAnn = MemM $ memAnn <$> get
 
 putImpl :: LLVM.MemImpl sym -> MemM sym w ()
 putImpl m = MemM $ do
@@ -102,15 +96,11 @@ withMem sym memExp op = do
     (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
                                 initMem LLVM.noAlignment
 
-    -- 3) Create a map for LLVM annotations
-    ann <- newIORef mempty
-    let ?badBehaviorMap = ann
-
-    -- 4) Write the initial memory expression array to the allocated block
+    -- 3) Write the initial memory expression array to the allocated block
     mem' <- LLVM.doArrayStoreUnbounded sym mem base LLVM.noAlignment memExp
 
-    -- 5) Execute the operation with these starting conditions
-    evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp ann)
+    -- 4) Execute the operation with these starting conditions
+    evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp)
 
 
 -- Input: a bit vector representing the offset from the base ptr for memory
