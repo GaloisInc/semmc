@@ -1,0 +1,63 @@
+name: semmc
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ["8.6.5", "8.8.4"]
+    runs-on: ubuntu-latest
+    name: semmc - GHC v${{ matrix.ghc }} - ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git config --global url.https://github.com/.insteadOf git@github.com:
+          git submodule update --init
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: true
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
+
+      - name: Configure
+        run: |
+          ln -sv cabal.project.newbuild cabal.project
+          ln -sv cabal.GHC-${{ matrix.ghc }}.config cabal.project.freeze
+          cabal v2-update
+          cabal v2-configure -j2 --minimize-conflict-set
+
+      - name: Build
+        run: cabal v2-build all
+
+      - name: Test
+        run: cabal v2-test
+          asl-translator-formula-test
+          asl-translator-genarm-test
+          dismantle-arm-tests
+          dismantle-arm-xml-tests
+          dismantle-ppc-tests
+          dismantle-thumb-tests
+          semmc-asl-test-formulas
+          test_formulas
+          semmc-ppc-tests
+          semmc-toy-tests
+          test-elf
+          dismantle-tests
+          absint-tests
+          helper-tests
