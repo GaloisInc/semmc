@@ -43,11 +43,11 @@ jobs:
           cabal v2-configure -j2 --minimize-conflict-set
 
       - name: Build
-        run: cabal v2-build semmc-arm semmc-ppc semmc-x86_64
+        run: cabal v2-build semmc-aarch32 semmc-arm semmc-ppc semmc-x86_64
 
       - name: Tests
         run: |
-          for package in semmc-arm semmc-ppc semmc-x86_64; do
+          for package in semmc-aarch32 semmc-arm semmc-ppc semmc-x86_64; do
               pushd $package
               cabal v2-test
               popd
