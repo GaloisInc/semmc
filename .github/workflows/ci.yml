@@ -43,21 +43,12 @@ jobs:
           cabal v2-configure -j2 --minimize-conflict-set
 
       - name: Build
-        run: cabal v2-build all
+        run: cabal v2-build semmc-arm semmc-ppc semmc-x86_64
 
-      - name: Test
-        run: cabal v2-test
-          asl-translator-formula-test
-          asl-translator-genarm-test
-          dismantle-arm-tests
-          dismantle-arm-xml-tests
-          dismantle-ppc-tests
-          dismantle-thumb-tests
-          semmc-asl-test-formulas
-          test_formulas
-          semmc-ppc-tests
-          semmc-toy-tests
-          test-elf
-          dismantle-tests
-          absint-tests
-          helper-tests
+      - name: Tests
+        run: |
+          for package in semmc-arm semmc-ppc semmc-x86_64; do
+              pushd $package
+              cabal v2-test
+              popd
+          done
