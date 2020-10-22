@@ -12,8 +12,18 @@ jobs:
       fail-fast: false
       matrix:
         ghc: ["8.6.5", "8.8.4", "8.10.2"]
+        package:
+          - semmc-aarch32
+          - semmc-arm
+          - semmc-ppc
+          - semmc-x86_64
+          - semmc-coverage
+          - semmc-fuzzer
+          - semmc-toy
+          - semmc-synthesis
+          - semmc-learning
     runs-on: ubuntu-latest
-    name: semmc - GHC v${{ matrix.ghc }} - ubuntu-latest
+    name: ${{ matrix.package }} - GHC v${{ matrix.ghc }} - ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -31,9 +41,9 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: cabal-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          key: cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
           restore-keys: |
-            cabal-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
+            cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
 
       - name: Configure
         run: |
@@ -43,7 +53,7 @@ jobs:
           cabal v2-configure -j2 --minimize-conflict-set
 
       - name: Build
-        run: cabal v2-build semmc-aarch32 semmc-arm semmc-ppc semmc-x86_64
+        run: cabal v2-build ${{ matrix.package }}
 
       # Solvers
       - name: Install yices
@@ -58,9 +68,5 @@ jobs:
           sudo mv z3-*/bin/z3 /usr/local/bin
 
       - name: Tests
-        run: |
-          for package in semmc-aarch32 semmc-arm semmc-ppc semmc-x86_64; do
-              pushd $package
-              cabal v2-test
-              popd
-          done
+        working-directory: ${{ matrix.package }}
+        run: cabal v2-test
