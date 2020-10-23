@@ -51,7 +51,7 @@ jobs:
           ln -sv cabal.project.newbuild cabal.project
           ln -sv cabal.GHC-${{ matrix.ghc }}.config cabal.project.freeze
           cabal v2-update
-          cabal v2-configure -j2 --minimize-conflict-set
+          cabal v2-configure -j2 --minimize-conflict-set --enable-tests
 
       - name: Build
         run: cabal v2-build ${{ matrix.package }}
