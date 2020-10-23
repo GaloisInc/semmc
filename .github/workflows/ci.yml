@@ -46,7 +46,7 @@ jobs:
           restore-keys: |
             cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
 
-      - if: matrix.package != "semmc"
+      - if: matrix.package != 'semmc'
         run: echo "ENABLE_TESTS=--enable-tests" >> $GITHUB_ENV
       - name: Configure
         run: |
