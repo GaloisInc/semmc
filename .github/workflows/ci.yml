@@ -46,12 +46,14 @@ jobs:
           restore-keys: |
             cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
 
+      - if: matrix.package != "semmc"
+        run: echo "ENABLE_TESTS=--enable-tests" >> $GITHUB_ENV
       - name: Configure
         run: |
           ln -sv cabal.project.newbuild cabal.project
           ln -sv cabal.GHC-${{ matrix.ghc }}.config cabal.project.freeze
           cabal v2-update
-          cabal v2-configure -j2 --minimize-conflict-set --enable-tests
+          cabal v2-configure -j2 --minimize-conflict-set $ENABLE_TESTS
 
       - name: Build
         run: cabal v2-build ${{ matrix.package }}
