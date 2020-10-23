@@ -60,16 +60,19 @@ jobs:
 
       # Solvers
       - name: Install yices
+        if: matrix.package != 'semmc'
         run: |
           curl -L https://yices.csl.sri.com/releases/2.6.2/yices-2.6.2-x86_64-pc-linux-gnu-static-gmp.tar.gz | tar xz
           sudo cp yices*/bin/yices-smt2 /usr/local/bin
           sudo cp yices*/bin/yices /usr/local/bin
       - name: Install z3
+        if: matrix.package != 'semmc'
         run: |
           curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip --output z3.zip
           unzip z3.zip
           sudo mv z3-*/bin/z3 /usr/local/bin
 
       - name: Tests
+        if: matrix.package != 'semmc'
         working-directory: ${{ matrix.package }}
         run: cabal v2-test
