@@ -1,0 +1,78 @@
+name: semmc
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ["8.6.5", "8.8.4", "8.10.2"]
+        package:
+          - semmc
+          - semmc-aarch32
+          - semmc-arm
+          - semmc-ppc
+          - semmc-x86_64
+          - semmc-coverage
+          - semmc-fuzzer
+          - semmc-toy
+          - semmc-synthesis
+          - semmc-learning
+    runs-on: ubuntu-latest
+    name: ${{ matrix.package }} - GHC v${{ matrix.ghc }} - ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git config --global url.https://github.com/.insteadOf git@github.com:
+          git submodule update --init
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: true
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
+
+      - if: matrix.package != 'semmc'
+        run: echo "ENABLE_TESTS=--enable-tests" >> $GITHUB_ENV
+      - name: Configure
+        run: |
+          ln -sv cabal.project.newbuild cabal.project
+          ln -sv cabal.GHC-${{ matrix.ghc }}.config cabal.project.freeze
+          cabal v2-update
+          cabal v2-configure -j2 --minimize-conflict-set $ENABLE_TESTS
+
+      - name: Build
+        run: cabal v2-build ${{ matrix.package }}
+
+      # Solvers
+      - name: Install yices
+        if: matrix.package != 'semmc'
+        run: |
+          curl -L https://yices.csl.sri.com/releases/2.6.2/yices-2.6.2-x86_64-pc-linux-gnu-static-gmp.tar.gz | tar xz
+          sudo cp yices*/bin/yices-smt2 /usr/local/bin
+          sudo cp yices*/bin/yices /usr/local/bin
+      - name: Install z3
+        if: matrix.package != 'semmc'
+        run: |
+          curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip --output z3.zip
+          unzip z3.zip
+          sudo mv z3-*/bin/z3 /usr/local/bin
+
+      - name: Tests
+        if: matrix.package != 'semmc'
+        working-directory: ${{ matrix.package }}
+        run: cabal v2-test
