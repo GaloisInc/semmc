@@ -22,7 +22,6 @@ import Prelude hiding (reverse)
 import           Data.Kind
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.Classes
 import           Data.Proxy ( Proxy(..) )
 
 data TyFun :: k1 -> k2 -> Type
