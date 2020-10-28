@@ -9,7 +9,6 @@ module SemMC.Architecture.Evaluate (
   ) where
 
 import qualified Data.BitVector.Sized as BV
-import           Data.Monoid ((<>))
 import           Data.Parameterized.Classes (ShowF(showF))
 import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF

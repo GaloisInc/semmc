@@ -39,11 +39,12 @@ module SemMC.Formula.Formula
 import           GHC.TypeLits ( Symbol )
 
 import           Control.Monad ( guard )
+import           Data.Maybe ( isJust )
 import qualified Data.Set as Set
 import           Text.Printf ( printf )
 
-import           Data.Parameterized.Classes
-import           Data.Parameterized.Some ( Some(..), viewSome )
+import qualified Data.Parameterized.Classes as PC
+import           Data.Parameterized.Some ( viewSome )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import qualified What4.Interface as S
@@ -99,42 +100,42 @@ data LocationFuncInterp t st fs arch where
   LocationFuncInterp :: ( forall sh s tp . SL.List (AO.AllocatedOperand arch (S.ExprBuilder t st fs)) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Maybe (L.Location arch tp))
                      -> LocationFuncInterp t st fs arch
 
-instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where
+instance PC.ShowF (L.Location arch) => Show (Parameter arch sh tp) where
   show (OperandParameter repr idx) = printf "OperandParameter (%s) (%s)" (show repr) (show idx)
-  show (LiteralParameter var) = unwords ["LiteralParameter", showF var]
+  show (LiteralParameter var) = unwords ["LiteralParameter", PC.showF var]
   show (FunctionParameter fnName (WrappedOperand rep ix) _) =
     printf "%s(operand %s@%s)" fnName (show rep) (show ix)
 
-instance (ShowF (L.Location arch)) => ShowF (Parameter arch sh)
+instance (PC.ShowF (L.Location arch)) => PC.ShowF (Parameter arch sh)
 
-instance TestEquality (WrappedOperand arch sh) where
+instance PC.TestEquality (WrappedOperand arch sh) where
   WrappedOperand r1 ix1 `testEquality` WrappedOperand r2 ix2 = do
-    Refl <- testEquality r1 r2
-    Refl <- testEquality ix1 ix2
-    return Refl
+    PC.Refl <- PC.testEquality r1 r2
+    PC.Refl <- PC.testEquality ix1 ix2
+    return PC.Refl
 
-instance OrdF (WrappedOperand arch sh) where
+instance PC.OrdF (WrappedOperand arch sh) where
   compareF (WrappedOperand r1 ix1) (WrappedOperand r2 ix2) =
-    case compareF r1 r2 of
-      LTF -> LTF
-      GTF -> GTF
-      EQF -> case compareF ix1 ix2 of
-        LTF -> LTF
-        GTF -> GTF
-        EQF -> EQF
+    case PC.compareF r1 r2 of
+      PC.LTF -> PC.LTF
+      PC.GTF -> PC.GTF
+      PC.EQF -> case PC.compareF ix1 ix2 of
+        PC.LTF -> PC.LTF
+        PC.GTF -> PC.GTF
+        PC.EQF -> PC.EQF
 
-instance TestEquality (L.Location arch) => TestEquality (Parameter arch sh) where
-  OperandParameter _ idx1 `testEquality` OperandParameter _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
-  LiteralParameter   var1 `testEquality` LiteralParameter   var2 = (\Refl -> Refl) <$> testEquality var1 var2
+instance PC.TestEquality (L.Location arch) => PC.TestEquality (Parameter arch sh) where
+  OperandParameter _ idx1 `testEquality` OperandParameter _ idx2 = (\PC.Refl -> PC.Refl) <$> PC.testEquality idx1 idx2
+  LiteralParameter   var1 `testEquality` LiteralParameter   var2 = (\PC.Refl -> PC.Refl) <$> PC.testEquality var1 var2
   FunctionParameter fname1 wo1 r1 `testEquality` FunctionParameter fname2 wo2 r2 = do
     guard (fname1 == fname2)
-    Refl <- testEquality wo1 wo2
-    Refl <- testEquality r1 r2
-    return Refl
+    PC.Refl <- PC.testEquality wo1 wo2
+    PC.Refl <- PC.testEquality r1 r2
+    return PC.Refl
   _              `testEquality`              _ = Nothing
 
-instance (Eq (L.Location arch tp), TestEquality (L.Location arch)) => Eq (Parameter arch sh tp) where
-  OperandParameter _ idx1 == OperandParameter _ idx2 = isJust $ testEquality idx1 idx2
+instance (Eq (L.Location arch tp), PC.TestEquality (L.Location arch)) => Eq (Parameter arch sh tp) where
+  OperandParameter _ idx1 == OperandParameter _ idx2 = isJust $ PC.testEquality idx1 idx2
   LiteralParameter   var1 == LiteralParameter   var2 = var1 == var2
   -- NOTE: This isn't quite true - they could be equal after normalization.  Be careful...
   --
@@ -143,39 +144,39 @@ instance (Eq (L.Location arch tp), TestEquality (L.Location arch)) => Eq (Parame
   -- instantiate a formula, it is only the case that a function parameter /MAY/
   -- equal another parameter after normalization.
   f1@(FunctionParameter {}) == f2@(FunctionParameter {}) =
-    isJust (testEquality f1 f2)
+    isJust (PC.testEquality f1 f2)
   _              ==              _ = False
 
-instance OrdF (L.Location arch) => OrdF (Parameter arch sh) where
-  FunctionParameter {} `compareF` LiteralParameter {} = LTF
-  LiteralParameter {} `compareF` FunctionParameter {} = GTF
-  FunctionParameter  {}`compareF` OperandParameter {} = LTF
-  OperandParameter {} `compareF` FunctionParameter {} = GTF
-  OperandParameter _ _ `compareF` LiteralParameter   _ = LTF
-  LiteralParameter   _ `compareF` OperandParameter _ _ = GTF
+instance PC.OrdF (L.Location arch) => PC.OrdF (Parameter arch sh) where
+  FunctionParameter {} `compareF` LiteralParameter {} = PC.LTF
+  LiteralParameter {} `compareF` FunctionParameter {} = PC.GTF
+  FunctionParameter  {}`compareF` OperandParameter {} = PC.LTF
+  OperandParameter {} `compareF` FunctionParameter {} = PC.GTF
+  OperandParameter _ _ `compareF` LiteralParameter   _ = PC.LTF
+  LiteralParameter   _ `compareF` OperandParameter _ _ = PC.GTF
   FunctionParameter fnName1 wo1 r1 `compareF` FunctionParameter fnName2 wo2 r2 =
     case fnName1 `compare` fnName2 of
-      LT -> LTF
-      GT -> GTF
+      LT -> PC.LTF
+      GT -> PC.GTF
       EQ ->
-        case wo1 `compareF` wo2 of
-          LTF -> LTF
-          GTF -> GTF
-          EQF -> case r1 `compareF` r2 of
-                   LTF -> LTF
-                   GTF -> GTF
-                   EQF -> EQF
+        case wo1 `PC.compareF` wo2 of
+          PC.LTF -> PC.LTF
+          PC.GTF -> PC.GTF
+          PC.EQF -> case r1 `PC.compareF` r2 of
+                   PC.LTF -> PC.LTF
+                   PC.GTF -> PC.GTF
+                   PC.EQF -> PC.EQF
 
   OperandParameter _ idx1 `compareF` OperandParameter _ idx2 =
-    case idx1 `compareF` idx2 of
-      LTF -> LTF
-      EQF -> EQF
-      GTF -> GTF
+    case idx1 `PC.compareF` idx2 of
+      PC.LTF -> PC.LTF
+      PC.EQF -> PC.EQF
+      PC.GTF -> PC.GTF
   LiteralParameter var1 `compareF` LiteralParameter var2 =
-    case var1 `compareF` var2 of
-      LTF -> LTF
-      EQF -> EQF
-      GTF -> GTF
+    case var1 `PC.compareF` var2 of
+      PC.LTF -> PC.LTF
+      PC.EQF -> PC.EQF
+      PC.GTF -> PC.GTF
 
 -- | Get a representation of the 'BaseType' this formula parameter is
 -- type-parameterized over.
@@ -206,15 +207,15 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        -- in here!
                        }
 
-deriving instance (ShowF (L.Location arch),
-                   ShowF (S.SymExpr sym),
-                   ShowF (S.BoundVar sym))
+deriving instance (PC.ShowF (L.Location arch),
+                   PC.ShowF (S.SymExpr sym),
+                   PC.ShowF (S.BoundVar sym))
                   => Show (ParameterizedFormula sym arch sh)
 
-instance (ShowF (L.Location arch),
-          ShowF (S.SymExpr sym),
-          ShowF (S.BoundVar sym))
-         => ShowF (ParameterizedFormula sym arch)
+instance (PC.ShowF (L.Location arch),
+          PC.ShowF (S.SymExpr sym),
+          PC.ShowF (S.BoundVar sym))
+         => PC.ShowF (ParameterizedFormula sym arch)
 
 -- | A formula representing a concrete instruction.
 --
@@ -240,14 +241,14 @@ data Formula sym arch =
   Formula { formParamVars :: MapF.MapF (L.Location arch) (S.BoundVar sym)
           , formDefs :: MapF.MapF (L.Location arch) (S.SymExpr sym)
           }
-deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (L.Location arch)) => Show (Formula sym arch)
+deriving instance (PC.ShowF (S.SymExpr sym), PC.ShowF (S.BoundVar sym), PC.ShowF (L.Location arch)) => Show (Formula sym arch)
 
 -- | Get the locations used by a formula.
-formInputs :: (OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.Location arch))
+formInputs :: (PC.OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.Location arch))
 formInputs = Set.fromList . MapF.keys . formParamVars
 
 -- | Get the locations modified by a formula.
-formOutputs :: (OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.Location arch))
+formOutputs :: (PC.OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.Location arch))
 formOutputs = Set.fromList . MapF.keys . formDefs
 
 -- | Check if a given 'Formula' obeys the stated invariant.
@@ -295,29 +296,29 @@ data FunctionRef (sig :: ([BaseType], BaseType)) where
 
 deriving instance Show (FunctionRef sig)
 
-instance ShowF FunctionRef
+instance PC.ShowF FunctionRef
 
 instance Eq (FunctionRef sig) where
   FunctionRef n1 ats1 rt1 == FunctionRef n2 ats2 rt2 =
     n1 == n2 &&
-    isJust (testEquality ats1 ats2) &&
-    isJust (testEquality rt1 rt2)
+    isJust (PC.testEquality ats1 ats2) &&
+    isJust (PC.testEquality rt1 rt2)
 
-instance TestEquality FunctionRef where
+instance PC.TestEquality FunctionRef where
   testEquality (FunctionRef n1 ats1 rt1) (FunctionRef n2 ats2 rt2) = do
     guard (n1 == n2)
-    Refl <- testEquality ats1 ats2
-    Refl <- testEquality rt1 rt2
-    return Refl
+    PC.Refl <- PC.testEquality ats1 ats2
+    PC.Refl <- PC.testEquality rt1 rt2
+    return PC.Refl
 
-instance OrdF FunctionRef where
+instance PC.OrdF FunctionRef where
   FunctionRef n1 ats1 rt1 `compareF` FunctionRef n2 ats2 rt2 =
     case n1 `compare` n2 of
-      EQ -> case ats1 `compareF` ats2 of
-        EQF -> case rt1 `compareF` rt2 of
-          EQF -> EQF; LTF -> LTF; GTF -> GTF
-        LTF -> LTF; GTF -> GTF
-      LT -> LTF; GT -> GTF
+      EQ -> case ats1 `PC.compareF` ats2 of
+        PC.EQF -> case rt1 `PC.compareF` rt2 of
+          PC.EQF -> PC.EQF; PC.LTF -> PC.LTF; PC.GTF -> PC.GTF
+        PC.LTF -> PC.LTF; PC.GTF -> PC.GTF
+      LT -> PC.LTF; GT -> PC.GTF
 
 functionRef :: FunctionFormula sym sig -> FunctionRef sig
 functionRef (FunctionFormula { ffName = name
