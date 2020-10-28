@@ -19,6 +19,7 @@ module SemMC.Formula.Equivalence
   , formulasEquivConcrete
   ) where
 
+import qualified Control.Monad.Fail as MF
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable ( foldrM )
 import           Data.Parameterized.Classes
@@ -239,7 +240,8 @@ checkSat :: (WPO.OnlineSolver solver)
          -> (SatResult (GroundEvalFn t) () -> IO a)
          -> IO a
 checkSat sym testExpr handler = do
-  CBO.withSolverProcess sym $ \sp -> do
+  let onlineDisabled = MF.fail "`concretize` requires online solving to be enabled"
+  CBO.withSolverProcess sym onlineDisabled$ \sp -> do
     let conn = WPO.solverConn sp
     WPO.inNewFrame sp $ do
       f <- WPS.mkFormula conn testExpr
