@@ -17,7 +17,6 @@ module SemMC.DSL.Internal
   ) where
 
 import Control.Monad ( guard )
-import Data.Text ( Text )
 import Data.Parameterized.Classes
 import Data.Parameterized.List as SL
 import Data.Parameterized.Some ( Some(..) )

@@ -44,6 +44,7 @@ import           TestUtils
 import           What4.BaseTypes
 import           What4.Config
 import qualified What4.Interface as WI -- ( getConfiguration )
+import qualified What4.ProblemFeatures as WPF
 import qualified What4.Serialize.Parser as W4P
 
 
@@ -176,7 +177,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -208,7 +209,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -240,7 +241,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -273,7 +274,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -310,7 +311,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -346,7 +347,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)

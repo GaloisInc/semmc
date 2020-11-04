@@ -31,7 +31,6 @@ import           Control.Applicative ( (<|>) )
 import           Control.Monad ( guard )
 import           Data.Bits
 import           Data.Maybe ( fromMaybe )
-import           Data.Monoid ((<>))
 import           Data.Proxy ( Proxy(..) )
 import           Numeric.Natural ( Natural )
 import qualified Text.Megaparsec as P

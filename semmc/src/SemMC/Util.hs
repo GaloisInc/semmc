@@ -43,7 +43,6 @@ import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Context
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr (knownNat)
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
 import           Text.Printf ( printf )
