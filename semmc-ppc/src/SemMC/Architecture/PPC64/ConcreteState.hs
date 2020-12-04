@@ -24,7 +24,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Int ( Int64 )
-import           Data.Parameterized.Classes ( testEquality )
+import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
@@ -93,7 +93,7 @@ interestingStates = gprStates -- ++ fprStates
     gprStates = [ mkState r1 v1 r2 v2
                 | r1 <- gprs
                 , r2 <- gprs
-                , Nothing == testEquality r1 r2
+                , Nothing == PC.testEquality r1 r2
                 , v1 <- bvVals
                 , v2 <- bvVals
                 ]

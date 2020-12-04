@@ -50,18 +50,18 @@ module SemMC.Synthesis.Template
   ) where
 
 import           Data.EnumF
-import           Data.Kind
-import           Data.Parameterized.Classes
+import           Data.Kind ( Type )
+import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
-import           Data.Parameterized.Some
+import           Data.Parameterized.Some ( Some(..), mapSome )
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
-import           Data.Typeable
+import           Data.Typeable ( Typeable )
 import           GHC.Stack ( HasCallStack )
 import           Unsafe.Coerce ( unsafeCoerce )
 
@@ -106,8 +106,8 @@ type TemplateConstraints arch = (Architecture arch,
                                  Typeable arch,
                                  TemplatableOperand arch,
                                  IsOperandTypeRepr arch,
-                                 OrdF ((Opcode arch) (TemplatedOperand arch)),
-                                 ShowF ((Opcode arch) (TemplatedOperand arch)),
+                                 PC.OrdF ((Opcode arch) (TemplatedOperand arch)),
+                                 PC.ShowF ((Opcode arch) (TemplatedOperand arch)),
                                  EnumF ((Opcode arch) (TemplatedOperand arch)))
 
 instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
@@ -147,7 +147,7 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 -- change the @arch@ of the interpretation.  This lets us re-use the
 -- interpretation in the templated architecture without actually having to
 -- rewrite them by hand twice (once normally and once templated).
-templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
+templatizeInterp :: (HasCallStack, PC.OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
                  => FunctionInterpretation t st fs arch
                  -> FunctionInterpretation t st fs (TemplatedArch arch)
 templatizeInterp fi =
@@ -166,7 +166,7 @@ templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix
   fi ops' (WrappedOperand orep ix) rep
 
 templatedEvaluator :: forall arch t st fs sh u tp
-                    . (OrdF (Location arch))
+                    . (PC.OrdF (Location arch))
                    => Evaluator arch t st fs
                    -> S.ExprBuilder t st fs
                    -> ParameterizedFormula (S.ExprBuilder t st fs) (TemplatedArch arch) sh
@@ -195,12 +195,12 @@ fromTemplatedOperand top =
     LocationOperand l s -> LocationOperand l s
     CompoundOperand oc -> CompoundOperand oc
 
-instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandComponents arch sym)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
+instance (S.IsExprBuilder sym, IsLocation (Location arch), PC.ShowF (OperandComponents arch sym)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
 
-instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (S.SymExpr sym), ShowF (OperandComponents arch sym)) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
+instance (S.IsExprBuilder sym, IsLocation (Location arch), PC.ShowF (S.SymExpr sym), PC.ShowF (OperandComponents arch sym)) => PC.ShowF (TaggedExpr (TemplatedArch arch) sym) where
   withShow (_ :: p (TaggedExpr (TemplatedArch arch) sym)) (_ :: q s) x =
-    withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s)) x
+    PC.withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s)) x
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using 'unsafeCoerce'.
@@ -227,7 +227,7 @@ uncoerceParameter (FunctionParameter name (WrappedOperand orep oix) r) = Functio
 --
 -- This is a safe version, but it's probably a lot slower.
 unTemplateSafe :: forall sym arch sh.
-                  (OrdF (Location arch))
+                  (PC.OrdF (Location arch))
                => ParameterizedFormula sym (TemplatedArch arch) sh
                -> ParameterizedFormula sym arch sh
 unTemplateSafe (ParameterizedFormula { pfUses = uses
@@ -247,7 +247,7 @@ unTemplateSafe (ParameterizedFormula { pfUses = uses
         coerceBoundVar (BV.BoundVar var) = BV.BoundVar var
 
 templateSafe :: forall arch sym sh
-              . (OrdF (Location arch))
+              . (PC.OrdF (Location arch))
              => ParameterizedFormula sym arch sh
              -> ParameterizedFormula sym (TemplatedArch arch) sh
 templateSafe ParameterizedFormula { pfUses = uses
@@ -271,7 +271,7 @@ templateSafe ParameterizedFormula { pfUses = uses
 --
 -- This is exactly 'unTemplateUnsafe', but here in case we want to switch the
 -- default to the safe implementation.
-unTemplate :: (OrdF (Location arch))
+unTemplate :: (PC.OrdF (Location arch))
            => ParameterizedFormula sym (TemplatedArch arch) sh
            -> ParameterizedFormula sym arch sh
 unTemplate = unTemplateSafe
@@ -284,23 +284,23 @@ data TemplatedFormula sym arch sh =
                    }
 deriving instance ( IsLocation (Location arch)
                   , S.IsExprBuilder sym
-                  , ShowF (OperandComponents arch sym)
-                  , ShowF (Operand arch)
-                  , ShowF (TemplatedOperand arch)
-                  , ShowF (S.SymExpr sym)
-                  , ShowF (S.BoundVar sym)
-                  , ShowF (Location arch))
+                  , PC.ShowF (OperandComponents arch sym)
+                  , PC.ShowF (Operand arch)
+                  , PC.ShowF (TemplatedOperand arch)
+                  , PC.ShowF (S.SymExpr sym)
+                  , PC.ShowF (S.BoundVar sym)
+                  , PC.ShowF (Location arch))
                  => Show (TemplatedFormula sym arch sh)
 
 instance ( IsLocation (Location arch)
          , S.IsExprBuilder sym
-         , ShowF (OperandComponents arch sym)
-         , ShowF (Operand arch)
-         , ShowF (TemplatedOperand arch)
-         , ShowF (S.SymExpr sym)
-         , ShowF (S.BoundVar sym)
-         , ShowF (Location arch))
-        => ShowF (TemplatedFormula sym arch) where
+         , PC.ShowF (OperandComponents arch sym)
+         , PC.ShowF (Operand arch)
+         , PC.ShowF (TemplatedOperand arch)
+         , PC.ShowF (S.SymExpr sym)
+         , PC.ShowF (S.BoundVar sym)
+         , PC.ShowF (Location arch))
+        => PC.ShowF (TemplatedFormula sym arch) where
   showF = show
 
 makeTemplatedOpLists :: (TemplatableOperand arch)
@@ -345,7 +345,7 @@ type TemplatedSemantics sym arch = MapF.MapF
 type BaseSet sym arch = TemplatedSemantics sym arch
 
 -- | Convert a plain semantics into a templated semantics
-toTemplatedSemantics :: (OrdF (Opcodes arch), OrdF (Location arch))
+toTemplatedSemantics :: (PC.OrdF (Opcodes arch), PC.OrdF (Location arch))
                      => Semantics sym arch
                      -> TemplatedSemantics sym arch
 toTemplatedSemantics m = MapF.fromList [ MapF.Pair o (templateSafe pf)
@@ -355,7 +355,7 @@ toTemplatedSemantics m = MapF.fromList [ MapF.Pair o (templateSafe pf)
 
 -- | Convert a plain semantics into a 'BaseSet'. Depricated in favor of
 -- 'toTemplatedSemantics'.
-toBaseSet :: (OrdF (Opcodes arch), OrdF (Location arch))
+toBaseSet :: (PC.OrdF (Opcodes arch), PC.OrdF (Location arch))
           => Semantics sym arch
           -> BaseSet sym arch
 toBaseSet = toTemplatedSemantics
@@ -363,11 +363,11 @@ toBaseSet = toTemplatedSemantics
 
 -- | Convert a templated semantics into a plain semantics
 fromTemplatedSemantics :: forall arch sym. 
-                          (OrdF (Location arch), OrdF (Opcodes arch))
+                          (PC.OrdF (Location arch), PC.OrdF (Opcodes arch))
                        => TemplatedSemantics sym arch
                        -> Semantics sym arch
 fromTemplatedSemantics = MapF.foldrWithKey f MapF.empty
-  where f :: (OrdF (Location arch))
+  where f :: (PC.OrdF (Location arch))
           => Opcode arch (Operand arch) sh
           -> ParameterizedFormula sym (TemplatedArch arch) sh
           -> Semantics sym arch
@@ -386,18 +386,18 @@ deriving instance (Show ((Opcode arch) (Operand arch) sh),
                    Show (SL.List (TemplatedOperand arch) sh))
   => Show (TemplatedInstruction sym arch sh)
 
-instance (ShowF ((Opcode arch) (Operand arch)),
-          ShowF (ParameterizedFormula sym (TemplatedArch arch)),
-          ShowF (TemplatedOperand arch))
-  => ShowF (TemplatedInstruction sym arch) where
+instance (PC.ShowF ((Opcode arch) (Operand arch)),
+          PC.ShowF (ParameterizedFormula sym (TemplatedArch arch)),
+          PC.ShowF (TemplatedOperand arch))
+  => PC.ShowF (TemplatedInstruction sym arch) where
   withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) x =
-    withShow (Proxy @((Opcode arch) (Operand arch))) (Proxy @sh) $
-      withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch ))) (Proxy @sh) $
-        withShow (Proxy @(SL.List (TemplatedOperand arch))) (Proxy @sh) $
+    PC.withShow (Proxy @((Opcode arch) (Operand arch))) (Proxy @sh) $
+      PC.withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch ))) (Proxy @sh) $
+        PC.withShow (Proxy @(SL.List (TemplatedOperand arch))) (Proxy @sh) $
           x
 
 -- | Get the set of locations that a 'TemplatedInstruction' uses.
-templatedInputs :: (OrdF (Location arch))
+templatedInputs :: (PC.OrdF (Location arch))
                 => TemplatedInstruction sym arch sh
                 -> Set.Set (Some (Location arch))
 templatedInputs (TemplatedInstruction _ pf oplist) =
@@ -411,7 +411,7 @@ templatedInputs (TemplatedInstruction _ pf oplist) =
             FunctionParameter {} -> error "Function parameters are not actually inputs: they can only be defined"
 
 -- | Get the set of locations that a 'TemplatedInstruction' defines.
-templatedOutputs :: (OrdF (Location arch))
+templatedOutputs :: (PC.OrdF (Location arch))
                  => TemplatedInstruction sym arch sh
                  -> Set.Set (Some (Location arch))
 templatedOutputs (TemplatedInstruction _ pf oplist) =
