@@ -23,6 +23,7 @@ module SemMC.Architecture.ARM.Combined where
 import           Data.Data
 import           Data.EnumF ( congruentF, EnumF, enumF, enumCompareF )
 import qualified Data.Foldable as F
+import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.Lift
@@ -34,12 +35,12 @@ import qualified Dismantle.ARM.T32 as T32
 import           GHC.TypeLits
 
 
-data ARMOperand :: Symbol -> * where
+data ARMOperand :: Symbol -> Type where
     A32Operand :: A32.Operand tp -> ARMOperand tp
     T32Operand :: T32.Operand tp -> ARMOperand tp
                   deriving (Typeable)
 
-data ARMOpcode :: (Symbol -> *) -> [Symbol] -> * where
+data ARMOpcode :: (Symbol -> Type) -> [Symbol] -> Type where
     A32Opcode :: (A32.Opcode A32.Operand sh)   -> ARMOpcode ARMOperand sh
     T32Opcode :: (T32.Opcode T32.Operand sh) -> ARMOpcode ARMOperand sh
                  deriving (Typeable)

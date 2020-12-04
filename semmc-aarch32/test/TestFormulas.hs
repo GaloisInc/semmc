@@ -13,7 +13,7 @@ import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
 
 import qualified Lang.Crucible.Backend.Simple as S
-import           SemMC.Architecture.ARM.Opcodes ( loadSemantics, ASLSemantics(..)
+import           SemMC.Architecture.ARM.Opcodes ( loadSemantics
                                                 , ASLSemanticsOpts(..))
 import qualified SemMC.Util as U
 import           System.IO

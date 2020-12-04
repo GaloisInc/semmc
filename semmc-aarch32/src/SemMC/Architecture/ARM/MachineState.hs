@@ -7,8 +7,6 @@ module SemMC.Architecture.ARM.MachineState
   ) where
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as B
-import qualified Data.Binary.Get as G
 import qualified Data.ByteString.Lazy as LB
 
 import qualified SemMC.Concrete.Execution as CE
@@ -20,13 +18,10 @@ data MachineState = MachineState
 type Instruction = LB.ByteString
 
 machineStateToBS :: MachineState -> B.ByteString
-machineStateToBS ms = error ""
+machineStateToBS _ms = error "machineStateToBS unimplemented"
 
 machineStateFromBS :: B.ByteString -> Maybe MachineState
-machineStateFromBS bs = error ""
-
-getMachineState :: G.Get MachineState
-getMachineState =  error ""
+machineStateFromBS _bs = error "machineStateFromBS unimplemented"
 
 testSerializer :: CE.TestSerializer MachineState Instruction
 testSerializer = CE.TestSerializer { CE.flattenMachineState = machineStateToBS

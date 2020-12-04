@@ -182,6 +182,7 @@ evaluateFunctions' sym pf operands locExpr rewriters e =
       S.sbMakeExpr sym app
     S.NonceAppExpr nonceApp -> do
       case S.nonceExprApp nonceApp of
+        S.Annotation {} -> error "evaluateFunctions: Annotation not implemented"
         S.Forall{} -> error "evaluateFunctions: Forall Not implemented"
         S.Exists{} -> error "evaluateFunctions: Exists Not implemented"
         S.ArrayFromFn{} ->

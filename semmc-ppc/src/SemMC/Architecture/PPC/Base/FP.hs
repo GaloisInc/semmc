@@ -11,7 +11,6 @@ module SemMC.Architecture.PPC.Base.FP (
   , fpBinarySingleToDouble
   ) where
 
-import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat )
 import Data.Parameterized.Some ( Some(..) )
 
