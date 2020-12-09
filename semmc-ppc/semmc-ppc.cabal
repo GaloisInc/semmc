@@ -71,7 +71,7 @@ library
                      , containers
                      , located-base
                      , filepath
-                     , megaparsec >= 7 && < 9
+                     , megaparsec >= 7 && < 10
                      , bv-sized
                      , what4 >= 0.4
 
