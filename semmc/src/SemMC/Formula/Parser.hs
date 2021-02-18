@@ -68,6 +68,7 @@ import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
 import           What4.BaseTypes
 import qualified Lang.Crucible.Backend as S
+import qualified What4.Expr.Builder as WEB
 import qualified What4.Interface as S
 import           What4.Symbol ( userSymbol )
 
@@ -278,13 +279,12 @@ data DefsInfo sym arch tps =
 -- > ((rt . (bvadd ra rb))
 -- >  ('ca . #b1))
 --
-readDefs :: forall sym m arch sh
-          . (S.IsSymExprBuilder sym,
+readDefs :: forall sym m arch sh t st fs
+          . (sym ~ WEB.ExprBuilder t st fs,
              Monad m,
              E.MonadError String m,
              A.Architecture arch,
-             MonadIO m,
-             ShowF (S.SymExpr sym))
+             MonadIO m)
          => DefsInfo sym arch (OperandTypes arch sh)
           -> A.ShapeRepr arch sh
          -> [SExpr]
@@ -293,13 +293,12 @@ readDefs info shapeRepr rawDefs = do
   defs <- mapM (readDef info shapeRepr) rawDefs
   return $ MapF.fromList defs
 
-readDef :: forall sym m arch sh
-          . (S.IsSymExprBuilder sym,
+readDef :: forall sym m arch sh t st fs
+          . (sym ~ WEB.ExprBuilder t st fs,
              Monad m,
              E.MonadError String m,
              A.Architecture arch,
-             MonadIO m,
-             ShowF (S.SymExpr sym))
+             MonadIO m)
          => DefsInfo sym arch (OperandTypes arch sh)
         -> A.ShapeRepr arch sh
         -> SExpr
@@ -364,12 +363,11 @@ readWithBindings bindings = do
 
 -- | Parse the whole definition of a templated formula,
 -- inside an appropriate monad.
-readFormula' :: forall sym arch (sh :: [Symbol]) m.
-                (S.IsSymExprBuilder sym,
+readFormula' :: forall sym arch (sh :: [Symbol]) m t st fs.
+                (sym ~ WEB.ExprBuilder t st fs,
                  E.MonadError String m,
                  MonadIO m,
                  A.Architecture arch,
-                 ShowF (S.SymExpr sym),
                  U.HasLogCfg)
              => sym
              -> FormulaEnv sym arch
@@ -454,9 +452,9 @@ readFormula' sym env repr text = do
                          }
 
 -- | Parse the definition of a templated formula.
-readFormula :: (S.IsSymExprBuilder sym,
+readFormula :: forall sym arch t st fs sh
+             . (sym ~ WEB.ExprBuilder t st fs,
                 A.Architecture arch,
-                ShowF (S.SymExpr sym),
                 U.HasLogCfg)
             => sym
             -> FormulaEnv sym arch
@@ -466,9 +464,8 @@ readFormula :: (S.IsSymExprBuilder sym,
 readFormula sym env repr text = E.runExceptT $ readFormula' sym env repr text
 
 -- | Read a templated formula definition from file, then parse it.
-readFormulaFromFile :: (S.IsSymExprBuilder sym,
+readFormulaFromFile :: (sym ~ WEB.ExprBuilder t st fs,
                         A.Architecture arch,
-                        ShowF (S.SymExpr sym),
                         U.HasLogCfg)
                     => sym
                     -> FormulaEnv sym arch
@@ -587,13 +584,12 @@ fnLookup sym info freshNameEnv nm
 
 -- | Parse the whole definition of a defined function,
 -- inside an appropriate monad.
-readDefinedFunction' :: forall sym arch m.
-                        (S.IsExprBuilder sym,
+readDefinedFunction' :: forall sym arch m t st fs .
+                        (sym ~ WEB.ExprBuilder t st fs,
                          S.IsSymInterface sym,
                          E.MonadError String m,
                          MonadIO m,
                          A.Architecture arch,
-                         ShowF (S.SymExpr sym),
                          U.HasLogCfg)
                      => sym
                      -> FormulaEnv sym arch
@@ -675,10 +671,9 @@ readDefinedFunction' sym env text = do
                                  , ffDef = symFn })
 
 -- | Parse the definition of a templated formula.
-readDefinedFunction :: (S.IsExprBuilder sym,
+readDefinedFunction :: (sym ~ WEB.ExprBuilder t st fs,
                         S.IsSymInterface sym,
                         A.Architecture arch,
-                        ShowF (S.SymExpr sym),
                         U.HasLogCfg)
                     => sym
                     -> FormulaEnv sym arch
@@ -687,10 +682,9 @@ readDefinedFunction :: (S.IsExprBuilder sym,
 readDefinedFunction sym env text = E.runExceptT $ readDefinedFunction' sym env text
 
 -- | Read a defined function definition from a file, then parse it.
-readDefinedFunctionFromFile :: (S.IsExprBuilder sym,
+readDefinedFunctionFromFile :: (sym ~ WEB.ExprBuilder t st fs,
                                 S.IsSymInterface sym,
                                 A.Architecture arch,
-                                ShowF (S.SymExpr sym),
                                 U.HasLogCfg)
                     => sym
                     -> FormulaEnv sym arch

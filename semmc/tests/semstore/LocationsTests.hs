@@ -21,28 +21,7 @@ locationTests :: [TestTree]
 locationTests = [
   testGroup "Location" $
 
-    [ testGroup "Nat" $
-      [ testProperty "location value distribution" $ -- test generator validity
-        property $ do l <- forAll genNatLocation
-                      let locNat = case l of { TestNatLoc n -> n }
-                      -- classify "natloc 0" (locNat == 0)
-                      -- classify "natloc single" (locNat == 1)
-                      -- classify "natloc multiple" (locNat >= 2)
-                      cover 1 "natloc 0" $ locNat == 0
-                      cover 1 "natloc single" $ locNat == 1
-                      success
-      , testProperty "location type" $
-        property $ do l <- forAll genNatLocation
-                      case testEquality (L.locationType l) BaseNatRepr of
-                          Just Refl -> success
-                          Nothing -> assert False
-      , testProperty "is mem location" $
-        property $ do l <- forAll genNatLocation
-                      assert $ not $ L.isMemoryLocation l
-      -- TBD: needs other tests
-      ]
-
-    , testGroup "Integer" $
+    [ testGroup "Integer" $
       [ testProperty "location value distribution" $ -- test generator validity
         property $ do l <- forAll genIntLocation
                       let locVal = case l of { TestIntLoc n -> n }
@@ -56,7 +35,7 @@ locationTests = [
                         Just Refl -> success
                         Nothing -> assert False
       , testProperty "is mem location" $
-        property $ do l <- forAll genNatLocation
+        property $ do l <- forAll genIntLocation
                       assert $ not $ L.isMemoryLocation l
       -- TBD: needs other tests
       ]
@@ -81,7 +60,7 @@ locationTests = [
                         Just Refl -> success
                         Nothing -> assert False
       , testProperty "is mem location" $
-        property $ do l <- forAll genNatLocation
+        property $ do l <- forAll genIntLocation
                       assert $ not $ L.isMemoryLocation l
       -- TBD: needs other tests
       ]

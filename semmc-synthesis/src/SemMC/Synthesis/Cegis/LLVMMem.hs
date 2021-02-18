@@ -31,7 +31,6 @@ import qualified Lang.Crucible.Backend as B
 
 import qualified What4.Interface as S
 import qualified What4.Expr.Builder as WE
-import qualified What4.Concrete as WC
 
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as LLVM
@@ -287,7 +286,7 @@ llvmValToSymBV :: S.IsExprBuilder sym
                -> S.SymBV sym bits
 llvmValToSymBV bits (LLVM.LLVMValInt blk val)
   | Just S.Refl <- S.testEquality bits (S.bvWidth val)
-  , Just (WC.ConcreteNat 0) <- S.asConcrete blk = val
+  , Just 0 <- S.asNat blk = val
 llvmValToSymBV _ _ = error "LLVMVal given is not a bitvector."
 
 

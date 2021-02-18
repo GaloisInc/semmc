@@ -14,7 +14,6 @@ import           Control.Monad.IO.Class ( liftIO )
 import           Data.Maybe
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.HasRepr as HR
-import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
@@ -25,7 +24,6 @@ import           Hedgehog.Internal.Property ( forAllT )
 import           HedgehogUtil ( )
 import qualified Lang.Crucible.Backend.Online as CBO
 import           Lang.Crucible.Backend.Simple ( newSimpleBackend, FloatModeRepr(..) )
-import qualified SemMC.BoundVar as BV
 import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param, ite, uf
                            , bvadd, bvmul, bvshl, bvnot
                            , runSem, printDefinition
@@ -71,11 +69,6 @@ testBasicParameters =
                     sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpPack)
                     assert (all isValidParamType (SF.pfUses p))
-    , testProperty "operand type" $
-      property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
-                    assert $ isNatArgFoo ((SF.pfOperandVars p) SL.!! SL.index0)
     , testProperty "literal vars" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend FloatRealRepr r
@@ -89,19 +82,14 @@ testBasicParameters =
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
     ]
   where
-    isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
-    isNatArgFoo _ = True
     isValidParamType (Some parameter) =
-      case testEquality (SF.paramType parameter) BaseNatRepr of
+      case testEquality (SF.paramType parameter) BaseIntegerRepr of
         Just Refl -> True
         Nothing ->
-          case testEquality (SF.paramType parameter) BaseIntegerRepr of
+          let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
+          case testEquality (SF.paramType parameter) aBV32 of
             Just Refl -> True
-            Nothing ->
-              let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
-              case testEquality (SF.paramType parameter) aBV32 of
-                Just Refl -> True
-                Nothing -> False
+            Nothing -> False
 
 
 testRoundTripPrintParse :: [TestTree]

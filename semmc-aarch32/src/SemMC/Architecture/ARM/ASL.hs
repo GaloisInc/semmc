@@ -513,8 +513,8 @@ data ASLSemantics sym = ASLSemantics
   , funSemantics :: SF.Library sym
   }
 
-testEqualitySymFn :: WB.ExprSymFn t (WB.Expr t) args ret
-                  -> WB.ExprSymFn t (WB.Expr t) args' ret'
+testEqualitySymFn :: WB.ExprSymFn t args ret
+                  -> WB.ExprSymFn t args' ret'
                   -> Maybe (args Ctx.::> ret :~: args' Ctx.::> ret')
 testEqualitySymFn symFn symFn' = testEquality (WB.symFnId symFn) (WB.symFnId symFn')
 

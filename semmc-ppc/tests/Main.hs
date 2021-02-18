@@ -27,7 +27,6 @@ import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
-import qualified What4.Expr.Builder as WEB
 import qualified What4.InterpretedFloatingPoint as WIF
 
 
@@ -65,11 +64,12 @@ executeTests progsToTest = do
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv progsToTest)
 
-allTests :: ( WPO.OnlineSolver solver
-            , WIF.IsInterpretedFloatExprBuilder (WEB.ExprBuilder t (CBO.OnlineBackendState solver) fs)
+allTests :: ( sym ~ CBO.OnlineBackend scope solver fs
+            , WPO.OnlineSolver solver
+            , WIF.IsInterpretedFloatExprBuilder sym
             )
-         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
-         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
+         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
+         -> SS.SynthesisEnvironment sym PPC64.PPC
          -> [(String, [D.Instruction])]
          -> T.TestTree
 allTests baseSet synthEnv progsToTest =

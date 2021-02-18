@@ -108,7 +108,7 @@ liveMemInExpr _                     = Set.empty
 
 exprSymFnToUninterpFn :: forall arch t args ret.
                          A.Architecture arch 
-                      => WE.ExprSymFn t (WE.Expr t) args ret -> Maybe (A.UninterpFn arch)
+                      => WE.ExprSymFn t args ret -> Maybe (A.UninterpFn arch)
 exprSymFnToUninterpFn f =
   case WE.symFnInfo f of
     WE.UninterpFnInfo args ret -> do

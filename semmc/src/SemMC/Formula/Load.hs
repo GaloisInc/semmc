@@ -30,10 +30,11 @@ import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as Pair
 import           Data.Parameterized.Some ( Some(..) )
-import           What4.BaseTypes
 
-import qualified What4.Interface as CRU
 import qualified Lang.Crucible.Backend as CRUB
+import qualified What4.Expr.Builder as WEB
+import qualified What4.Interface as CRU
+import           What4.BaseTypes
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula.Env as FE
@@ -68,12 +69,11 @@ instance E.Exception FormulaParseError
 -- | Load formulas when formula contents are already held in memory.
 --
 -- This will throw an exception if any of the formula strings is malformed
-loadFormulas :: forall sym arch a
-                . ( CRU.IsSymExprBuilder sym
+loadFormulas :: forall sym arch a t st fs
+                . ( sym ~ WEB.ExprBuilder t st fs
                   , A.Architecture arch
                   , HR.HasRepr a (A.ShapeRepr arch)
                   , ShowF a
-                  , ShowF (CRU.SymExpr sym)
                   , OrdF a
                   , U.HasCallStack
                   , L.HasLogCfg )
@@ -114,12 +114,11 @@ loadFormulas sym initEnv lib contents = do
 --
 -- The funDir argument gives a directory whose defined functions will be
 -- loaded. All files with extension `.fun` in this directory will be loaded.
-loadFormulasFromFiles :: forall sym arch a
-                       . ( CRU.IsSymExprBuilder sym
+loadFormulasFromFiles :: forall sym arch a t st fs
+                       . ( sym ~ WEB.ExprBuilder t st fs
                          , A.Architecture arch
                          , HR.HasRepr a (A.ShapeRepr arch)
                          , MapF.OrdF a
-                         , ShowF (CRU.SymExpr sym)
                          , U.HasCallStack
                          , L.HasLogCfg )
                       => sym
@@ -165,11 +164,10 @@ addIfJust f m a = do
 -- | Load library when contents are already held in memory.
 --
 -- This will throw an exception if any of the strings is malformed
-loadLibrary :: forall sym arch
-             . ( CRU.IsExprBuilder sym
+loadLibrary :: forall sym arch t st fs
+             . ( sym ~ WEB.ExprBuilder t st fs
                , CRUB.IsSymInterface sym
                , A.Architecture arch
-               , ShowF (CRU.SymExpr sym)
                , U.HasCallStack
                , L.HasLogCfg )
             => Proxy arch
@@ -197,11 +195,10 @@ loadLibrary _ sym env contents = do
         Left e -> putStrLn "Trying to load library" >> E.throwIO (FormulaParseError name e)
 
 
-loadLibraryFromFiles :: forall sym arch
-                      . ( CRU.IsExprBuilder sym
+loadLibraryFromFiles :: forall sym arch t st fs
+                      . ( sym ~ WEB.ExprBuilder t st fs
                         , CRUB.IsSymInterface sym
                         , A.Architecture arch
-                        , ShowF (CRU.SymExpr sym)
                         , U.HasCallStack
                         , L.HasLogCfg )
                      => Proxy arch
