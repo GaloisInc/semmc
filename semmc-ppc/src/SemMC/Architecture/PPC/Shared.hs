@@ -45,7 +45,6 @@ import qualified Data.ByteString.Builder as B
 import           Data.Int ( Int16 )
 import qualified Data.Int.Indexed as I
 import qualified Data.List.NonEmpty as NEL
-import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as PL

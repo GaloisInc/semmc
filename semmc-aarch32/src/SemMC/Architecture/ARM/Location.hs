@@ -21,15 +21,11 @@ module SemMC.Architecture.ARM.Location
     )
     where
 
+import           Data.Kind ( Type )
 import qualified Data.Text as T
 import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Classes
-import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
-import           Data.Parameterized.TH.GADT
-import           Data.Semigroup
-import qualified Dismantle.ARM.A32 as A32
-import qualified Dismantle.ARM.T32 as T32
 import qualified SemMC.Architecture as A
 import           What4.BaseTypes
 import qualified What4.Interface as WI
@@ -44,7 +40,7 @@ class ArchRepr arch where
 -- ----------------------------------------------------------------------
 
 -- | A location is simply an index int o the globals
-data Location arm :: BaseType -> * where
+data Location arm :: BaseType -> Type where
   Location :: ASL.GlobalRef s -> Location arm (ASL.GlobalsType s)
 
 locPC :: Location arm (BaseBVType 32)

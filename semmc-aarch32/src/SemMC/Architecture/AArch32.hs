@@ -27,7 +27,6 @@ import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Semigroup ((<>))
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits
 
