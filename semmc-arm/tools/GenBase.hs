@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,7 +10,6 @@ module Main where
 import           Control.Exception
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
-import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
@@ -27,14 +27,14 @@ import qualified SemMC.Architecture.AArch32 as ARMSem
 import qualified SemMC.Architecture.ARM.BaseSemantics as B
 import           SemMC.Architecture.ARM.Opcodes ( allA32Opcodes, allT32Opcodes )
 import qualified SemMC.DSL as DSL
-import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Formula.Env as SE
+import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Util as U
 import qualified System.Directory as D
 import           System.Exit
 import           System.FilePath ( (<.>), (</>) )
-import qualified What4.Interface as CRU
+import qualified What4.Expr.Builder as WEB
 
 
 data Options = Options { oRootDir :: FilePath
@@ -94,8 +94,9 @@ mainWithOptions opts = do
   if e > 0 then exitFailure else exitSuccess
 
 
-genFunDefs :: ( CRUB.IsSymInterface sym
-              , ShowF (CRU.SymExpr sym) )
+genFunDefs :: ( sym ~ WEB.ExprBuilder t st fs
+              , CRUB.IsSymInterface sym
+              )
            => sym -> SE.FormulaEnv sym (ARMSem.AArch32)
            -> FilePath -> Bool -> [(String, DSL.FunctionDefinition)]
            -> IO (Int, Int, SF.Library sym)
@@ -114,8 +115,9 @@ genFunDefs sym env d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
                          return (s+1, e, lib)
 
 
-genOpDefs :: ( CRUB.IsSymInterface sym
-             , ShowF (CRU.SymExpr sym) )
+genOpDefs :: ( sym ~ WEB.ExprBuilder t st fs
+             , CRUB.IsSymInterface sym
+             )
           => sym -> SE.FormulaEnv sym ARMSem.AArch32 -> SF.Library sym
           -> FilePath -> Bool -> [(String, DSL.Definition)] -> IO (Int, Int)
 genOpDefs sym env lib d chk l = F.foldlM writeDef (0, 0) l
@@ -139,8 +141,8 @@ genOpDefs sym env lib d chk l = F.foldlM writeDef (0, 0) l
                                       return (s+1, e)
           opcodes = allA32Opcodes ++ allT32Opcodes
 
-checkFunction :: ( CRUB.IsSymInterface sym
-                 , ShowF (CRU.SymExpr sym)
+checkFunction :: ( sym ~ WEB.ExprBuilder t st fs
+                 , CRUB.IsSymInterface sym
                  , Architecture arch )
               => Proxy arch
               -> sym
@@ -154,8 +156,8 @@ checkFunction arch sym env sem name =
       catch (Right <$> loadFunction arch sym env (name, sem)) $
                  \(e :: SomeException) -> return $ Left $ show e
 
-loadFunction :: ( CRUB.IsSymInterface sym
-                , ShowF (CRU.SymExpr sym)
+loadFunction :: ( sym ~ WEB.ExprBuilder t st fs
+                , CRUB.IsSymInterface sym
                 , Architecture arch
                 , U.HasLogCfg )
              => Proxy arch
@@ -165,9 +167,9 @@ loadFunction :: ( CRUB.IsSymInterface sym
              -> IO (SF.Library sym)
 loadFunction arch sym env pair = FL.loadLibrary arch sym env [pair]
 
-checkFormula :: ( Architecture arch
+checkFormula :: ( sym ~ WEB.ExprBuilder t st fs
+                , Architecture arch
                 , CRUB.IsSymInterface sym
-                , ShowF (CRU.SymExpr sym)
                 , HasRepr (ARMSem.ARMOpcode ARMSem.ARMOperand) (SL.List (OperandTypeRepr arch))
                 ) =>
                 Proxy arch
@@ -185,8 +187,8 @@ checkFormula arch sym env lib sem op =
           \(e :: SomeException) -> return $ Just $ show e
 
 
-loadFormula :: ( CRUB.IsSymInterface sym
-               , ShowF (CRU.SymExpr sym)
+loadFormula :: ( sym ~ WEB.ExprBuilder t st fs
+               , CRUB.IsSymInterface sym
                , Architecture arch
                , HasRepr (ARMSem.ARMOpcode ARMSem.ARMOperand) (SL.List (OperandTypeRepr arch))
                , U.HasLogCfg
