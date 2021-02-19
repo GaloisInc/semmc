@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -9,7 +10,6 @@ import           Control.Exception
 import           Control.Monad ( when )
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
-import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
@@ -34,7 +34,8 @@ import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Util as U
 import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
-import qualified What4.Interface as CRU
+import qualified What4.Expr.Builder as WEB
+import qualified What4.InterpretedFloatingPoint as WIF
 
 import           Prelude
 
@@ -91,20 +92,32 @@ mainWithOptions opts = do
   D.createDirectoryIfMissing True (oBaseDir opts)
   D.createDirectoryIfMissing True (oPseudoDir opts)
   let sz = oBitSize opts
-  genTo sym (oManualDir opts) sz (B.manual sz)
-  genTo sym (oBaseDir   opts) sz (B.base   sz)
-  genTo sym (oPseudoDir opts) sz (B.pseudo sz)
-      where genTo sym d sz l =
-              do (noErrors, errors) <-
-                   genOpDefs sym d sz (not $ oNoCheck opts) (oWriteOnFail opts) (oLogProgress opts) l
-                 putStrLn $ "Wrote " <>
-                   (if (oWriteOnFail opts) then (show $ noErrors + errors) else (show noErrors)) <>
-                   " files to " <> d <>
-                   (if 0 == errors then "" else " (" <> show errors <> " errors!)")
+  genTo opts sym (oManualDir opts) sz (B.manual sz)
+  genTo opts sym (oBaseDir   opts) sz (B.base   sz)
+  genTo opts sym (oPseudoDir opts) sz (B.pseudo sz)
 
-genOpDefs :: forall sym
-           . ( CRUB.IsSymInterface sym
-             , ShowF (CRU.SymExpr sym) )
+genTo :: ( sym ~ WEB.ExprBuilder t st fs
+         , CRUB.IsSymInterface sym
+         , WIF.IsInterpretedFloatExprBuilder sym
+         )
+      => Options
+      -> sym
+      -> FilePath
+      -> B.BitSize
+      -> DSL.Package
+      -> IO ()
+genTo opts sym d sz l =
+  do (noErrors, errors) <-
+       genOpDefs sym d sz (not $ oNoCheck opts) (oWriteOnFail opts) (oLogProgress opts) l
+     putStrLn $ "Wrote " <>
+       (if (oWriteOnFail opts) then (show $ noErrors + errors) else (show noErrors)) <>
+       " files to " <> d <>
+       (if 0 == errors then "" else " (" <> show errors <> " errors!)")
+
+genOpDefs :: forall sym t st fs
+           . ( sym ~ WEB.ExprBuilder t st fs
+             , CRUB.IsSymInterface sym
+             )
           => sym
           -- ^ Symbolic backend
           -> FilePath
@@ -166,9 +179,10 @@ genOpDefs sym d sz checkSemantics writeOnFail logProgress pkg = do
                       B.Size32 -> PPC32.allOpcodes
                       B.Size64 -> PPC64.allOpcodes
 
-checkFunction :: ( CRUB.IsSymInterface sym
-                 , ShowF (CRU.SymExpr sym)
-                 , Architecture arch )
+checkFunction :: ( sym ~ WEB.ExprBuilder t st fs
+                 , CRUB.IsSymInterface sym
+                 , Architecture arch
+                 )
               => Proxy arch
               -> sym
               -> BS.ByteString
@@ -180,8 +194,8 @@ checkFunction arch sym sem name =
       catch (Right <$> loadFunction arch sym (name, sem)) $
                  \(e :: SomeException) -> return $ Left $ show e   
 
-loadFunction :: ( CRUB.IsSymInterface sym
-                , ShowF (CRU.SymExpr sym)
+loadFunction :: ( sym ~ WEB.ExprBuilder t st fs
+                , CRUB.IsSymInterface sym
                 , Architecture arch
                 , U.HasLogCfg )
              => Proxy arch
@@ -192,9 +206,10 @@ loadFunction arch sym pair = do
   env <- FL.formulaEnv arch sym
   FL.loadLibrary arch sym env [pair]
 
-checkFormula :: ( Architecture arch
-                , HasRepr (PPC.Opcode PPC.Operand) (SL.List (OperandTypeRepr arch))       , CRUB.IsSymInterface sym
-                , ShowF (CRU.SymExpr sym)
+checkFormula :: ( sym ~ WEB.ExprBuilder t st fs
+                , Architecture arch
+                , HasRepr (PPC.Opcode PPC.Operand) (SL.List (OperandTypeRepr arch))
+                , CRUB.IsSymInterface sym
                 ) =>
                 Proxy arch
              -> sym
@@ -210,8 +225,8 @@ checkFormula arch sym lib sem op =
                       \(e :: SomeException) -> return $ Just $ show e
 
 
-loadFormula :: ( CRUB.IsSymInterface sym
-               , ShowF (CRU.SymExpr sym)
+loadFormula :: ( sym ~ WEB.ExprBuilder t st fs
+               , CRUB.IsSymInterface sym
                , Architecture arch
                , HasRepr (PPC.Opcode PPC.Operand) (SL.List (OperandTypeRepr arch))
                , U.HasLogCfg

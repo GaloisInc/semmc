@@ -144,14 +144,13 @@ groundValToExpr :: forall sym tp.
 groundValToExpr sym _ BaseBoolRepr True = return (S.truePred sym)
 groundValToExpr sym _ BaseBoolRepr False = return (S.falsePred sym)
 groundValToExpr sym _ (BaseBVRepr w) val = S.bvLit sym w val
-groundValToExpr sym _ BaseNatRepr val = S.natLit sym val
 groundValToExpr sym _ BaseIntegerRepr val = S.intLit sym val
 groundValToExpr sym _ BaseRealRepr val = S.realLit sym val
 groundValToExpr sym _ (BaseFloatRepr fpp@(FloatingPointPrecisionRepr eb sb)) val
   | LeqProof <- leqTrans (LeqProof @1 @2) (leqProof (knownNat @2) eb)
   , LeqProof <- leqTrans (LeqProof @1 @2) (leqProof (knownNat @2) sb)
   , LeqProof <- leqAddPos eb sb
-  = S.floatFromBinary sym fpp =<< S.bvLit sym (addNat eb sb) val
+  = S.floatLit sym fpp val
 groundValToExpr sym _        BaseComplexRepr val = S.mkComplexLit sym val
 groundValToExpr sym indices (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
   base' <- groundValToExpr sym indices elemTp base
@@ -188,7 +187,7 @@ groundValToExpr sym indices (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
             -> Assignment S.IndexLit idx'
     mkIndex Empty Empty = Empty
     mkIndex (idx' :> BaseBVRepr n) (vals :> GE.GVW i) = mkIndex idx' vals :> S.BVIndexLit n i
-    mkIndex (idx' :> BaseNatRepr)  (vals :> GE.GVW i) = mkIndex idx' vals :> S.NatIndexLit i
+    mkIndex (idx' :> BaseIntegerRepr)  (vals :> GE.GVW i) = mkIndex idx' vals :> S.IntIndexLit i
     mkIndex _                      _                  = error "Error creating index literal into an array: unsupported types"
 
 
@@ -199,7 +198,6 @@ groundValToExpr _ _ (BaseStringRepr _) _ = error "groundValToExpr: string base t
 
 showGroundValue :: BaseTypeRepr b -> GE.GroundValue b -> String
 showGroundValue BaseBoolRepr b = show b
-showGroundValue BaseNatRepr n = show n
 showGroundValue BaseIntegerRepr i = show i
 showGroundValue BaseRealRepr r = show r
 showGroundValue (BaseBVRepr _w) i = show i
@@ -244,7 +242,6 @@ exprToGroundVal :: forall sym tp.
                 -> Maybe (GE.GroundValue tp)
 exprToGroundVal BaseBoolRepr                 e = S.asConstantPred e
 exprToGroundVal (BaseBVRepr _w)              e = S.asBV e
-exprToGroundVal BaseNatRepr                  e = S.asNat e 
 exprToGroundVal BaseIntegerRepr              e = S.asInteger e
 exprToGroundVal BaseRealRepr                _e = Nothing
 exprToGroundVal (BaseFloatRepr _fpp)        _e = Nothing
@@ -261,7 +258,6 @@ concreteToGVW = GE.GVW . concreteToGroundVal
 -- | Convert concrete values to ground values
 concreteToGroundVal :: W.ConcreteVal tp -> GE.GroundValue tp
 concreteToGroundVal (W.ConcreteBool b) = b
-concreteToGroundVal (W.ConcreteNat n) = n
 concreteToGroundVal (W.ConcreteInteger n) = n
 concreteToGroundVal (W.ConcreteReal r) = r
 concreteToGroundVal (W.ConcreteString s) = s
@@ -276,7 +272,7 @@ concreteToGroundVal (W.ConcreteArray _idx def m) = GE.ArrayConcrete (concreteToG
     concToGV' (args,v) = (fmapFC concreteToIndexLit args, concreteToGroundVal v)
 
 concreteToIndexLit :: W.ConcreteVal tp -> S.IndexLit tp
-concreteToIndexLit (W.ConcreteNat n) = S.NatIndexLit n
+concreteToIndexLit (W.ConcreteInteger n) = S.IntIndexLit n
 concreteToIndexLit (W.ConcreteBV r i) = S.BVIndexLit r i
 concreteToIndexLit v = error $ "Cannot turn conrete value of type " ++ show (W.concreteType v) ++ " into an IndexLit"
 

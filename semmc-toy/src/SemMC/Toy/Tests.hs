@@ -39,9 +39,10 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
 import qualified Lang.Crucible.Backend as SB
+import qualified Lang.Crucible.Backend.Online as CBO
+import qualified What4.Expr.Builder as WEB
 import qualified What4.Interface as S
 import qualified What4.ProblemFeatures as WPF
-import qualified Lang.Crucible.Backend.Online as CBO
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -67,7 +68,7 @@ allOperands = $(captureDictionaries (const True) ''T.Opcode)
 readBinOpc :: ( U.HasLogCfg
               , S.IsSymExprBuilder sym
               , SB.IsBoolSolver sym
-              , ShowF (S.SymExpr sym)
+              , sym ~ WEB.ExprBuilder t st fs
               ) =>
               sym
            -> Opcode Operand sh

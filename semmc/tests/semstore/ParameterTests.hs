@@ -20,16 +20,7 @@ parameterTests :: [TestTree]
 parameterTests = [
   testGroup "Parameter" $
 
-    [ testGroup "Nat" $
-      [ testProperty "parameter type" $
-        property $ do p <- forAll genNatParameter
-                      case testEquality (F.paramType p) BaseNatRepr of
-                        Just Refl -> success
-                        Nothing -> assert False
-      -- TBD: needs other tests
-      ]
-
-    , testGroup "Integer" $
+    [ testGroup "Integer" $
       [ testProperty "parameter type" $
         property $ do p <- forAll $ genIntParameter
                       case testEquality (F.paramType p) BaseIntegerRepr of

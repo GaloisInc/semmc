@@ -9,6 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -21,7 +22,7 @@ import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
 import qualified Data.List as L
 import qualified Data.Map as Map
-import           Data.Maybe ( catMaybes, Maybe(..) )
+import           Data.Maybe ( catMaybes )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.List ( List( (:<) ) )
@@ -36,7 +37,6 @@ import           Hedgehog
 import qualified Hedgehog.Gen as HG
 import           Hedgehog.Range
 import           HedgehogUtil
-import           Numeric.Natural
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Env as FE
@@ -54,20 +54,7 @@ type Trace = String
 
 
 ----------------------------------------------------------------------
-
-genNat :: Monad m => GenT m Natural
-genNat = HG.frequency [ (10, return 0)
-                      , (10, return 1)
-                      , (80, toEnum . abs <$> HG.int (linearBounded :: Range Int))
-                      ]
-         -- Ensures that 0 and 1 are present in any reasonably-sized distribution
-
-
-----------------------------------------------------------------------
 -- Location Generators
-
-genNatLocation :: Monad m => GenT m (TestLocation BaseNatType)
-genNatLocation = TestNatLoc <$> genNat
 
 genIntLocation :: Monad m => GenT m (TestLocation BaseIntegerType)
 genIntLocation = TestIntLoc <$>
@@ -84,20 +71,6 @@ genBoxLocation = TestBoxLoc <$> HG.element [0..3]
 ----------------------------------------------------------------------
 -- Function.Parameter Generators
 
-genNatParameter :: Monad m => GenT m (F.Parameter TestGenArch sh BaseNatType)
-genNatParameter = HG.choice
-                  [
-                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> PL.Index sh s -> Parameter arch sh (A.OperandType arch s)
-                    F.LiteralParameter <$> genNatLocation
-                    -- , FunctionParameter :: String
-                    -- -- The name of the uninterpreted function
-                    -- -> WrappedOperand arch sh s
-                    -- -- The operand we are calling the function on (this is a newtype so
-                    -- -- we don't need an extra typerepr)
-                    -- -> BaseTypeRepr tp
-                    -- -- The typerepr for the return type of the function
-                    -- -> Parameter arch sh tp
-                  ]
 
 genIntParameter :: Monad m => GenT m (F.Parameter TestGenArch sh BaseIntegerType)
 genIntParameter = HG.choice
@@ -182,17 +155,6 @@ genSolverSymbol forPrinting =
 
 ----------------------------------------------------------------------
 
-genBoundNatVar :: ( Monad m
-                  , MonadIO m
-                  , WI.IsSymExprBuilder sym
-                  ) =>
-                  sym
-               -> Maybe String
-               -> GenT m (WI.BoundVar sym BaseNatType)
-genBoundNatVar sym mbName = do
-  s <- bvSymName mbName
-  liftIO $ WI.freshBoundVar sym s BaseNatRepr
-
 genBoundIntVar :: ( Monad m
                   , MonadIO m
                   , WI.IsSymExprBuilder sym
@@ -233,13 +195,12 @@ operandName :: ( WI.BoundVar sym ~ WE.ExprBoundVar t) =>
                OperandPair sym x -> String
 operandName (OpP _ bv) = show $ WE.bvarName $ BV.unBoundVar bv
 
-
-
-genBoundVar_NatArgFoo :: Monad m => MonadIO m =>
-                         WI.IsSymExprBuilder sym =>
-                         sym -> GenT m (OperandPair sym "Foo")
-genBoundVar_NatArgFoo sym =
-  OpP FooArg . BV.BoundVar <$> genBoundNatVar sym Nothing
+genBoundVar_IntegerArgFoo
+  :: (Monad m, MonadIO m, WI.IsSymExprBuilder sym)
+  => sym
+  -> GenT m (OperandPair sym "Foo")
+genBoundVar_IntegerArgFoo sym =
+  OpP FooArg . BV.BoundVar <$> genBoundIntVar sym Nothing
 
 genBoundVar_BV32ArgBar :: Monad m => MonadIO m =>
                           WI.IsSymExprBuilder sym =>
@@ -275,21 +236,6 @@ fn3 :: MonadIO m => t1 -> String -> (t1 -> t2 -> t3 -> t4 -> IO b)
     -> (Trace, t2) -> (Trace, t3) -> (Trace, t4) -> m (Trace, b)
 fn3 sym n i = \(l,t) -> \(m,u) -> \(o,v) -> do e <- liftIO $ i sym t u v
                                                return (t3 n l m o, e)
-
-genNatSymExpr :: ( Monad m
-                 , MonadIO m
-                 , WI.IsExprBuilder sym
-                 ) =>
-                 sym
-              -> Set.Set (Some (F.Parameter arch sh))
-              -> PL.List (BV.BoundVar sym arch) sh
-              -> MapF.MapF TestLocation (WI.BoundVar sym)
-              -> GenT m (Trace, WI.SymExpr sym BaseNatType)
-genNatSymExpr sym _params _opvars _litvars =
-  do expr <- liftIO $ do x <- WI.natLit sym 3
-                         y <- WI.natLit sym 5
-                         WI.natAdd sym x y
-     return ("natAdd (3::nat) (5::nat)", expr)
 
 
 genIntSymExpr :: ( MonadIO m
@@ -505,7 +451,13 @@ genBV32SymExpr sym params opvars litvars = do
       (fn3 sym "bvIte" WI.bvIte)
     ]
 
-
+-- | Generate a symbolic expression for a parameter
+--
+-- Note that while parameters may be either bitvectors or integers, we always
+-- return a bitvector symbolic expression.  To do this, we generate a value of
+-- the actual expected type and convert it to a bitvector.
+--
+-- Question: why? What is this code actually doing?
 paramExprBV32 :: ( MonadIO m
                  , WI.IsSymExprBuilder sym
                  , SA.IsLocation (SA.Location arch)
@@ -525,17 +477,15 @@ paramExprBV32 sym opvars litvars (Some param) =
             F.OperandParameter _ idx -> WI.varExpr sym $ BV.unBoundVar $ opvars PL.!! idx
             F.LiteralParameter loc -> WI.varExpr sym $ fromJust' "paramExprBV32.BVRepr32.lookup" $ MapF.lookup loc litvars
         Nothing -> error $ "paramExprBV32 unsupported BVRepr size: " <> show w
-    BaseNatRepr ->
+    BaseIntegerRepr ->
       case param of
-        F.OperandParameter _ idx ->
-          liftIO $ do let v = WI.varExpr sym $ BV.unBoundVar $ opvars PL.!! idx
-                      i <- WI.natToInteger sym v
-                      WI.integerToBV sym i (knownRepr :: NatRepr 32)
-        F.LiteralParameter loc ->
-          liftIO $ do let v = WI.varExpr sym $ fromJust' "paramExprBV32.BVRepr32.lookup" $ MapF.lookup loc litvars
-                      i <- WI.natToInteger sym v
-                      WI.integerToBV sym i (knownRepr :: NatRepr 32)
-    BaseIntegerRepr -> error "paramExprBV32 BaseNatRepr TBD"
+        F.OperandParameter _ idx -> liftIO $ do
+          let i = WI.varExpr sym (BV.unBoundVar (opvars PL.!! idx))
+          WI.integerToBV sym i (knownNat @32)
+        F.LiteralParameter loc -> liftIO $ do
+          let i = WI.varExpr sym (fromJust' "paramExprBV32.IntegerRerp.lookup" (MapF.lookup loc litvars))
+          WI.integerToBV sym i (knownNat @32)
+
 
 
 ----------------------------------------------------------------------
@@ -593,8 +543,7 @@ genParameterizedFormula sym _opcode = do
   (trace, defs) <-
     if F.length params == 0
     then return ("<no params>", MapF.empty)
-    else let genExpr = natdefexpr $
-                       intdefexpr $
+    else let genExpr = intdefexpr $
                        bv32defexpr $
                        error "unsupported parameter type in generator"
              anElem = do Some p <- HG.element $ F.toList params
@@ -644,7 +593,6 @@ locationsForLiteralParams sym params = MapF.fromList <$> F.foldrM appendLitVarPa
   where appendLitVarPair (Some p@(F.LiteralParameter loc)) rs = do
           let nm = Just $ show loc
           e <- case F.paramType p of
-                 BaseNatRepr -> Pair loc <$> genBoundNatVar sym nm
                  BaseIntegerRepr -> Pair loc <$> genBoundIntVar sym nm
                  (BaseBVRepr w) ->
                    case testEquality w (knownNat :: NatRepr 32) of
@@ -679,12 +627,6 @@ type GenDefFunc = forall m sym arch sh tp .
                   ) =>
                   GenDefDirect m sym arch sh tp
                -> GenDefDirect m sym arch sh tp
-
-natdefexpr :: GenDefFunc
-natdefexpr next sym p params opvars litvars =
-  case testEquality (F.paramType p) BaseNatRepr of
-    Just Refl -> fmap (Pair p) <$> genNatSymExpr sym params opvars litvars
-    Nothing -> next sym p params opvars litvars
 
 intdefexpr :: GenDefFunc
 intdefexpr next sym p params opvars litvars =
@@ -744,7 +686,7 @@ instance ( Monad m
          , WI.IsSymExprBuilder sym
          ) =>
          MkOperands (GenT m) sym (OperandPair sym) "Foo" where
-  mkOperand = genBoundVar_NatArgFoo
+  mkOperand = genBoundVar_IntegerArgFoo
 
 instance ( Monad m
          , MonadIO m

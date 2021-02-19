@@ -58,7 +58,7 @@ instance SA.Architecture TestGenArch where
     case SR.symbolRepr sr of
       "Foo"
         | Just Refl <- testEquality sr (SR.knownSymbol @"Foo")
-          -> BaseNatRepr
+          -> BaseIntegerRepr
       "Bar"
         | Just Refl <- testEquality sr (SR.knownSymbol @"Bar")
           -> BaseBVRepr (knownNat :: NatRepr 32)
@@ -83,7 +83,6 @@ instance SA.Architecture TestGenArch where
 -- Location
 
 data TestLocation :: BaseType -> Type where
-  TestNatLoc :: Natural -> TestLocation BaseNatType
   TestIntLoc :: Integer -> TestLocation BaseIntegerType
   TestBoxLoc :: Natural -> TestLocation (BaseBVType 32)
   TestBarLoc :: TestLocation (BaseBVType 32)
@@ -97,7 +96,6 @@ data TestLocation :: BaseType -> Type where
 instance Show (TestLocation tp) where
   show TestBarLoc     = "Bar"
   show (TestBoxLoc n) = "Box_" <> show n
-  show (TestNatLoc n) = "NAT_" <> show n
   show (TestIntLoc i) = if i >= 0
                         then "INT_" <> show i
                         else "NEGINT_" <> show (-i)
@@ -107,7 +105,6 @@ instance ShowF TestLocation
 deriving instance Eq (TestLocation tp)
 
 instance L.IsLocation TestLocation where
-  locationType (TestNatLoc _) = BaseNatRepr
   locationType (TestIntLoc _) = BaseIntegerRepr
   locationType (TestBoxLoc _) = BaseBVRepr knownNat
   locationType TestBarLoc     = BaseBVRepr knownNat
@@ -125,7 +122,6 @@ instance L.IsLocation TestLocation where
 
   nonMemLocations = [Some TestBarLoc]
                  <> (Some . TestBoxLoc <$> [0..3])
-                 <> (Some . TestNatLoc <$> [0..6])
                  <> (Some . TestIntLoc <$> [-10..10])
 
   defaultLocationExpr = error "TestLocation defaultLocationExpr TBD"
@@ -139,7 +135,7 @@ type instance L.Location TestGenArch = TestLocation
 ----------------------------------------------------------------------
 -- Operands
 
-type instance SA.OperandType TestGenArch "Foo" = BaseNatType  -- unsupported for Printer
+type instance SA.OperandType TestGenArch "Foo" = BaseIntegerType  -- unsupported for Printer
 type instance SA.OperandType TestGenArch "Bar" = BaseBVType 32
 type instance SA.OperandType TestGenArch "Box" = BaseBVType 32
 

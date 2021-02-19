@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -14,21 +15,20 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
-import           Data.Semigroup
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
 import qualified SemMC.Architecture.AArch32 as ARM
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics
                                                 , a32DefinedFunctions, t32DefinedFunctions )
+import qualified SemMC.Formula.Env as FE
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
-import qualified SemMC.Formula.Env as FE
 import qualified SemMC.Util as U
 import           System.IO
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import qualified What4.Interface as CRU
+import qualified What4.Expr.Builder as WEB
 
 
 main :: IO ()
@@ -87,8 +87,8 @@ testFormula dfs a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op
      MapF.size fm @?= 1
     where opname (Some op) = showF op
 
-loadFormula :: ( CRUB.IsSymInterface sym
-               , ShowF (CRU.SymExpr sym)
+loadFormula :: ( sym ~ WEB.ExprBuilder t st fs
+               , CRUB.IsSymInterface sym
                , U.HasLogCfg) =>
                sym
             -> FE.FormulaEnv sym ARM.AArch32
