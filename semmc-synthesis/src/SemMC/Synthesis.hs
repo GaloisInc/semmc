@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MonoLocalBinds #-}
 module SemMC.Synthesis
   ( setupEnvironment
@@ -22,6 +23,7 @@ import           Control.Exception.Base (finally)
 import qualified What4.Protocol.Online as WPO
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -66,7 +68,8 @@ setupEnvironment sym baseSet =
 mcSynth :: (TemplateConstraints arch,
             ArchRepr arch,
             WPO.OnlineSolver solver,
-            CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+            CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+            ?memOpts :: LLVM.MemOptions
            )
         => SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
         -> Formula (CBO.OnlineBackend t solver fs) arch
@@ -104,9 +107,10 @@ mcSynth env target = do
 mcSynthTimeout :: (TemplateConstraints arch,
                    ArchRepr arch,
                    WPO.OnlineSolver solver,
-                   CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+                   CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+                   ?memOpts :: LLVM.MemOptions
                   )
-               => Int 
+               => Int
                -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
                -> Formula (CBO.OnlineBackend t solver fs) arch
                -> IO (Maybe [Instruction arch])

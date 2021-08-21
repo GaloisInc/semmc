@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -13,6 +14,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified What4.Protocol.Online as WPO
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.Backend as CB
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as SF
@@ -37,6 +39,7 @@ synthesizeAndCheck :: forall proxy arch t solver fs
                       , WPO.OnlineSolver solver
                       , SS.TemplatableOperand arch
                       , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+                      , ?memOpts :: LLVM.MemOptions
                       )
                    => proxy arch
                    -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch

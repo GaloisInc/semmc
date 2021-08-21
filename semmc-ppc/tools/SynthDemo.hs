@@ -30,6 +30,7 @@ import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some (..) )
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Expr.Builder as SB
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
@@ -208,6 +209,7 @@ mainWith r opts = do
     -- Look for an equivalent program!
     putStrLn ""
     putStrLn "Starting synthesis..."
+    let ?memOpts = LLVM.defaultMemOptions
     newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
     putStrLn ""
     putStrLn "Here's the equivalent program:"

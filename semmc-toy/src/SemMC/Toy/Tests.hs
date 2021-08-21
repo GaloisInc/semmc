@@ -40,6 +40,7 @@ import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
 import qualified Lang.Crucible.Backend as SB
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Expr.Builder as WEB
 import qualified What4.Interface as S
 import qualified What4.ProblemFeatures as WPF
@@ -145,7 +146,7 @@ dependentFormula sym = do
                               $ MapF.empty
                    }
 
-doThing2 :: (U.HasLogCfg) => IO ()
+doThing2 :: (U.HasLogCfg, ?memOpts :: LLVM.MemOptions) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
   CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
@@ -171,7 +172,7 @@ doThing3 = do
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
-doThing4 :: (U.HasLogCfg) => IO ()
+doThing4 :: (U.HasLogCfg, ?memOpts :: LLVM.MemOptions) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
   CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do

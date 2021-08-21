@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, TypeApplications, ScopedTypeVariables, TypeFamilies,
-  DataKinds, AllowAmbiguousTypes #-}
+  DataKinds, AllowAmbiguousTypes, ImplicitParams #-}
 
 module SemMC.Synthesis.Cegis.EvalFormula
   ( LocEval
@@ -20,6 +20,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.TraversableF as TF
 
 import qualified Lang.Crucible.Backend as CB
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 
@@ -31,7 +32,7 @@ import qualified SemMC.Synthesis.Template as Temp
 import qualified SemMC.Synthesis.Cegis.ReadWriteEval as RW
 import qualified SemMC.Synthesis.Cegis.Types as T
 
-    
+
 -- A data structure representing functions from locations to expressions
 data LocEval loc expr =
   LocEval { evalLoc :: forall (tp :: S.BaseType). loc tp -> IO (expr tp) }
@@ -112,6 +113,7 @@ evalFormula' sym (Formula vars defs) el = do
 simplifyReadMem' :: forall arch t st fs sym.
                 ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
                 , A.Architecture arch
+                , ?memOpts :: LLVM.MemOptions
                 )
              => sym
              -> Formula sym arch
@@ -126,6 +128,7 @@ simplifyReadMem' sym f@(Formula vars defs) (LocEval el) = do
 evalFormulaMem' :: forall arch t st fs sym.
                 ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
                 , A.Architecture arch
+                , ?memOpts :: LLVM.MemOptions
                 )
              => sym
              -> Formula sym arch
@@ -143,6 +146,7 @@ evalFormulaMem' sym f el = do
 evalFormulaMem :: forall arch t st fs sym.
                 ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
                 , A.Architecture arch
+                , ?memOpts :: LLVM.MemOptions
                 )
              => Formula sym arch
              -> L.ArchState arch (WE.Expr t)

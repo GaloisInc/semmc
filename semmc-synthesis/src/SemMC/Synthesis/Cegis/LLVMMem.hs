@@ -77,7 +77,7 @@ putImpl m = MemM $ do
 
 -- | Start an LLVM memory model instance consisting of a single block of memory
 -- of size 2^w where w is the width of registers in the architecture. All values
--- in memory are initialized to the values of an uninterpreted symbolic array. 
+-- in memory are initialized to the values of an uninterpreted symbolic array.
 withMem :: forall arch sym a.
            (A.Architecture arch, B.IsSymInterface sym)
         => sym
@@ -92,7 +92,7 @@ withMem sym memExp op = do
     initMem <- LLVM.emptyMem (A.archEndianForm (Proxy @arch))
 
     -- 2) Allocate a block of uninitialized memory
-    (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
+    (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem"
                                 initMem LLVM.noAlignment
 
     -- 3) Write the initial memory expression array to the allocated block
@@ -123,6 +123,7 @@ readMemNoOF :: ( LLVM.HasPtrWidth (A.RegWidth arch)
                , B.IsSymInterface sym
                , 1 S.<= bits
                , LLVM.HasLLVMAnn sym
+               , ?memOpts :: LLVM.MemOptions
                )
             => S.NatRepr bits
             -- ^ The number of bits to read
@@ -185,6 +186,7 @@ readMem :: forall arch sym bits.
            , B.IsSymInterface sym
            , 1 S.<= bits
            , LLVM.HasLLVMAnn sym
+           , ?memOpts :: LLVM.MemOptions
            )
         => S.NatRepr bits
         -- ^ The number of bits to read
@@ -197,6 +199,7 @@ readMemIO :: forall arch sym bits.
              ( A.Architecture arch
              , B.IsSymInterface sym
              , 1 S.<= bits
+             , ?memOpts :: LLVM.MemOptions
              )
           => sym
           -> S.NatRepr bits
@@ -219,6 +222,7 @@ readMemOF :: forall arch sym bits.
            , B.IsSymInterface sym
            , 1 S.<= bits
            , LLVM.HasLLVMAnn sym
+           , ?memOpts :: LLVM.MemOptions
            )
         => S.NatRepr bits
         -- ^ The number of bits to read
@@ -388,8 +392,8 @@ isUpdateArray :: forall arch t st fs sym.
            -> Maybe ( S.SymExpr sym (A.MemType arch)
                     , A.AccessData sym arch)
 isUpdateArray (WE.AppExpr a)
-  | WE.UpdateArray (S.BaseBVRepr _) (Ctx.Empty Ctx.:> S.BaseBVRepr regWidth) 
-                   mem (Ctx.Empty Ctx.:> idx) val <- WE.appExprApp a 
-  , Just S.Refl <- S.testEquality regWidth (S.knownNat @(A.RegWidth arch)) = 
+  | WE.UpdateArray (S.BaseBVRepr _) (Ctx.Empty Ctx.:> S.BaseBVRepr regWidth)
+                   mem (Ctx.Empty Ctx.:> idx) val <- WE.appExprApp a
+  , Just S.Refl <- S.testEquality regWidth (S.knownNat @(A.RegWidth arch)) =
     Just (mem, A.WriteData idx val)
 isUpdateArray _ | otherwise = Nothing

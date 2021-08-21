@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE ImplicitParams #-}
 module SemMC.Synthesis.Core
   ( synthesizeFormula
   , SynthesisEnvironment(..)
@@ -26,6 +27,7 @@ import qualified What4.Protocol.Online as WPO
 import qualified What4.Interface as S
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -94,7 +96,9 @@ footprintFilter target candidate =
 
 
 
-instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
+instantiate :: ( TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+               , ?memOpts :: LLVM.MemOptions
+               )
             => CegisParams (CBO.OnlineBackend t solver fs) arch
             -> Formula (CBO.OnlineBackend t solver fs) arch
             -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver fs) arch)]
@@ -140,7 +144,8 @@ synthesizeFormula' :: (Architecture arch,
                        ArchRepr arch,
                        Architecture (TemplatedArch arch),
                        WPO.OnlineSolver solver,
-                       CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+                       CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+                       ?memOpts :: LLVM.MemOptions
                        )
                    => CegisParams (CBO.OnlineBackend t solver fs) arch
                    -> Formula (CBO.OnlineBackend t solver fs) arch
@@ -172,7 +177,8 @@ synthesizeFormula :: forall t solver fs arch .
                       Architecture (TemplatedArch arch),
                       Typeable arch,
                       WPO.OnlineSolver solver,
-                      CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+                      CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+                      ?memOpts :: LLVM.MemOptions
                      )
                   => SynthesisParams (CBO.OnlineBackend t solver fs) arch
                   -> Formula (CBO.OnlineBackend t solver fs) arch
@@ -188,4 +194,4 @@ synthesizeFormula params target = do
                    }
 
 
-    
+

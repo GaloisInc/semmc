@@ -25,6 +25,7 @@ import qualified Data.Int.Indexed as I
 import qualified Dismantle.PPC as D
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
 import qualified What4.InterpretedFloatingPoint as WIF
@@ -62,11 +63,13 @@ executeTests progsToTest = do
     CBO.withZ3OnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
+      let ?memOpts = LLVM.defaultMemOptions
       T.defaultMain (allTests baseSet synthEnv progsToTest)
 
 allTests :: ( sym ~ CBO.OnlineBackend scope solver fs
             , WPO.OnlineSolver solver
             , WIF.IsInterpretedFloatExprBuilder sym
+            , ?memOpts :: LLVM.MemOptions
             )
          => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
          -> SS.SynthesisEnvironment sym PPC64.PPC
@@ -154,6 +157,7 @@ mkMemRI n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 toSynthesisTest :: ( WPO.OnlineSolver solver
                    , CB.IsSymInterface sym
                    , sym ~ CBO.OnlineBackend t solver fs
+                   , ?memOpts :: LLVM.MemOptions
                    )
                 => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
                 -> SS.SynthesisEnvironment sym PPC64.PPC

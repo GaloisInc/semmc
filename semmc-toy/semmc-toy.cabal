@@ -27,13 +27,14 @@ library
                      , located-base
                      , text >= 1 && < 2
                      , crucible >= 0.4
+                     , crucible-llvm
                      , dismantle-tablegen
                      , parameterized-utils >= 2.1.0 && < 2.2
                      , semmc
                      , semmc-learning
                      , semmc-synthesis
                      , what4 >= 0.4
-                     
+
 executable semmc-toy-stratify
   hs-source-dirs:      semmc-toy-stratify
   main-is:             Main.hs
@@ -68,4 +69,4 @@ test-suite semmc-toy-tests
                  , tasty-hunit
                  , async
                  , directory
-                 
+
