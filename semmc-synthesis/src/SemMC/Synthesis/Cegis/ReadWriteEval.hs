@@ -1,5 +1,5 @@
 {-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE RankNTypes, TypeOperators, TypeApplications, DataKinds, 
+{-# LANGUAGE RankNTypes, TypeOperators, TypeApplications, DataKinds,
 TypeFamilies, ScopedTypeVariables, AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -fno-warn-unticked-promoted-constructors #-}
 
@@ -16,6 +16,7 @@ import qualified Data.Parameterized.List as L
 import qualified Data.Parameterized.Map as MapF
 
 import qualified Lang.Crucible.Backend as B
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 
@@ -31,6 +32,7 @@ import qualified SemMC.Synthesis.Cegis.LLVMMem as LLVM
 instantiateReadMem :: forall arch t st fs sym tp.
                    ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
                    , A.Architecture arch
+                   , ?memOpts :: LLVM.MemOptions
                    )
                    => sym
                    -> F.Formula sym arch
@@ -51,21 +53,22 @@ instantiateReadMem sym f evalLoc e =
 
 trivialParameterizedFormula :: forall sym arch.
                                A.Architecture arch
-                            => F.Formula sym arch 
+                            => F.Formula sym arch
                             -> F.ParameterizedFormula sym arch '[]
-trivialParameterizedFormula (F.Formula vars defs) = 
+trivialParameterizedFormula (F.Formula vars defs) =
     F.ParameterizedFormula Set.empty L.Nil vars (mapFKeys F.LiteralParameter defs)
 
 mapFKeys :: forall keys keys' res.
             OrdF keys'
-         => (forall (tp :: S.BaseType). keys tp -> keys' tp) 
-         -> MapF.MapF keys res 
+         => (forall (tp :: S.BaseType). keys tp -> keys' tp)
+         -> MapF.MapF keys res
          -> MapF.MapF keys' res
 mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
 
 readMemInterp :: forall arch t st fs sym.
                 ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
                 , A.Architecture arch
+                , ?memOpts :: LLVM.MemOptions
                 )
               => Integer
               -> (String, A.Evaluator arch t st fs)
@@ -76,6 +79,7 @@ readMemInterp n = ( A.createSymbolicName (A.readMemUF @arch n)
 readMemEvaluator :: forall arch sym t st fs sh u tp.
                        ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
                        , A.Architecture arch
+                       , ?memOpts :: LLVM.MemOptions
                        )
                  => sym
                  -> F.ParameterizedFormula sym arch sh
@@ -105,6 +109,7 @@ readMemEvaluatorTotal :: forall arch sym w t st fs.
                        ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
                        , A.Architecture arch
                        , 1 S.<= w
+                       , ?memOpts :: LLVM.MemOptions
                        )
                      => sym
                      -- ^ The expression builder

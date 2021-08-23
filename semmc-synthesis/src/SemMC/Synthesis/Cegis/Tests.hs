@@ -35,6 +35,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Context as Ctx
 
 import qualified Lang.Crucible.Backend as CB
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 
@@ -70,6 +71,7 @@ import qualified SemMC.Synthesis.Cegis.MemAccesses as MA
 simplifyWithTest :: ( A.Architecture arch
                         , sym ~ WE.ExprBuilder t st fs
                         , CB.IsSymInterface sym
+                        , ?memOpts :: LLVM.MemOptions
                         )
                      => F.Formula sym arch
                      -> T.ConcreteTest sym arch
@@ -87,7 +89,7 @@ simplifyWithTest f test = do
 
 -- | Get the @L.MemLoc@ associated with the formula
 formMem :: A.Architecture arch
-        => F.Formula sym arch 
+        => F.Formula sym arch
         -> Maybe (L.MemLoc (L.Location arch))
 formMem f | any (\(Some l) -> L.isMemoryLocation l) (MapF.keys $ F.formParamVars f) = listToMaybe L.memLocation
 formMem _ | otherwise = Nothing
@@ -96,11 +98,12 @@ formMem _ | otherwise = Nothing
 -- | Substitute test input (for non-memory locations) into the target formula,
 -- producing a new formula f' such that the only free variables in f' are Mem
 -- and any uninstantiated immediates to be generated. We then construct a
--- predicate of the form 
+-- predicate of the form
 -- @forall l <> Mem, f'(l) = testOutput(l)@
 simplifyWithTestNonMem :: forall arch t st fs sym.
                         ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
                         , A.Architecture arch
+                        , ?memOpts :: LLVM.MemOptions
                         )
                       => F.Formula sym arch
                       -- ^ the target formula
@@ -122,7 +125,7 @@ simplifyWithTestNonMem trialFormula test = do
 
 
 -- | Build an equality expression for the given non-memory location, under the given
--- concrete test, of the form 
+-- concrete test, of the form
 -- > e[i ↦ testInput(i)] = testOutput(l)]
 -- What this means is all of the machine state variables have
 -- been filled in, and the resulting expression is set equal to the known "real"
@@ -168,7 +171,7 @@ buildEqualityLocation sym test vars outputLoc expr = do
   -- liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
   -- liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
   actuallyShould <- liftIO $ S.isEq sym actuallyIs shouldBe
-  
+
   -- Check that these results don't overlap with memory
   noOverlap <- checkNoOverlap @arch sym actuallyIs shouldBe
   -- liftIO . putStrLn $ "NO OVERLAP CHECK:\t" ++ show noOverlap
@@ -218,6 +221,7 @@ inMemAccesses (i,j) = do
 simplifyWithTestMem :: forall t st fs sym arch.
                         ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
                         , A.Architecture arch
+                        , ?memOpts :: LLVM.MemOptions
                         )
                         => Maybe (L.MemLoc (L.Location arch))
                         -> F.Formula sym arch
@@ -263,6 +267,7 @@ simplifyWithTestMem _ _ _ = error "Memory location for this architecture does no
 addTest ::  ( A.Architecture arch
             , sym ~ WE.ExprBuilder t st fs
             , CB.IsSymInterface sym
+            , ?memOpts :: LLVM.MemOptions
             )
         => F.Formula sym arch
         -> T.ConcreteTest sym arch
@@ -281,7 +286,9 @@ addTest form test = do
 -- with the tests, and conjoins them with the current cashed check @csCheck@.
 addTests :: ( A.Architecture arch
             , sym ~ WE.ExprBuilder t st fs
-            , CB.IsSymInterface sym)
+            , CB.IsSymInterface sym
+            , ?memOpts :: LLVM.MemOptions
+            )
         => F.Formula sym arch -> [T.ConcreteTest sym arch] -> T.Cegis sym arch ()
 addTests form tests = mapM_ (addTest form) tests
 
@@ -301,6 +308,7 @@ stripMemLoc = MapF.filterWithKey (\l _ -> not (L.isMemoryLocation l))
 mkTest :: forall sym arch t st fs.
           (A.Architecture arch, sym ~ WE.ExprBuilder t st fs
           , CB.IsSymInterface sym
+          , ?memOpts :: LLVM.MemOptions
           )
        => sym
        -> F.Formula sym arch

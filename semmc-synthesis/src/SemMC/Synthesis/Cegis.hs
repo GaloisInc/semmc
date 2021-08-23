@@ -29,6 +29,7 @@ import qualified Data.Parameterized.Map as MapF
 
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.Backend as CB
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 import qualified What4.Protocol.Online as WPO
@@ -58,6 +59,7 @@ cegis' :: forall arch t solver fs.
           (A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
           , WPO.OnlineSolver solver
           , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+          , ?memOpts :: LLVM.MemOptions
           )
        => [T.TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
        -- ^ The trial instructions.
@@ -96,7 +98,7 @@ cegis' trial trialFormula = do
                                          (checkBounds @arch sym)
                                          (checkNoDuplicates @arch sym existingTests)
                                          (MA.liveMemConst filledInFormula)
-                                         targetFormula 
+                                         targetFormula
                                          filledInFormula
       case equiv of
         -- FIXME: Is the correct behavior in a timeout to give up on this
@@ -123,6 +125,7 @@ cegis :: forall arch sym t solver fs.
         ( A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
         , WPO.OnlineSolver solver, sym ~ CBO.OnlineBackend t solver fs
         , CB.IsSymInterface sym
+        , ?memOpts :: LLVM.MemOptions
         )
       => CegisParams sym arch
       -- ^ Parameters not specific to the candidate. See 'CegisParams' for
@@ -174,7 +177,9 @@ checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
 -- Produces a check that we do not generate duplicate tests: check that for all
 -- tests, the LocExprs given is not symbolically equal to the test input.
 checkNoDuplicates :: forall arch sym s t fs.
-             (S.IsExprBuilder sym, A.Architecture arch, CB.IsSymInterface sym, sym ~ WE.ExprBuilder s t fs)
+             ( S.IsExprBuilder sym, A.Architecture arch, CB.IsSymInterface sym, sym ~ WE.ExprBuilder s t fs
+             , ?memOpts :: LLVM.MemOptions
+             )
           => sym
           -> [ConcreteTest sym arch]
           -> LocExprs sym (L.Location arch)

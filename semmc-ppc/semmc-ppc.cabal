@@ -158,6 +158,7 @@ executable semmc-ppc-synthdemo
                  , dismantle-tablegen
                  , dismantle-ppc
                  , crucible
+                 , crucible-llvm
                  , base16-bytestring
                  , elf-edit
                  , optparse-applicative
@@ -202,5 +203,6 @@ test-suite semmc-ppc-tests
                  tasty-hunit,
                  parameterized-utils,
                  crucible,
+                 crucible-llvm,
                  what4,
                  text
