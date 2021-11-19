@@ -22,6 +22,7 @@ optional-packages:
   submodules/crucible/crucible
   submodules/what4/what4
   submodules/crucible/crucible-llvm
+  submodules/crucible/crucible-symio
   submodules/llvm-pretty
   submodules/elf-edit/
   submodules/dismantle/dismantle-ppc/
