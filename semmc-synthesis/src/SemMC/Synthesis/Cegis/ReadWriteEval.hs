@@ -128,6 +128,6 @@ readMemEvaluatorTotal sym evalLoc w memExpr i
     startingMem <- evalLoc memLoc
     LLVM.withMem @arch sym startingMem $ do
       LLVM.instantiateMemOps memExpr
-      let ?recordLLVMAnnotation = \_ _ -> pure ()
+      let ?recordLLVMAnnotation = \_ _ _ -> pure ()
       LLVM.readMem w i
   | otherwise = error "Could not find memory location for this architecture"

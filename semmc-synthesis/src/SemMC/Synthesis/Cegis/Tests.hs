@@ -240,7 +240,7 @@ simplifyWithTestMem (Just (L.MemLoc w_mem mem)) f test
     F.Formula _ defs' <- liftIO $ CE.evalFormula' sym f $ CE.mkEvalLoc @arch sym (T.testInput test)
 
     -- 2) Prepare the memory to model the input part of the test
-    let ?recordLLVMAnnotation = \_ _ -> pure ()
+    let ?recordLLVMAnnotation = \_ _ _ -> pure ()
     LLVM.doWrites (T.memInput test)
 
     -- 3) Perform the operations specified by the formula
