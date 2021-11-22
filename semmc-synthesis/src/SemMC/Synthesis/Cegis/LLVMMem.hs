@@ -79,7 +79,8 @@ putImpl m = MemM $ do
 -- of size 2^w where w is the width of registers in the architecture. All values
 -- in memory are initialized to the values of an uninterpreted symbolic array.
 withMem :: forall arch sym a.
-           (A.Architecture arch, B.IsSymInterface sym)
+           ( A.Architecture arch, B.IsSymInterface sym
+           , ?memOpts :: LLVM.MemOptions )
         => sym
         -> S.SymExpr sym (A.MemType arch)
         -> (LLVM.HasPtrWidth (A.RegWidth arch) => MemM sym arch a)
