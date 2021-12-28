@@ -170,12 +170,12 @@ instantiateFormula :: forall arch t st fs sh.
                    -> ParameterizedFormula (SB t st fs) arch sh
                    -> SL.List (A.Operand arch) sh
                    -> IO (SL.List (A.TaggedExpr arch (SB t st fs)) sh, Formula (SB t st fs) arch)
-instantiateFormula sym pf opVals 
-    = instantiateFormula' sym pf opVals (A.locationFuncInterpretation (Proxy @ arch))
+instantiateFormula sym pf opVals
+    = instantiateFormula' sym pf opVals (A.locationFuncInterpretation (Proxy @arch))
 
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
--- operand that are used within the returned formula. 
+-- operand that are used within the returned formula.
 instantiateFormula' :: forall arch t st fs sh.
                       ( A.Architecture arch
                       , S.IsSymExprBuilder (SB t st fs))
@@ -192,7 +192,7 @@ instantiateFormula'
                            , pfLiteralVars = litVars
                            , pfDefs = defs
                            })
-  opVals 
+  opVals
   functions = do
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)

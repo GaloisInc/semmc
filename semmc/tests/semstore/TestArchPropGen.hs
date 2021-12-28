@@ -20,6 +20,7 @@ import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.BitVector.Sized as BVS
 import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
+import           Data.Kind ( Type )
 import qualified Data.List as L
 import qualified Data.Map as Map
 import           Data.Maybe ( catMaybes )
@@ -647,7 +648,7 @@ bv32defexpr next sym p params opvars litvars =
 -- ParameterizedFormula 'sh'
 
 
-class Monad m => MkOperands m sym (f :: k -> *) (ctx :: k) where
+class Monad m => MkOperands m sym (f :: k -> Type) (ctx :: k) where
   mkOperand :: sym -> m (f ctx)
 
 instance Monad m => MkOperands m sym (PL.List (OperandPair sym)) '[] where

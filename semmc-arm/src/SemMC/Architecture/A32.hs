@@ -900,7 +900,7 @@ concreteTemplatedOperand op loc x =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
           ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
-          return (ao, T.RecoverOperandFn $ const (return (op x)))
+          return (ao, T.RecoverOperandFn $ \_ -> return (op x))
 
 symbolicTemplatedOperand :: forall arch s (bits :: Nat)
                           . (A.OperandType arch s ~ BaseBVType bits,
@@ -917,9 +917,11 @@ symbolicTemplatedOperand Proxy _signed name constr =
                      , T.templOpFn = mkTemplate'
                      }
   where mkTemplate' :: T.TemplatedOperandFn arch s
-        mkTemplate' sym _ = do
+        mkTemplate' (sym :: sym) _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          let recover evalFn = constr <$> BVS.asUnsigned <$> evalFn v
+          let recover :: (forall tp. S.SymExpr sym tp -> IO (WEB.GroundValue tp))
+                      -> IO (A.Operand arch s)
+              recover evalFn = constr <$> BVS.asUnsigned <$> evalFn v
           return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 ----------------------------------------------------------------------

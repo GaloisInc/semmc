@@ -173,7 +173,7 @@ concreteTemplatedOperand op loc x =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
           ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
-          return (ao, T.RecoverOperandFn $ const (return (op x)))
+          return (ao, T.RecoverOperandFn $ \_ -> return (op x))
 
 symbolicTemplatedOperand :: forall arch s (bits :: Nat)
                           . (A.OperandType arch s ~ BaseBVType bits,
@@ -190,9 +190,11 @@ symbolicTemplatedOperand Proxy _signed name constr =
                      , T.templOpFn = mkTemplate'
                      }
   where mkTemplate' :: T.TemplatedOperandFn arch s
-        mkTemplate' sym _ = do
+        mkTemplate' (sym :: sym) _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          let recover evalFn = constr <$> BV.asUnsigned <$> evalFn v
+          let recover :: (forall tp. S.SymExpr sym tp -> IO (S.GroundValue tp))
+                      -> IO (A.Operand arch s)
+              recover evalFn = constr <$> BV.asUnsigned <$> evalFn v
           return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 isR0 :: forall t st fs sh u tp arch sym
@@ -304,7 +306,7 @@ fromMaybeGPRLoc Nothing    = LocGPR (PPC.GPR 0)
 fromMaybeGPRBase :: forall arch sym.
                     ( A.Architecture arch
                     , S.IsExprBuilder sym )
-                 => sym 
+                 => sym
                  -> Maybe PPC.GPR
                  -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                  -> IO (S.SymBV sym (A.RegWidth arch))

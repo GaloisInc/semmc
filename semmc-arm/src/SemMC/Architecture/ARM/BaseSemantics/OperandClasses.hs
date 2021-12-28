@@ -9,6 +9,7 @@
 module SemMC.Architecture.ARM.BaseSemantics.OperandClasses
     where
 
+import           Data.Kind ( Type )
 import qualified Data.Type.List as TL
 import           GHC.TypeLits ( Symbol )
 import           SemMC.DSL
@@ -137,7 +138,7 @@ unpredictableInstrBits = "Unpredictable"
 -- known as the "saturation requirement" on type families:
 --
 -- https://stackoverflow.com/questions/40758738/why-doesnt-this-code-infringe-the-saturation-requirement-of-type-families
-data SymToExprTagWrapper :: TL.TyFun k1 k2 -> *
+data SymToExprTagWrapper :: TL.TyFun k1 k2 -> Type
 type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
 type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPR" = 'TBV
