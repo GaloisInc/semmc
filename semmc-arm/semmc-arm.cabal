@@ -47,7 +47,7 @@ library
                      , SemMC.Architecture.ARM.UF
                      , SemMC.Architecture.ARM.UFgen
   -- other-extensions:
-  build-depends:       base >=4 && <5
+  build-depends:       base >=4.9 && <5
                      , mtl
                      , binary
                      , bytestring

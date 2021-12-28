@@ -12,6 +12,7 @@ module SemMC.Architecture.PPC.Location (
 --  parseLocation
   ) where
 
+import           Data.Kind ( Type )
 import qualified Data.Parameterized.Ctx as Ctx
 import           Data.Parameterized.Classes
 import           Data.Parameterized.NatRepr
@@ -26,7 +27,7 @@ import qualified SemMC.Architecture as A
 class ArchRepr arch where
   regWidthRepr :: proxy arch -> NatRepr (A.RegWidth arch)
 
-data Location ppc :: BaseType -> * where
+data Location ppc :: BaseType -> Type where
   -- NOTE: If you add new constructors here, you also need to update:
   --   * the PPC state serializer / deserializer functions
   --   * the remote-runner.c program's PPC32 state struct definition

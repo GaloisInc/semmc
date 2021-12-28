@@ -25,6 +25,7 @@ module SemMC.Architecture.ARM.Combined where
 import           Data.Data
 import           Data.EnumF ( congruentF, EnumF, enumF, enumCompareF )
 import qualified Data.Foldable as F
+import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.Lift
@@ -36,12 +37,12 @@ import qualified Dismantle.Thumb as ThumbDis
 import           GHC.TypeLits
 
 
-data ARMOperand :: Symbol -> * where
+data ARMOperand :: Symbol -> Type where
     A32Operand :: ARMDis.Operand tp -> ARMOperand tp
     T32Operand :: ThumbDis.Operand tp -> ARMOperand tp
                   deriving (Typeable)
 
-data ARMOpcode :: (Symbol -> *) -> [Symbol] -> * where
+data ARMOpcode :: (Symbol -> Type) -> [Symbol] -> Type where
     A32Opcode :: (ARMDis.Opcode ARMDis.Operand sh)   -> ARMOpcode ARMOperand sh
     T32Opcode :: (ThumbDis.Opcode ThumbDis.Operand sh) -> ARMOpcode ARMOperand sh
                  deriving (Typeable)

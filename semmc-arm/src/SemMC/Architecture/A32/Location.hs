@@ -10,6 +10,7 @@ module SemMC.Architecture.A32.Location
     )
     where
 
+import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.TH.GADT
@@ -28,7 +29,7 @@ import           Prelude
 -- their values do not have to be synchronously maintained, but since
 -- R15 is sometimes not the PC value, it is separately managed.
 
-data Location arm :: BaseType -> * where
+data Location arm :: BaseType -> Type where
   LocGPR :: GPRIdent -> Location arm (BaseBVType 32)
   LocGPRMask :: GPRIdent -> Location arm (BaseBVType 32)
   LocFPR :: GPRIdent -> Location arm (BaseBVType 32)

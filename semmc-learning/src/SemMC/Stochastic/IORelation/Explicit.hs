@@ -143,7 +143,6 @@ collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
           case input /= output of
             True -> return (S.insert (Some idx) s)
             False -> return s
-      | otherwise = L.error ("Missing location in architecture state: " ++ P.showF opView)
 
 -- | Given an initial test state, generate all interesting variants on it.  The
 -- idea is to see which outputs change when we tweak an input.

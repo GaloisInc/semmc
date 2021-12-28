@@ -11,6 +11,7 @@ module SemMC.Architecture.ARM.Location
     )
     where
 
+import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
@@ -35,7 +36,7 @@ class ArchRepr arch where
 -- their values do not have to be synchronously maintained, but since
 -- R15 is sometimes not the PC value, it is separately managed.
 
-data Location arm :: BaseType -> * where
+data Location arm :: BaseType -> Type where
   LocGPR :: GPRIdent -> Location arm (BaseBVType (A.RegWidth arm))
   LocPC :: Location arm (BaseBVType (A.RegWidth arm))
   LocCPSR :: Location arm (BaseBVType (A.RegWidth arm))

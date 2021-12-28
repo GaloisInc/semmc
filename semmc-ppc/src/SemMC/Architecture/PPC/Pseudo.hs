@@ -14,6 +14,7 @@ module SemMC.Architecture.PPC.Pseudo (
 
 import           GHC.TypeLits ( Symbol )
 
+import           Data.Kind ( Type )
 import qualified Data.Word.Indexed as W
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
@@ -27,7 +28,7 @@ import           Dismantle.PPC.Random ()
 
 import qualified SemMC.Architecture as A
 
-data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
+data PseudoOpcode :: (Symbol -> Type) -> [Symbol] -> Type where
   -- | @ReplaceByteGPR rA, n, rB@ replaces the @n@th byte of @rA@ with the low
   -- byte of @rB@.
   ReplaceByteGPR :: PseudoOpcode PPC.Operand '["Gprc", "U2imm", "Gprc"]

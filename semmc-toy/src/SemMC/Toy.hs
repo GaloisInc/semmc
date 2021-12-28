@@ -33,6 +33,7 @@ import           Control.Monad
 import           Data.Bits ( complement )
 import           Data.EnumF ( congruentF, EnumF, enumF, enumCompareF )
 import           Data.Int ( Int32 )
+import           Data.Kind ( Type )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
@@ -56,6 +57,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Arbitrary as D
 
 import           What4.BaseTypes
+import qualified What4.Expr as S
 import qualified What4.Interface as S
 import           What4.Expr.GroundEval
 
@@ -85,7 +87,7 @@ data Reg = Reg1 | Reg2 | Reg3
 -- | An operand, indexed so that we can compute the type of its
 -- values, and describe the shape of instructions that can take it as
 -- an argument.
-data Operand :: Symbol -> * where
+data Operand :: Symbol -> Type where
   -- | A 32-bit register. A 16-bit register would look like
   --
   -- > RL16 :: Reg -> Operand "R16"
@@ -131,7 +133,7 @@ instance OrdF Operand where
 -- be indexed in this way.
 --
 -- Q: So, why is 'D.GenericInstruction' expect an indexed first arg?
-data Opcode (o :: Symbol -> *) (sh :: [Symbol]) where
+data Opcode (o :: Symbol -> Type) (sh :: [Symbol]) where
   AddRr :: Opcode Operand '["R32", "R32"]
   SubRr :: Opcode Operand '["R32", "R32"]
   NegR  :: Opcode Operand '["R32"]
@@ -230,7 +232,7 @@ initialMachineState = MapF.fromList
   | r <- [Reg1, Reg2, Reg3] ]
 
 -- | The value type of a symbol, e.g. @"R32"@ registers are 32 bits.
-type family Value (s :: Symbol) :: *
+type family Value (s :: Symbol) :: Type
 type instance Value "R32" = Word32
 type instance Value "I32" = Word32
 
@@ -298,14 +300,16 @@ instance TemplatableOperand Toy where
                           mkTemplate' _ locLookup = do
                             let loc = RegLoc reg
                             expr <- locLookup loc
-                            return (A.LocationOperand loc expr, RecoverOperandFn $ const (return (R32 reg)))
+                            return (A.LocationOperand loc expr, RecoverOperandFn $ \_ -> return (R32 reg))
       "I32"
         | Just Refl <- testEquality sr (SR.knownSymbol @"I32") ->
             [TemplatedOperand Nothing Set.empty mkConst]
               where mkConst :: TemplatedOperandFn Toy "I32"
-                    mkConst sym _ = do
+                    mkConst (sym :: sym) _ = do
                       v <- S.freshConstant sym (makeSymbol "I32") knownRepr
-                      let recover evalFn = I32 . fromInteger . BV.asUnsigned <$> evalFn v
+                      let recover :: (forall tp. S.SymExpr sym tp -> IO (S.GroundValue tp))
+                                  -> IO (A.Operand Toy "I32")
+                          recover evalFn = I32 . fromInteger . BV.asUnsigned <$> evalFn v
                       return (A.ValueOperand v, RecoverOperandFn recover)
       r -> error $ "opTemplates: unexpected symbolRepr: "++show r
 
@@ -371,7 +375,7 @@ instance A.Architecture Toy where
 -- ** Locations
 
 -- A location for storing data, i.e. register or memory.
-data Location :: BaseType -> * where
+data Location :: BaseType -> Type where
   RegLoc :: Reg -> Location (BaseBVType 32)
   -- MemLoc :: Mem -> Location (BaseBVType 32)
 deriving instance Show (Location tp)
@@ -517,7 +521,7 @@ instance D.ArbitraryOperands Opcode Operand where
 ----------------------------------------------------------------
 -- * Pseudo Ops
 
-data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
+data PseudoOpcode :: (Symbol -> Type) -> [Symbol] -> Type where
   -- | The @MovRr dst src@ copies the value of @src@ into @dst@.
   MovRr :: PseudoOpcode Operand '["R32", "R32"]
 

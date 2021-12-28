@@ -34,8 +34,52 @@ import qualified SemMC.Architecture as SA
 import qualified SemMC.Architecture.Location as L
 import           What4.BaseTypes
 
+----------------------------------------------------------------------
+-- Data types
 
 data TestGenArch  -- ^ the architecture type for testing
+
+data TestLocation :: BaseType -> Type where
+  TestIntLoc :: Integer -> TestLocation BaseIntegerType
+  TestBoxLoc :: Natural -> TestLocation (BaseBVType 32)
+  TestBarLoc :: TestLocation (BaseBVType 32)
+  -- TBD: more basetype locations
+  -- TBD: some memory locations
+  -- MemLoc :: Mem -> Location (BaseBVType 32)
+
+data TestGenOperand (nm::Symbol) where
+  FooArg :: TestGenOperand "Foo"
+  BarArg :: TestGenOperand "Bar"
+  BoxArg :: Natural -> TestGenOperand "Box"
+
+data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) where
+  OpWave :: TestGenOpcode TestGenOperand '["Bar"]
+  OpSurf :: TestGenOpcode TestGenOperand '["Foo"]
+  OpPack :: TestGenOpcode TestGenOperand '["Box", "Bar", "Box", "Box"]
+  OpSolo :: TestGenOpcode TestGenOperand '[]
+
+----------------------------------------------------------------------
+-- TH-generated TestEquality and OrdF instances
+
+$(return [])
+
+instance TestEquality TestGenOperand where
+  testEquality = $(TH.structuralTypeEquality [t| TestGenOperand |] [])
+
+instance OrdF TestGenOperand where
+  compareF = $(TH.structuralTypeOrd [t| TestGenOperand |] [])
+
+instance TestEquality (TestGenOpcode operand_constr) where
+  testEquality = $(TH.structuralTypeEquality [t| TestGenOpcode |] [])
+
+instance TestEquality TestLocation where
+  testEquality = $(TH.structuralTypeEquality [t| TestLocation |] [])
+
+instance OrdF TestLocation where
+  compareF = $(TH.structuralTypeOrd [t| TestLocation |] [])
+
+----------------------------------------------------------------------
+-- TestGenArch
 
 type instance SA.RegWidth TestGenArch = 32
 
@@ -81,14 +125,6 @@ instance SA.Architecture TestGenArch where
 
 ----------------------------------------------------------------------
 -- Location
-
-data TestLocation :: BaseType -> Type where
-  TestIntLoc :: Integer -> TestLocation BaseIntegerType
-  TestBoxLoc :: Natural -> TestLocation (BaseBVType 32)
-  TestBarLoc :: TestLocation (BaseBVType 32)
-  -- TBD: more basetype locations
-  -- TBD: some memory locations
-  -- MemLoc :: Mem -> Location (BaseBVType 32)
 
 -- Specifies the serialized S-expression form of these locations.
 -- These must be valid S-expression symbols: alphanumeric and
@@ -139,23 +175,12 @@ type instance SA.OperandType TestGenArch "Foo" = BaseIntegerType  -- unsupported
 type instance SA.OperandType TestGenArch "Bar" = BaseBVType 32
 type instance SA.OperandType TestGenArch "Box" = BaseBVType 32
 
-data TestGenOperand (nm::Symbol) where
-  FooArg :: TestGenOperand "Foo"
-  BarArg :: TestGenOperand "Bar"
-  BoxArg :: Natural -> TestGenOperand "Box"
-
 deriving instance Show (TestGenOperand nm)
 instance ShowF TestGenOperand
   where
     -- once it's clear where this is needed, a more descriptive form
     -- can be provided.
     showF _ = "<<OPERAND>>"
-
-data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) where
-  OpWave :: TestGenOpcode TestGenOperand '["Bar"]
-  OpSurf :: TestGenOpcode TestGenOperand '["Foo"]
-  OpPack :: TestGenOpcode TestGenOperand '["Box", "Bar", "Box", "Box"]
-  OpSolo :: TestGenOpcode TestGenOperand '[]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
 deriving instance Eq   (TestGenOpcode operand_constr operands)
@@ -192,23 +217,3 @@ instance EnumF (TestGenOpcode TestGenOperand) where
 
 instance OrdF (TestGenOpcode TestGenOperand) where
   compareF = enumCompareF
-
-----------------------------------------------------------------------
--- TestEquality and OrdF instances
-
-$(return [])
-
-instance TestEquality TestGenOperand where
-  testEquality = $(TH.structuralTypeEquality [t| TestGenOperand |] [])
-
-instance OrdF TestGenOperand where
-  compareF = $(TH.structuralTypeOrd [t| TestGenOperand |] [])
-
-instance TestEquality (TestGenOpcode operand_constr) where
-  testEquality = $(TH.structuralTypeEquality [t| TestGenOpcode |] [])
-
-instance TestEquality TestLocation where
-  testEquality = $(TH.structuralTypeEquality [t| TestLocation |] [])
-
-instance OrdF TestLocation where
-  compareF = $(TH.structuralTypeOrd [t| TestLocation |] [])
