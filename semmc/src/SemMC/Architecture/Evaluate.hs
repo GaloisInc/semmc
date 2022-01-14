@@ -20,7 +20,6 @@ import qualified Data.Word.Indexed as W
 import qualified Dismantle.Instruction as I
 
 import qualified What4.BaseTypes as BT
-import qualified Lang.Crucible.Backend as SB
 import qualified What4.Interface as SI
 import qualified What4.Expr.Builder as S
 
@@ -34,7 +33,7 @@ import qualified SemMC.Formula as F
 -- final state.
 evaluateInstruction :: (A.Architecture arch
                        , MapF.OrdF (A.Opcode arch (A.Operand arch))
-                       , SB.IsBoolSolver (S.ExprBuilder t st fs))
+                       )
                     => S.ExprBuilder t st fs
                     -- ^ The symbolic backend
                     -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (S.ExprBuilder t st fs) arch)

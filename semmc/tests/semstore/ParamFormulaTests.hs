@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -10,7 +11,7 @@ module ParamFormulaTests where
 
 import           Control.Monad ( join, void )
 import qualified Control.Monad.Catch as E
-import           Control.Monad.IO.Class ( liftIO )
+import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Data.Maybe
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.HasRepr as HR
@@ -23,7 +24,6 @@ import           Hedgehog
 import           Hedgehog.Internal.Property ( forAllT )
 import           HedgehogUtil ( )
 import qualified Lang.Crucible.Backend.Online as CBO
-import           Lang.Crucible.Backend.Simple ( newSimpleBackend, FloatModeRepr(..) )
 import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param, ite, uf
                            , bvadd, bvmul, bvshl, bvnot
                            , runSem, printDefinition
@@ -44,6 +44,8 @@ import           What4.Config
 import qualified What4.Interface as WI -- ( getConfiguration )
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Serialize.Parser as W4P
+import           What4.Expr (ExprBuilder, FloatModeRepr(..), newExprBuilder, Flags, FloatReal)
+import           What4.Protocol.Online (OnlineSolver)
 
 
 import           Prelude
@@ -56,28 +58,44 @@ parameterizedFormulaTests = [
     <> testRoundTripPrintParse
   ]
 
+data SemMCTestData t = SemMCTestData
+
+withYices ::
+  (MonadIO m, E.MonadMask m) =>
+  NonceGenerator IO t ->
+  (forall solver st fs. OnlineSolver solver =>
+    ExprBuilder t st fs -> CBO.OnlineBackend solver t st fs -> m a) ->
+  m a
+withYices gen k =
+  do sym <- liftIO $ newExprBuilder FloatRealRepr SemMCTestData gen
+     CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures WPF.noFeatures (k sym)
+
+newTestSym ::
+  NonceGenerator IO t ->
+  IO (ExprBuilder t SemMCTestData (Flags FloatReal))
+newTestSym r = newExprBuilder FloatRealRepr SemMCTestData r
 
 testBasicParameters :: [TestTree]
 testBasicParameters =
     [ testProperty "parameter type" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "parameter type multiple" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpPack)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "literal vars" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     _ <- forAllT (genParameterizedFormula sym OpSurf)
                     success -- TBD: something (manything?) to test literal vars here
       -- TBD: needs other tests
     , testProperty "defs keys in uses" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
     ]
@@ -98,7 +116,7 @@ testRoundTripPrintParse =
     testProperty "ser/des round trip, simple backend, OpPack" $
       withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     let opcode = OpPack
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugOut "TEST: ser/des round trip, simple backend, OpPack"
@@ -120,7 +138,7 @@ testRoundTripPrintParse =
     , testProperty "ser/des round trip, simple backend, OpWave" $
       withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     let opcode = OpWave
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugOut "TEST: ser/des round trip, simple backend, OpWave"
@@ -142,7 +160,7 @@ testRoundTripPrintParse =
     , testProperty "ser/des round trip, simple backend, OpSolo" $
       withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
+                    sym <- liftIO $ newTestSym r
                     let opcode = OpSolo
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugOut "TEST: ser/des round trip, simple backend, OpSolo"
@@ -165,7 +183,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+        withYices r $ \sym bak -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -173,7 +191,7 @@ testRoundTripPrintParse =
           let opcode = OpWave
           (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
-          compareParameterizedFormulasSymbolically sym operands 1 p p
+          compareParameterizedFormulasSymbolically bak operands 1 p p
           -- now print the formula to a text string
           debugOut "TEST: ser/des round trip, online backend, OpWave"
           debugOut $ "trace: " <> show trace
@@ -191,13 +209,13 @@ testRoundTripPrintParse =
           debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
-          compareParameterizedFormulasSymbolically sym operands 1 p f
+          compareParameterizedFormulasSymbolically bak operands 1 p f
 
     , testProperty "ser/des round trip, online backend, OpPack" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+        withYices r $ \sym bak -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -205,7 +223,7 @@ testRoundTripPrintParse =
           let opcode = OpPack
           (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
-          compareParameterizedFormulasSymbolically sym operands 1 p p
+          compareParameterizedFormulasSymbolically bak operands 1 p p
           -- now print the formula to a text string
           debugOut "TEST: ser/des round trip, online backend, OpPack"
           debugOut $ "trace: " <> show trace
@@ -223,13 +241,13 @@ testRoundTripPrintParse =
           debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
-          compareParameterizedFormulasSymbolically sym operands 1 p f
+          compareParameterizedFormulasSymbolically bak operands 1 p f
 
     , testProperty "ser/des round trip, online backend, OpSolo" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+        withYices r $ \sym bak -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -238,7 +256,7 @@ testRoundTripPrintParse =
           (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- ensure that formula compares as equivalent to itself
-          compareParameterizedFormulasSymbolically sym operands 1 p p
+          compareParameterizedFormulasSymbolically bak operands 1 p p
           -- now print the formula to a text string
           debugOut "TEST: ser/des round trip, online backend, OpSolo"
           debugOut $ "trace: " <> show trace
@@ -256,13 +274,13 @@ testRoundTripPrintParse =
           debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
-          compareParameterizedFormulasSymbolically sym operands 1 p f
+          compareParameterizedFormulasSymbolically bak operands 1 p f
 
     , testProperty "ser/des double round trip, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+        withYices r $ \sym bak -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -290,16 +308,16 @@ testRoundTripPrintParse =
           f' <- evalEither reForm'
 
           -- verification of results
-          compareParameterizedFormulasSymbolically sym operands 1 p f
-          compareParameterizedFormulasSymbolically sym operands 1 f f'
+          compareParameterizedFormulasSymbolically bak operands 1 p f
+          compareParameterizedFormulasSymbolically bak operands 1 f f'
           -- KWQ: is variable renaming OK as long as the renaming is consistent and non-overlapping?
-          compareParameterizedFormulasSymbolically sym operands 2 p f'
+          compareParameterizedFormulasSymbolically bak operands 2 p f'
 
     , testProperty "ser/des double round trip, OpPack" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+        withYices r $ \sym bak -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -327,15 +345,15 @@ testRoundTripPrintParse =
           f' <- evalEither reForm'
 
           -- verification of results
-          compareParameterizedFormulasSymbolically sym operands 1 p f
-          compareParameterizedFormulasSymbolically sym operands 1 f f'
-          compareParameterizedFormulasSymbolically sym operands 2 p f'
+          compareParameterizedFormulasSymbolically bak operands 1 p f
+          compareParameterizedFormulasSymbolically bak operands 1 f f'
+          compareParameterizedFormulasSymbolically bak operands 2 p f'
 
     , testProperty "ser/des double round trip, OpSolo" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+        withYices r $ \sym bak -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -363,9 +381,9 @@ testRoundTripPrintParse =
           f' <- evalEither reForm'
 
           -- verification of results
-          compareParameterizedFormulasSymbolically sym operands 1 p f
-          compareParameterizedFormulasSymbolically sym operands 1 f f'
-          compareParameterizedFormulasSymbolically sym operands 2 p f'
+          compareParameterizedFormulasSymbolically bak operands 1 p f
+          compareParameterizedFormulasSymbolically bak operands 1 f f'
+          compareParameterizedFormulasSymbolically bak operands 2 p f'
 
     , testGroup "DSL specified"
       [
@@ -391,7 +409,7 @@ testRoundTripPrintParse =
                         ])
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
-          sym <- liftIO $ newSimpleBackend FloatRealRepr r
+          sym <- liftIO $ newTestSym r
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
@@ -445,7 +463,7 @@ testRoundTripPrintParse =
           actual @?= expected
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
-          sym <- liftIO $ newSimpleBackend FloatRealRepr r
+          sym <- liftIO $ newTestSym r
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
@@ -535,7 +553,7 @@ testRoundTripPrintParse =
           actual @?= expected
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
-          sym <- liftIO $ newSimpleBackend FloatRealRepr r
+          sym <- liftIO $ newTestSym r
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
