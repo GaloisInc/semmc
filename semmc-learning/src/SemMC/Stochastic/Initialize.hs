@@ -23,6 +23,8 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
 
+import qualified What4.Expr.Builder as W4
+
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
@@ -32,6 +34,7 @@ import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Arbitrary as DA
 
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Protocol.Online as WPO
 import qualified What4.ProblemFeatures as WPF
@@ -47,7 +50,7 @@ import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Constraints ( SynC )
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.Statistics as S
-import           SemMC.Symbolic ( Sym )
+import           SemMC.Symbolic
 import qualified SemMC.Worklist as WL
 
 data Config arch =
@@ -82,10 +85,10 @@ data Config arch =
          }
 
 -- | Synthesis environment.
-data SynEnv t solver fs arch =
-  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
+data SynEnv solver t fs arch =
+  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t fs) arch))
          -- ^ All of the known formulas (base set + learned set) for real opcodes
-         , sePseudoFormulas :: MapF.MapF ((AP.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch)
+         , sePseudoFormulas :: MapF.MapF ((AP.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t fs) arch)
          -- ^ Formulas for all pseudo opcodes
          , seKnownCongruentOps :: STM.TVar (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (AP.SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
@@ -98,7 +101,7 @@ data SynEnv t solver fs arch =
          -- classification.
          , seIORelations :: MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
          -- ^ Descriptions of implicit and explicit operands for each opcode
-         , seSymBackend :: STM.TMVar (Sym t solver fs)
+         , seSymBackend :: STM.TMVar (Backend solver t fs)
          -- ^ The solver backend from Crucible.  This is behind a TMVar because
          -- it isn't thread safe - we have to serialize access.  We can't
          -- allocate one per thread, otherwise we won't be able to compare
@@ -111,7 +114,7 @@ data SynEnv t solver fs arch =
 -- continuation.
 --
 -- This is a "with" function, vs just returning the the constructed
--- 'SynEnv', because of the existential @t@ param in @Sym t solver fs@.
+-- 'SynEnv', because of the existential @t@ param in @Sym t fs@.
 withInitialState :: forall arch a
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
@@ -128,19 +131,20 @@ withInitialState :: forall arch a
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
-                 -> (forall t solver fs . (WPO.OnlineSolver solver) => SynEnv t solver fs arch -> IO a)
+                 -> (forall t solver fs . (WPO.OnlineSolver solver) => SynEnv solver t fs arch -> IO a)
                  -- ^ Computation to pass run with access to the 'SynEnv'
                  -> IO a
 withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
   Some ng <- N.newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+  sym <- W4.newExprBuilder W4.FloatRealRepr SemMCW4State ng
+  CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures WPF.noFeatures $ \bak -> do
 
     rng <- DA.createGen
     let genTest = AC.randomState (Proxy @arch) rng
 
     let interestingTests = AC.heuristicallyInterestingStates (Proxy @arch)
 
-    synEnv <- loadInitialStateExplicit cfg sym genTest interestingTests
+    synEnv <- loadInitialStateExplicit cfg bak genTest interestingTests
       allOpcodes pseudoOpcodes targetOpcodes iorels
     k synEnv
 
@@ -160,7 +164,7 @@ loadInitialStateExplicit :: forall arch t solver fs
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
                     HR.HasRepr (AP.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
                  => Config arch
-                 -> Sym t solver fs
+                 -> Backend solver t fs
                  -> IO (V.ConcreteState arch)
                  -- ^ A generator of random test cases
                  -> [V.ConcreteState arch]
@@ -176,8 +180,9 @@ loadInitialStateExplicit :: forall arch t solver fs
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
-                 -> IO (SynEnv t solver fs arch)
-loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
+                 -> IO (SynEnv solver t fs arch)
+loadInitialStateExplicit cfg bak genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
+  let sym = CB.backendGetSym bak
   env <- F.formulaEnv (Proxy @arch) sym
   let load dir = F.loadFormulasFromFiles sym env F.emptyLibrary (mkFormulaFilename dir) allOpcodes
   baseSet <- load (baseSetDir cfg)
@@ -196,14 +201,14 @@ loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcod
   wlref <- STM.newTVarIO worklist
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
-  symVar <- STM.newTMVarIO sym
+  bakVar <- STM.newTMVarIO bak
   return SynEnv { seFormulas = fref
                 , sePseudoFormulas = pseudoSet
                 , seKnownCongruentOps = congruentRef
                 , seTestCases = testref
                 , seWorklist = wlref
                 , seIORelations = iorels
-                , seSymBackend = symVar
+                , seSymBackend = bakVar
                 , seConfig = cfg
                 }
 
@@ -229,7 +234,7 @@ mkFormulaFilename dir oc =
 -- have a formula (and that we actually want to learn)
 makeWorklist :: (MapF.OrdF (A.Opcode arch (A.Operand arch)))
              => [Some ((A.Opcode arch) (A.Operand arch))]
-             -> MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch)
+             -> MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t fs) arch)
              -> WL.Worklist (Some (A.Opcode arch (A.Operand arch)))
 makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
   where

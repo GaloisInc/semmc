@@ -69,8 +69,8 @@ caller controls the number and placement of threads.
 -- shared work list.
 stratifiedSynthesis :: forall arch t solver fs
                      . (SynC arch, L.HasCallStack, L.HasLogCfg, WPO.OnlineSolver solver)
-                    => SynEnv t solver fs arch
-                    -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
+                    => SynEnv solver t fs arch
+                    -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t fs) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $
     (L.namedIO "strata" $ runSynInNewLocalEnv env0 go)
@@ -86,7 +86,7 @@ stratifiedSynthesis env0 = do
 -- yet. This "timing out" is handled by the orchestration code (not in
 -- this module) that calls 'stratifiedSynthesis' itself.
 processWorklist :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
-                => Syn t solver fs arch ()
+                => Syn solver t fs arch ()
 processWorklist = do
   mwork <- takeWork
   case mwork of
@@ -99,7 +99,7 @@ processWorklist = do
 -- | Process a single opcode, requeueing it on the work list if
 -- synthesis times out.
 processOpcode :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
-              => A.Opcode arch (A.Operand arch) sh -> Syn t solver fs arch ()
+              => A.Opcode arch (A.Operand arch) sh -> Syn solver t fs arch ()
 processOpcode op = do
   rinstr <- instantiateInstruction op
   let instr = AC.riInstruction rinstr
@@ -135,15 +135,15 @@ processOpcode op = do
 strataOne :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
           => A.Opcode arch (A.Operand arch) sh
           -> AC.RegisterizedInstruction arch
-          -> Syn t solver fs arch (Maybe (F.ParameterizedFormula (Sym t solver fs) arch sh ))
+          -> Syn solver t fs arch (Maybe (F.ParameterizedFormula (Sym t fs) arch sh ))
 strataOne op rinstr = strataOneLoop op rinstr (C.emptyEquivalenceClasses)
 
 -- | Main loop of stratified synthesis for a single instruction.
 strataOneLoop :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
               => A.Opcode arch (A.Operand arch) sh
               -> AC.RegisterizedInstruction arch
-              -> C.EquivalenceClasses (CP.CandidateProgram t solver fs arch)
-              -> Syn t solver fs arch (Maybe (F.ParameterizedFormula (Sym t solver fs) arch sh))
+              -> C.EquivalenceClasses (CP.CandidateProgram t fs arch)
+              -> Syn solver t fs arch (Maybe (F.ParameterizedFormula (Sym t fs) arch sh))
 strataOneLoop op rinstr eqclasses = do
   let instr = AC.riInstruction rinstr
   cfg <- askConfig
@@ -188,11 +188,11 @@ strataOneLoop op rinstr eqclasses = do
 -- | Choose the best candidate and return its formula.
 --
 -- Returns 'Nothing' if there are no candidates in the eqclasses.
-finishStrataOne :: (SynC arch, L.HasCallStack)
+finishStrataOne :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
                 => A.Opcode arch (A.Operand arch) sh
                 -> AC.RegisterizedInstruction arch
-                -> C.EquivalenceClasses (CP.CandidateProgram t solver fs arch)
-                -> Syn t solver fs arch (Maybe (F.ParameterizedFormula (Sym t solver fs) arch sh))
+                -> C.EquivalenceClasses (CP.CandidateProgram t fs arch)
+                -> Syn solver t fs arch (Maybe (F.ParameterizedFormula (Sym t fs) arch sh))
 finishStrataOne op instr eqclasses = do
   L.logM L.Info ("Equivalence classes: " ++ show eqclasses)
   mBestClass <- C.chooseClass eqclasses
@@ -205,11 +205,11 @@ finishStrataOne op instr eqclasses = do
 -- | Construct a formula for the given instruction based on the selected representative program.
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
-buildFormula :: (SynC arch)
+buildFormula :: (SynC arch, WPO.OnlineSolver solver)
              => A.Opcode arch (A.Operand arch) sh
              -> AC.RegisterizedInstruction arch
-             -> F.Formula (Sym t solver fs) arch
-             -> Syn t solver fs arch (F.ParameterizedFormula (Sym t solver fs) arch sh)
+             -> F.Formula (Sym t fs) arch
+             -> Syn solver t fs arch (F.ParameterizedFormula (Sym t fs) arch sh)
 buildFormula o i progFormula =
   opcodeIORelation o >>= \case
     Just iorel ->

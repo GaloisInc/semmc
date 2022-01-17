@@ -56,6 +56,8 @@ import           Dismantle.Arbitrary as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
+import           What4.Protocol.Online (OnlineSolver)
+
 import           SemMC.Architecture ( Instruction, Opcode, Operand, ShapeRepr, OperandTypeRepr )
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.Pseudo as AP
@@ -77,9 +79,9 @@ import qualified UnliftIO as U
 -- the same semantics as the given instruction.
 --
 -- This function can loop forever, and should be called under a timeout
-synthesize :: (SynC arch, U.HasCallStack)
+synthesize :: (SynC arch, U.HasCallStack, OnlineSolver solver)
            => AC.RegisterizedInstruction arch
-           -> Syn t solver fs arch (CP.CandidateProgram t solver fs arch)
+           -> Syn solver t fs arch (CP.CandidateProgram t fs arch)
 synthesize target = do
   case target of
     AC.RI { AC.riInstruction = i0 } -> do
@@ -93,7 +95,7 @@ synthesize target = do
   U.logM U.Debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
   tests <- askTestCases
   U.logM U.Debug $ printf "number of test cases = %i\n" (length tests)
-  withSymBackend $ \sym -> do
+  withSym $ \sym -> do
     f <- CP.programFormula sym candidateWithoutNops
     return CP.CandidateProgram { CP.cpInstructions = candidateWithoutNops
                                , CP.cpFormula = f
@@ -107,7 +109,7 @@ instance (Typeable arch, SynC arch) => C.Exception (SynthesisException arch)
 parallelSynthOne :: forall arch t solver fs
                   . (SynC arch, HasCallStack)
                  => AC.RegisterizedInstruction arch
-                 -> Syn t solver fs arch (Integer, Candidate arch)
+                 -> Syn solver t fs arch (Integer, Candidate arch)
 parallelSynthOne target = do
   nThreads <- askParallelSynth
   env <- askGlobalEnv
@@ -123,7 +125,7 @@ parallelSynthOne target = do
 computeTargetResults :: (SynC arch)
                      => AC.RegisterizedInstruction arch
                      -> [V.ConcreteState arch]
-                     -> Syn t solver fs arch ([CE.TestCase (V.ConcreteState arch) (Instruction arch)],
+                     -> Syn solver t fs arch ([CE.TestCase (V.ConcreteState arch) (Instruction arch)],
                                     (CE.ResultIndex (V.ConcreteState arch)))
 computeTargetResults target tests = do
   let registerizedInsns = map (AC.registerizeInstruction target) tests
@@ -144,7 +146,7 @@ computeTargetResults target tests = do
 computeCandidateResults :: (SynC arch)
                         => Candidate arch
                         -> [CE.TestCase (V.ConcreteState arch) (Instruction arch)]
-                        -> Syn t solver fs arch ([(CE.TestCase (V.ConcreteState arch) (Instruction arch), CE.TestCase (V.ConcreteState arch) (Instruction arch))],
+                        -> Syn solver t fs arch ([(CE.TestCase (V.ConcreteState arch) (Instruction arch), CE.TestCase (V.ConcreteState arch) (Instruction arch))],
                                        (CE.ResultIndex (V.ConcreteState arch)))
 computeCandidateResults candidate tests = do
   indexedTests <- mapM (\tc -> (tc,) <$> mkTestCase (CE.testContext tc) (candidateInstructions candidate)) tests
@@ -164,7 +166,7 @@ data TargetData arch = TargetData
 
 -- | Initialize the target data for the given target instruction.
 mkTargetData :: SynC arch
-             => AC.RegisterizedInstruction arch -> Syn t solver fs arch (TargetData arch)
+             => AC.RegisterizedInstruction arch -> Syn solver t fs arch (TargetData arch)
 mkTargetData target = do
   tests <- askTestCases
   (targetTests, targetResults) <- computeTargetResults target tests
@@ -179,7 +181,7 @@ mkTargetData target = do
 mcmcSynthesizeOne :: forall arch t solver fs
                    . (SynC arch, U.HasCallStack)
                   => AC.RegisterizedInstruction arch
-                  -> Syn t solver fs arch (Integer, Candidate arch)
+                  -> Syn solver t fs arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
   -- needed.
@@ -313,7 +315,7 @@ import Control.Monad
 weighCandidate :: SynC arch
                => TargetData arch
                -> Candidate arch
-               -> Syn t solver fs arch (Double, Maybe [R.RvwpDelta arch])
+               -> Syn solver t fs arch (Double, Maybe [R.RvwpDelta arch])
 weighCandidate td@TargetData{..} candidate = do
   (testPairs, candidateResults) <- computeCandidateResults candidate tdTargetTests
   -- The @sequence@ collapses the 'Maybe's.
@@ -354,7 +356,7 @@ chooseNextCandidate :: (SynC arch, U.HasCallStack)
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
-                    -> Syn t solver fs arch (Double, Maybe [[R.RvwpDelta arch]], Candidate arch)
+                    -> Syn solver t fs arch (Double, Maybe [[R.RvwpDelta arch]], Candidate arch)
 chooseNextCandidate td@TargetData{..} oldCandidate oldCost newCandidate = do
   gen <- askGen
   threshold <- liftIO $ D.uniformR (0::Double, 1) gen
@@ -400,7 +402,7 @@ compareTargetToCandidate :: forall arch t solver fs .
                          -> CE.ResultIndex (V.ConcreteState arch)
                          -> ( CE.TestCase (V.ConcreteState arch) (Instruction arch)
                             , CE.TestCase (V.ConcreteState arch) (Instruction arch) )
-                         -> Syn t solver fs arch (Maybe ([R.RvwpDelta arch]))
+                         -> Syn solver t fs arch (Maybe ([R.RvwpDelta arch]))
 compareTargetToCandidate TargetData{..} candidateResults (targetTest, candidateTest) = do
   let targetRes = M.lookup (CE.testNonce targetTest) (CE.riSuccesses tdTargetResults)
       candidateRes = M.lookup (CE.testNonce candidateTest) (CE.riSuccesses candidateResults)
@@ -448,7 +450,7 @@ instance C.Exception ComparisonError
 -- tests, then the rvwp computation (tracking which wrong places have
 -- the right value) wouldn't make sense anymore.
 getOutMasks :: forall arch t solver fs . SynC arch
-            => Instruction arch -> Syn t solver fs arch [V.SemanticView arch]
+            => Instruction arch -> Syn solver t fs arch [V.SemanticView arch]
 getOutMasks (D.Instruction opcode operands) =
   opcodeIORelation opcode >>= \case
     Just ioRel -> do
@@ -519,13 +521,13 @@ candidateInstructions :: (SynC arch) => Candidate arch -> [Instruction arch]
 candidateInstructions = concatMap synthInsnToActual . catMaybes . F.toList
 
 -- | The empty program is a sequence of no-ops.
-emptyCandidate :: Int -> Syn t solver fs arch (Candidate arch)
+emptyCandidate :: Int -> Syn solver t fs arch (Candidate arch)
 emptyCandidate len = return $ S.replicate len Nothing
 
 ----------------------------------------------------------------
 
 -- | Randomly perturb a candidate. STOKE Section 4.3.
-perturb :: SynC arch => Candidate arch -> Syn t solver fs arch (Candidate arch)
+perturb :: SynC arch => Candidate arch -> Syn solver t fs arch (Candidate arch)
 perturb candidate = do
   gen <- askGen
   strategy <- liftIO $ D.categoricalChoose
@@ -548,7 +550,7 @@ randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch),
                     HasRepr (AP.Pseudo arch (Operand arch)) (ShapeRepr arch),
                     OrdF (OperandTypeRepr arch))
                 => AP.SynthInstruction arch
-                -> Syn t solver fs arch (AP.SynthInstruction arch)
+                -> Syn solver t fs arch (AP.SynthInstruction arch)
 randomizeOpcode (AP.SynthInstruction oldOpcode operands) = do
   gen <- askGen
   congruent <- CP.lookupCongruentOpcodes oldOpcode
@@ -588,7 +590,7 @@ randomInstruction gen baseSet = do
 
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.
-perturbOpcode :: SynC arch => Candidate arch -> Syn t solver fs arch (Candidate arch)
+perturbOpcode :: SynC arch => Candidate arch -> Syn solver t fs arch (Candidate arch)
 perturbOpcode candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
@@ -597,7 +599,7 @@ perturbOpcode candidate = do
   return $ S.update index newInstruction candidate
 
 -- | Randomly replace the operands, while keeping the opcode fixed.
-perturbOperand :: SynC arch => Candidate arch -> Syn t solver fs arch (Candidate arch)
+perturbOperand :: SynC arch => Candidate arch -> Syn solver t fs arch (Candidate arch)
 perturbOperand candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
@@ -606,7 +608,7 @@ perturbOperand candidate = do
   return $ S.update index newInstruction candidate
 
 -- | Swap two instructions in a program.
-swapInstructions :: SynC arch => Candidate arch -> Syn t solver fs arch (Candidate arch)
+swapInstructions :: SynC arch => Candidate arch -> Syn solver t fs arch (Candidate arch)
 swapInstructions candidate = do
   gen <- askGen
   index1 <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
@@ -618,7 +620,7 @@ swapInstructions candidate = do
   return $ S.update index1 instr2 $ S.update index2 instr1 candidate
 
 -- | Replace an instruction with an unrelated instruction.
-perturbInstruction :: SynC arch => Candidate arch -> Syn t solver fs arch (Candidate arch)
+perturbInstruction :: SynC arch => Candidate arch -> Syn solver t fs arch (Candidate arch)
 perturbInstruction candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen

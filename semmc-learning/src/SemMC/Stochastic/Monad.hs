@@ -33,7 +33,8 @@ module SemMC.Stochastic.Monad (
   askKnownCongruentOps,
   opcodeIORelation,
   -- * Symbolic backend manipulation
-  withSymBackend,
+  withBackend,
+  withSym,
   withTimeout,
   -- * Recording results
   withStats,
@@ -76,12 +77,14 @@ import           Data.Parameterized.Some ( mapSome, Some(..) )
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Dismantle.Arbitrary as DA
 import qualified Data.Set.NonEmpty as NES
+import qualified Lang.Crucible.Backend as CB
+import qualified What4.Protocol.Online as W4
 
 import qualified Data.Parameterized.Seq as SeqF
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
-import           SemMC.Symbolic ( Sym )
+import           SemMC.Symbolic ( Sym, Backend )
 import qualified SemMC.Util as U
 import qualified SemMC.Worklist as WL
 
@@ -96,8 +99,8 @@ import qualified SemMC.Stochastic.Statistics as S
 --
 -- This includes a remote connection to run test cases, as well as a nonce
 -- source for test cases.
-data LocalSynEnv t solver fs arch =
-  LocalSynEnv { seGlobalEnv :: SynEnv t solver fs arch
+data LocalSynEnv solver t fs arch =
+  LocalSynEnv { seGlobalEnv :: SynEnv solver t fs arch
               , seRandomGen :: DA.Gen
               , seNonceSource :: IORef Word64
               -- ^ Nonces for test cases sent to the remote runner.
@@ -110,18 +113,18 @@ data LocalSynEnv t solver fs arch =
 --
 -- Note: the 'U.MonadUnliftIO' instance makes sense for 'Reader' +
 -- 'IO', but will no longer make sense if e.g. 'Syn' grows 'State'.
-newtype Syn t solver fs arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t solver fs arch) IO a }
+newtype Syn solver t fs arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv solver t fs arch) IO a }
   deriving (Functor,
             Applicative,
             Monad,
             MonadIO,
             U.MonadUnliftIO,
-            R.MonadReader (LocalSynEnv t solver fs arch))
+            R.MonadReader (LocalSynEnv solver t fs arch))
 
-instance MC.MonadThrow (Syn t solver fs arch) where
+instance MC.MonadThrow (Syn solver t fs arch) where
   throwM = liftIO . MC.throwM
 
-instance U.MonadHasLogCfg (Syn t solver fs arch) where
+instance U.MonadHasLogCfg (Syn solver t fs arch) where
   getLogCfgM = logConfig <$> askConfig
 
 -- | This is the exception that is thrown if the synthesis times out waiting for
@@ -140,19 +143,19 @@ instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
 --
 -- The ty vars are explicitly quantified with @arch@ first so that we
 -- can use @-XTypeApplications@ more conveniently.
-runSyn :: forall arch t solver fs a . LocalSynEnv t solver fs arch -> Syn t solver fs arch a -> IO a
+runSyn :: forall arch t solver fs a . LocalSynEnv solver t fs arch -> Syn solver t fs arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
 -- | Run a computation under the general timeout for the maximum operation
 -- length for any synthesis operation
-withTimeout :: Syn t solver fs arch a -> Syn t solver fs arch (Maybe a, TM.NominalDiffTime)
+withTimeout :: Syn solver t fs arch a -> Syn solver t fs arch (Maybe a, TM.NominalDiffTime)
 withTimeout action = do
   us <- timeoutMicroseconds opcodeTimeoutSeconds
   timeSyn $ U.timeout us action
 
 -- | Time an action, returning its value as well as the time taken to execute
 -- the action
-timeSyn :: Syn t solver fs arch a -> Syn t solver fs arch (a, TM.NominalDiffTime)
+timeSyn :: Syn solver t fs arch a -> Syn solver t fs arch (a, TM.NominalDiffTime)
 timeSyn action = do
   start <- liftIO TM.getCurrentTime
   res <- action
@@ -162,7 +165,7 @@ timeSyn action = do
 -- | Run a 'Syn' computation in a new local env with a new test
 -- runner, and clean up the test runner at the end.
 runSynInNewLocalEnv :: (U.MonadIO m, U.MonadUnliftIO m)
-                    => SynEnv t solver fs arch -> Syn t solver fs arch a -> m a
+                    => SynEnv solver t fs arch -> Syn solver t fs arch a -> m a
 runSynInNewLocalEnv env0 action = do
   nonceRef <- U.newIORef 0
   gen <- liftIO $ DA.createGen
@@ -180,8 +183,8 @@ runSynInNewLocalEnv env0 action = do
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (SynC arch)
                      => A.Opcode arch (A.Operand arch) sh
-                     -> F.ParameterizedFormula (Sym t solver fs) arch sh
-                     -> Syn t solver fs arch ()
+                     -> F.ParameterizedFormula (Sym t fs) arch sh
+                     -> Syn solver t fs arch ()
 recordLearnedFormula op f = do
   formulasRef <- R.asks (seFormulas . seGlobalEnv)
   congruentRef <- R.asks (seKnownCongruentOps . seGlobalEnv)
@@ -195,7 +198,7 @@ recordLearnedFormula op f = do
     STM.modifyTVar' congruentRef (MapF.insertWith (SeqF.><) opShape newOps)
 
 -- | Take an opcode off of the worklist
-takeWork :: Syn t solver fs arch (Maybe (Some (A.Opcode arch (A.Operand arch))))
+takeWork :: Syn solver t fs arch (Maybe (Some (A.Opcode arch (A.Operand arch))))
 takeWork = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ do
@@ -207,21 +210,21 @@ takeWork = do
         return (Just work)
 
 -- | Add an opcode back to into the worklist
-addWork :: Some (A.Opcode arch (A.Operand arch)) -> Syn t solver fs arch ()
+addWork :: Some (A.Opcode arch (A.Operand arch)) -> Syn solver t fs arch ()
 addWork op = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' wlref (WL.putWork op)
 
-askConfig :: Syn t solver fs arch (Config arch)
+askConfig :: Syn solver t fs arch (Config arch)
 askConfig = R.asks (seConfig . seGlobalEnv)
 
-askGlobalEnv :: Syn t solver fs arch (SynEnv t solver fs arch)
+askGlobalEnv :: Syn solver t fs arch (SynEnv solver t fs arch)
 askGlobalEnv = R.asks seGlobalEnv
 
-askGen :: Syn t solver fs arch DA.Gen
+askGen :: Syn solver t fs arch DA.Gen
 askGen = R.asks seRandomGen
 
-timeoutMicroseconds :: (Num b) => (Config arch -> b) -> Syn t solver fs arch b
+timeoutMicroseconds :: (Num b) => (Config arch -> b) -> Syn solver t fs arch b
 timeoutMicroseconds accessor = do
   seconds <- R.asks (accessor . seConfig . seGlobalEnv)
   return (seconds * 1000 * 1000)
@@ -229,40 +232,47 @@ timeoutMicroseconds accessor = do
 -- | Get access to the symbolic backend to compute something.
 --
 -- NOTE: Nested calls to this function are not allowed!  It takes an MVar, so
--- nested calls will deadlock.
-withSymBackend :: (Sym t solver fs -> Syn t solver fs arch a) -> Syn t solver fs arch a
-withSymBackend k = do
+-- nested calls will deadlock.  Also, do not call `withSym`.
+withBackend :: (Backend solver t fs -> Syn solver t fs arch a) -> Syn solver t fs arch a
+withBackend k = do
   symVar <- R.asks (seSymBackend . seGlobalEnv)
   env <- R.ask
   liftIO $ C.bracket (STM.atomically $ STM.takeTMVar symVar)
                      (STM.atomically . STM.putTMVar symVar)
                      (runSyn env . k)
 
-withStats :: (S.StatisticsThread arch -> IO ()) -> Syn t solver fs arch ()
+-- | Get access to the symbolic expression builder.
+--
+-- NOTE: Nested calls to this function are not allowed!  It takes an MVar, so
+-- nested calls will deadlock.  Also, do not call `withBackend`.
+withSym :: W4.OnlineSolver solver => (Sym t fs -> Syn solver t fs arch a) -> Syn solver t fs arch a
+withSym k = withBackend (\bak -> k (CB.backendGetSym bak))
+
+withStats :: (S.StatisticsThread arch -> IO ()) -> Syn solver t fs arch ()
 withStats k = do
   st <- R.asks (statsThread . seConfig . seGlobalEnv)
   liftIO (k st)
 
-askTestCases :: Syn t solver fs arch [V.ConcreteState arch]
+askTestCases :: Syn solver t fs arch [V.ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: V.ConcreteState arch -> Syn t solver fs arch ()
+addTestCase :: V.ConcreteState arch -> Syn solver t fs arch ()
 addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
 
-askFormulas :: Syn t solver fs arch (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
+askFormulas :: Syn solver t fs arch (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t fs) arch))
 askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
-askPseudoFormulas :: Syn t solver fs arch (MapF.MapF (AP.Pseudo arch (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
+askPseudoFormulas :: Syn t solver fs arch (MapF.MapF (AP.Pseudo arch (A.Operand arch)) (F.ParameterizedFormula (Sym solver fs) arch))
 askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
 
 -- | Get the number of requested parallel synthesis operations
-askParallelSynth :: Syn t solver fs arch Int
+askParallelSynth :: Syn solver t fs arch Int
 askParallelSynth = R.asks (parallelSynth . seConfig . seGlobalEnv)
 
-askKnownCongruentOps :: Syn t solver fs arch (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (AP.SynthOpcode arch)))
+askKnownCongruentOps :: Syn solver t fs arch (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (AP.SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
@@ -276,7 +286,7 @@ askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . 
 -- naming conventions to make them distinct.
 askBaseSet :: (P.OrdF (A.Opcode arch (A.Operand arch)),
                P.OrdF (AP.Pseudo arch (A.Operand arch)))
-           => Syn t solver fs arch (NES.Set (Some (AP.SynthOpcode arch)))
+           => Syn solver t fs arch (NES.Set (Some (AP.SynthOpcode arch)))
 askBaseSet = do
   -- Since we don't update the base set during a round, it would make
   -- sense to cache this for constant lookup, instead of doing this
@@ -290,7 +300,7 @@ askBaseSet = do
 
 opcodeIORelation :: (A.Architecture arch)
                  => A.Opcode arch (A.Operand arch) sh
-                 -> Syn t solver fs arch (Maybe (IORelation arch sh))
+                 -> Syn solver t fs arch (Maybe (IORelation arch sh))
 opcodeIORelation op = do
   iorels <- R.asks (seIORelations . seGlobalEnv)
   return $ MapF.lookup op iorels
@@ -300,7 +310,7 @@ opcodeIORelation op = do
 -- (see 'runConcreteTest' and 'runConcreteTests').
 mkTestCase :: V.ConcreteState arch
            -> [A.Instruction arch]
-           -> Syn t solver fs arch (CE.TestCase (V.ConcreteState arch) (A.Instruction arch))
+           -> Syn solver t fs arch (CE.TestCase (V.ConcreteState arch) (A.Instruction arch))
 mkTestCase s0 prog = do
   nref <- R.asks seNonceSource
   nonce <- liftIO $ readIORef nref
@@ -320,7 +330,7 @@ mkTestCase s0 prog = do
 runConcreteTests :: forall t solver fs arch
                   . (SynC arch)
                  => [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)]
-                 -> Syn t solver fs arch (CE.ResultIndex (V.ConcreteState arch))
+                 -> Syn solver t fs arch (CE.ResultIndex (V.ConcreteState arch))
 runConcreteTests tests = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
@@ -338,7 +348,7 @@ runConcreteTests tests = do
 runConcreteTest :: forall t solver fs arch
                  . (SynC arch)
                 => CE.TestCase (V.ConcreteState arch) (A.Instruction arch)
-                -> Syn t solver fs arch (CE.ResultOrError (V.ConcreteState arch))
+                -> Syn solver t fs arch (CE.ResultOrError (V.ConcreteState arch))
 runConcreteTest tc = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
