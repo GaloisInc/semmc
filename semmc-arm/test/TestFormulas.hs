@@ -16,7 +16,6 @@ import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Lang.Crucible.Backend as CRUB
-import qualified Lang.Crucible.Backend.Simple as S
 import qualified SemMC.Architecture.AArch32 as ARM
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics
@@ -74,11 +73,13 @@ testT32Formulas :: TestTree
 testT32Formulas = testGroup "T32 Formulas" $
                   fmap (testFormula t32DefinedFunctions) allT32Semantics
 
+data SemMCArmTestData t = SemMCArmTestData
+
 testFormula :: [(String, BS.ByteString)]
             -> (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
 testFormula dfs a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
   do Some ng <- PN.newIONonceGenerator
-     sym <- S.newSimpleBackend S.FloatIEEERepr ng
+     sym <- WEB.newExprBuilder WEB.FloatIEEERepr SemMCArmTestData ng
      env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
      lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env dfs
      fm <- withTestLogging $ loadFormula sym env lib a

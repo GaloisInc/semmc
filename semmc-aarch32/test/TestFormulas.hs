@@ -12,7 +12,6 @@ import           Control.Exception
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
 
-import qualified Lang.Crucible.Backend.Simple as S
 import           SemMC.Architecture.ARM.Opcodes ( loadSemantics
                                                 , ASLSemanticsOpts(..))
 import qualified SemMC.Util as U
@@ -55,7 +54,9 @@ tests = do testGroup "Read Formulas" [ testAll ]
 testAll :: TestTree
 testAll = testCase "testAll" $ withTestLogging $ do
   Some ng <- PN.newIONonceGenerator
-  sym <- S.newSimpleBackend S.FloatIEEERepr ng
+  sym <- WB.newExprBuilder WB.FloatIEEERepr SemMCAArch32Data ng
   WB.startCaching sym
   _sem <- loadSemantics sym (ASLSemanticsOpts { aslOptTrimRegs = True })
   return ()
+
+data SemMCAArch32Data t = SemMCAArch32Data
