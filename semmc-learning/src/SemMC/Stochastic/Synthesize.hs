@@ -95,8 +95,8 @@ synthesize target = do
   U.logM U.Debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
   tests <- askTestCases
   U.logM U.Debug $ printf "number of test cases = %i\n" (length tests)
-  withSym $ \sym -> do
-    f <- CP.programFormula sym candidateWithoutNops
+  withBackend $ \bak -> do
+    f <- CP.programFormula bak candidateWithoutNops
     return CP.CandidateProgram { CP.cpInstructions = candidateWithoutNops
                                , CP.cpFormula = f
                                }

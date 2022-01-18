@@ -38,6 +38,7 @@ import           Data.Proxy                         ( Proxy(..) )
 import           What4.BaseTypes
 import qualified What4.Interface     as S
 import qualified What4.Expr.Builder as S
+import qualified Lang.Crucible.Backend as B
 
 import qualified SemMC.Architecture                 as A
 import qualified SemMC.BoundVar                     as BV
@@ -163,23 +164,26 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
 -- operand list. The first result is the list of created 'TaggedExpr's for each
 -- operand that are used within the returned formula. Will instantiate the
 -- functions given by 'SemMC.Architecture.locationFuncInterpretation'
-instantiateFormula :: forall arch t st fs sh.
+instantiateFormula :: forall arch t st fs bak sh.
                       ( A.Architecture arch
-                      , S.IsSymExprBuilder (SB t st fs))
-                   => SB t st fs
+                      , S.IsSymExprBuilder (SB t st fs)
+                      , B.IsBoolSolver (SB t st fs) bak
+                      )
+                   => bak
                    -> ParameterizedFormula (SB t st fs) arch sh
                    -> SL.List (A.Operand arch) sh
                    -> IO (SL.List (A.TaggedExpr arch (SB t st fs)) sh, Formula (SB t st fs) arch)
-instantiateFormula sym pf opVals
-    = instantiateFormula' sym pf opVals (A.locationFuncInterpretation (Proxy @arch))
+instantiateFormula bak pf opVals
+    = instantiateFormula' bak pf opVals (A.locationFuncInterpretation (Proxy @arch))
 
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
 -- operand that are used within the returned formula.
-instantiateFormula' :: forall arch t st fs sh.
+instantiateFormula' :: forall arch t st fs bak sh.
                       ( A.Architecture arch
-                      , S.IsSymExprBuilder (SB t st fs))
-                   => SB t st fs
+                      , S.IsSymExprBuilder (SB t st fs)
+                      , B.IsBoolSolver (SB t st fs) bak) 
+                   => bak
                    -> ParameterizedFormula (SB t st fs) arch sh
                    -> SL.List (A.Operand arch) sh
                    -> [(String, A.FunctionInterpretation t st fs arch)]
@@ -187,13 +191,14 @@ instantiateFormula' :: forall arch t st fs sh.
                    -- parameterized formula to be instantiated
                    -> IO (SL.List (A.TaggedExpr arch (SB t st fs)) sh, Formula (SB t st fs) arch)
 instantiateFormula'
-  sym
+  bak
   pf@(ParameterizedFormula { pfOperandVars = opVars
                            , pfLiteralVars = litVars
                            , pfDefs = defs
                            })
   opVals
   functions = do
+    let sym = B.backendGetSym bak
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -209,7 +214,7 @@ instantiateFormula'
     let allocOpers :: SL.List (A.AllocatedOperand arch (SB t st fs)) sh
         allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
     let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp)
-        rewrite = FE.evaluateFunctions sym pf allocOpers newLitExprLookup (fmap A.exprInterp <$> functions)
+        rewrite = FE.evaluateFunctions bak pf allocOpers newLitExprLookup (fmap A.exprInterp <$> functions)
     -- Here, the formula rewriter walks over the formula AST and replaces calls
     -- to functions that we know something about with concrete values.  Most
     -- often, these functions are predicates testing something about operands

@@ -37,6 +37,7 @@ import qualified Data.Text                          as T
 import           What4.Interface as S
 import qualified What4.Expr.Builder as S
 import qualified What4.Symbol as S
+import qualified Lang.Crucible.Backend as B
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.Location        as A
 import qualified SemMC.BoundVar as BV
@@ -115,7 +116,8 @@ evalBitvectorExtractorWith :: ( HasCallStack, 1 <= n
                            -> (forall s . A.OperandComponents arch (Sym t st fs) s -> NatRepr n -> Maybe (S.SymExpr (Sym t st fs) (BaseBVType n)))
                            -> A.Evaluator arch t st fs
 evalBitvectorExtractorWith wrapResultWith operationName litRep match =
-  A.Evaluator $ \sym pf operands ufArguments _locExpr resultRepr ->
+  A.Evaluator $ \bak pf operands ufArguments _locExpr resultRepr ->
+    let sym = B.backendGetSym bak in
     case ufArguments of
       Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
         case ufArg `lookupVarInFormulaOperandList` pf of
@@ -151,27 +153,30 @@ evalBitvectorExtractorWith wrapResultWith operationName litRep match =
 -- | See `evaluateFunctions'`
 evaluateFunctions
   :: MapF.OrdF (Location arch)
-  => Sym t st fs
+  => B.IsBoolSolver (Sym t st fs) bak
+  => bak
   -> ParameterizedFormula (Sym t st fs) arch sh
   -> SL.List (A.AllocatedOperand arch (Sym t st fs)) sh
   -> (forall ltp . A.Location arch ltp -> IO (S.Expr t ltp))
   -> [(String, A.Evaluator arch t st fs)]
   -> S.Expr t tp
   -> IO (S.Expr t tp)
-evaluateFunctions sym pf operands locExpr rewriters elt =
-  evaluateFunctions' sym pf operands locExpr rewriters elt
+evaluateFunctions bak pf operands locExpr rewriters elt =
+  evaluateFunctions' bak pf operands locExpr rewriters elt
 
 -- | Recursively applies rewrite rules to all uninterpreted functions present in a formula.
 evaluateFunctions'
   :: MapF.OrdF (Location arch)
-  => Sym t st fs
+  => B.IsBoolSolver (Sym t st fs) bak
+  => bak
   -> ParameterizedFormula (Sym t st fs) arch sh
   -> SL.List (A.AllocatedOperand arch (Sym t st fs)) sh
   -> (forall ltp . A.Location arch ltp -> IO (S.Expr t ltp))
   -> [(String, A.Evaluator arch t st fs)]
   -> S.Expr t tp
   -> IO (S.Expr t tp)
-evaluateFunctions' sym pf operands locExpr rewriters e =
+evaluateFunctions' bak pf operands locExpr rewriters e =
+  let sym = B.backendGetSym bak in
   case e of
     S.SemiRingLiteral {} -> return e
     S.FloatExpr {} -> return e
@@ -179,7 +184,7 @@ evaluateFunctions' sym pf operands locExpr rewriters e =
     S.StringExpr {} -> return e
     S.BoolExpr {} -> return e
     S.AppExpr a -> do
-      app <- S.traverseApp (evaluateFunctions' sym pf operands locExpr rewriters) (S.appExprApp a)
+      app <- S.traverseApp (evaluateFunctions' bak pf operands locExpr rewriters) (S.appExprApp a)
       S.sbMakeExpr sym app
     S.NonceAppExpr nonceApp -> do
       case S.nonceExprApp nonceApp of
@@ -195,10 +200,10 @@ evaluateFunctions' sym pf operands locExpr rewriters e =
         S.FnApp symFun assignment -> do
           let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
               rs = first normalizeUFName <$> rewriters
-          assignment' <- traverseFC (evaluateFunctions' sym pf operands locExpr rs) assignment
+          assignment' <- traverseFC (evaluateFunctions' bak pf operands locExpr rs) assignment
           case lookup key  rewriters of
             Just (A.Evaluator evaluator) ->
-              evaluator sym pf operands assignment' locExpr (S.exprType e)
+              evaluator bak pf operands assignment' locExpr (S.exprType e)
             Nothing ->
               applySymFn sym symFun assignment'
 

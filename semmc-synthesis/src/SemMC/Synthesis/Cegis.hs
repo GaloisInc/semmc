@@ -55,21 +55,22 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- of the candidate instructions given, has the same
                           -- behavior as the target formula.
 
-cegis' :: forall arch t solver fs.
+cegis' :: forall arch solver t st fs.
           (A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
           , WPO.OnlineSolver solver
-          , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+          , CB.IsSymInterface (WE.ExprBuilder t st fs)
           , ?memOpts :: LLVM.MemOptions
           )
-       => [T.TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
+       => CBO.OnlineBackend solver t st fs
+       -> [T.TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
        -- ^ The trial instructions.
-       -> Formula (CBO.OnlineBackend t solver fs) arch
+       -> Formula (WE.ExprBuilder t st fs) arch
        -- ^ A formula representing the sequence of trial instructions.
-       -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
-cegis' trial trialFormula = do
+       -> Cegis (WE.ExprBuilder t st fs) arch (CegisResult (WE.ExprBuilder t st fs) arch)
+cegis' bak trial trialFormula = do
   sym <- askSym
   check <- askCheck
-  insns' <- liftIO $ checkSat sym check (tryExtractingConcreteWithParamsCheck sym trial)
+  insns' <- liftIO $ checkSat bak check (tryExtractingConcreteWithParamsCheck sym trial)
   case insns' of
     Nothing -> do
         tests <- askTests
@@ -94,9 +95,9 @@ cegis' trial trialFormula = do
       -- unsatisfiable. This situation will be caught e.g. by the function
       -- 'synthesizeAndCheck' in SemMC.Synthesis.Testing.
       existingTests <- askTests
-      equiv <- liftIO $ formulasEquivSymWithCondition sym
+      equiv <- liftIO $ formulasEquivSymWithCondition bak
                                          (checkBounds @arch sym)
-                                         (checkNoDuplicates @arch sym existingTests)
+                                         (checkNoDuplicates @arch bak existingTests)
                                          (MA.liveMemConst filledInFormula)
                                          targetFormula
                                          filledInFormula
@@ -112,22 +113,24 @@ cegis' trial trialFormula = do
           return . CegisEquivalent $ map templInsnToDism insns
         DifferentBehavior ctrExample -> do
           memExpr <- askMemExpr
-          newTest <- liftIO $ CT.mkTest sym targetFormula ctrExample memExpr
+          newTest <- liftIO $ CT.mkTest bak targetFormula ctrExample memExpr
 
           liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
 
           CT.addTest trialFormula newTest
           -- Add the params check for future iterations of cegis
           addModelOverlapCheck paramsCheck
-          cegis' trial trialFormula
+          cegis' bak trial trialFormula
 
-cegis :: forall arch sym t solver fs.
+cegis :: forall arch sym solver t st fs.
         ( A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
-        , WPO.OnlineSolver solver, sym ~ CBO.OnlineBackend t solver fs
+        , WPO.OnlineSolver solver
+        , sym ~ WE.ExprBuilder t st fs
         , CB.IsSymInterface sym
         , ?memOpts :: LLVM.MemOptions
         )
-      => CegisParams sym arch
+      => CBO.OnlineBackend solver t st fs
+      -> CegisParams sym arch
       -- ^ Parameters not specific to the candidate. See 'CegisParams' for
       -- details.
       -> [ConcreteTest sym arch]
@@ -135,8 +138,8 @@ cegis :: forall arch sym t solver fs.
       -> [T.TemplatedInstructionFormula sym arch]
       -- ^ The candidate template program.
       -> IO (CegisResult sym arch)
-cegis params tests trial = do
-  let sym = cpSym params
+cegis bak params tests trial = do
+  let sym = CB.backendGetSym bak
 
   -- Don't want to consider IP here
   trialFormula <- formStripIP <$> condenseFormulas sym (map T.tifFormula trial)
@@ -145,7 +148,7 @@ cegis params tests trial = do
 
   let cst = emptyCegisState sym
   runCegis params cst $ do CT.addTests trialFormula tests
-                           cegis' trial trialFormula
+                           cegis' bak trial trialFormula
 
 -------------------------------------------------------
 
@@ -176,19 +179,26 @@ checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
 
 -- Produces a check that we do not generate duplicate tests: check that for all
 -- tests, the LocExprs given is not symbolically equal to the test input.
-checkNoDuplicates :: forall arch sym s t fs.
-             ( S.IsExprBuilder sym, A.Architecture arch, CB.IsSymInterface sym, sym ~ WE.ExprBuilder s t fs
+checkNoDuplicates :: forall arch sym bak t st fs.
+             ( S.IsExprBuilder sym
+             , A.Architecture arch
+             , CB.IsSymInterface sym
+             , CB.IsBoolSolver sym bak
+             , sym ~ WE.ExprBuilder t st fs
              , ?memOpts :: LLVM.MemOptions
              )
-          => sym
+          => bak
           -> [ConcreteTest sym arch]
           -> LocExprs sym (L.Location arch)
           -> IO (S.Pred sym)
-checkNoDuplicates sym tests lExprs = andPred sym tests $ \test -> do
+checkNoDuplicates bak tests lExprs =
+  andPred sym tests $ \test -> do
     tInput <- checkTestInput (testInput test)
     mInput <- checkMemInput (memInput test)
     S.notPred sym =<< S.andPred sym tInput mInput
   where
+    sym = CB.backendGetSym bak
+
     -- for all l \in domain(test), test(l) = lExprs(l)
     checkTestInput :: LocExprs sym (L.Location arch) -> IO (S.Pred sym)
     checkTestInput test = andPred sym (MapF.toList test) $ \(MapF.Pair l testL) ->
@@ -200,7 +210,7 @@ checkNoDuplicates sym tests lExprs = andPred sym tests $ \test -> do
     checkMemInput test | Just memE <- getMemExpr = andPred sym test $ \case
       A.ReadData _ -> return $ S.truePred sym
       A.WriteData i v -> do
-        actuallyIs <- LLVM.readMemIO @arch sym (S.bvWidth v) i memE
+        actuallyIs <- LLVM.readMemIO @arch bak (S.bvWidth v) i memE
         S.isEq sym actuallyIs v
     -- if there is no memory in the formula
     checkMemInput _ | otherwise = return $ S.truePred sym
@@ -214,7 +224,7 @@ checkNoDuplicates sym tests lExprs = andPred sym tests $ \test -> do
 
 -- | Conjoin the given predicate to the 'csCheck' field of the 'CegisState'.
 addModelOverlapCheck :: forall sym t st fs arch.
-                      ( sym ~ CBO.OnlineBackend t st fs
+                      ( sym ~ WE.ExprBuilder t st fs
                       , A.Architecture arch
                       , A.Architecture (T.TemplatedArch arch)
                       )

@@ -44,6 +44,7 @@ import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Expr.Builder as WEB
 import qualified What4.Interface as S
 import qualified What4.ProblemFeatures as WPF
+import qualified What4.Protocol.Online as WPO
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -68,7 +69,6 @@ allOperands = $(captureDictionaries (const True) ''T.Opcode)
 
 readBinOpc :: ( U.HasLogCfg
               , S.IsSymExprBuilder sym
-              , SB.IsBoolSolver sym
               , sym ~ WEB.ExprBuilder t st fs
               ) =>
               sym
@@ -78,10 +78,12 @@ readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semanti
   where
     env = FormulaEnv Map.empty undefined
 
+data SemMCToyData t = SemMCToyData
+
 doThing :: (U.HasLogCfg) => IO ()
 doThing = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+  sym <- WEB.newExprBuilder WEB.FloatRealRepr SemMCToyData r
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -149,7 +151,8 @@ dependentFormula sym = do
 doThing2 :: (U.HasLogCfg, ?memOpts :: LLVM.MemOptions) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+  sym <- WEB.newExprBuilder WEB.FloatRealRepr SemMCToyData r
+  CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures WPF.noFeatures $ \bak -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -160,22 +163,23 @@ doThing2 = do
   -- target <- fooFormula sym
   target <- independentFormula sym
 
-  let synthEnv = setupEnvironment sym (toBaseSet baseset)
-  print =<< mcSynth synthEnv target
+  let synthEnv = setupEnvironment bak (toBaseSet baseset)
+  print =<< mcSynth bak synthEnv target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
 
 doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+  sym <- WEB.newExprBuilder WEB.FloatRealRepr SemMCToyData r
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: (U.HasLogCfg, ?memOpts :: LLVM.MemOptions) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+  sym <- WEB.newExprBuilder WEB.FloatRealRepr SemMCToyData r
+  CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures WPF.noFeatures $ \bak -> do
   Right add <- readBinOpc sym AddRr
   print add
   Right sub <- readBinOpc sym SubRr
@@ -186,8 +190,8 @@ doThing4 = do
               $ MapF.empty
 
   ind <- independentFormula sym
-  let synthEnv = setupEnvironment sym (toBaseSet baseset)
-  print =<< mcSynth synthEnv ind
+  let synthEnv = setupEnvironment bak (toBaseSet baseset)
+  print =<< mcSynth bak synthEnv ind
 
 ----------------------------------------------------------------
 -- * Stratefied synthesis
@@ -281,7 +285,7 @@ defaultRunSynToyCfg = RunSynToyCfg
 runSynToy :: (U.HasLogCfg)
           => RunSynToyCfg
           -> FilePath -- ^ Root dir for test data, e.g. semantics.
-          -> (forall t solver fs . Syn t solver fs Toy a)
+          -> (forall solver t fs . WPO.OnlineSolver solver => Syn solver t fs Toy a)
           -> IO a
 runSynToy rstCfg dataRoot action = do
   stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")

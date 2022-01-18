@@ -69,6 +69,7 @@ import           What4.BaseTypes
 import qualified What4.Interface as S
 import qualified What4.Expr as S
 
+import qualified Lang.Crucible.Backend as B
 import qualified Lang.Crucible.LLVM.DataLayout as LLVM
 
 import           SemMC.Architecture.AllocatedOperand
@@ -290,8 +291,9 @@ taggedExprImmediate _ _ = error "Other tagged operand"
 -- We need to pass the return type 'BaseTypeRepr' in so that we can know at the
 -- call site that the expression produced by the evaluator is correctly-typed.
 data Evaluator arch t st fs =
-  Evaluator (forall tp u sh
-               . Sym t st fs
+  Evaluator (forall tp u sh bak.
+              B.IsBoolSolver (Sym t st fs) bak
+              => bak
               -> ParameterizedFormula (Sym t st fs) arch sh
               -> SL.List (AllocatedOperand arch (Sym t st fs)) sh
               -> Ctx.Assignment (S.Expr t) u

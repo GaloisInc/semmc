@@ -49,6 +49,7 @@ import qualified Dismantle.Instruction as D
 import qualified GHC.Err.Located as L
 import           GHC.Stack ( HasCallStack )
 import           GHC.TypeLits
+import qualified Lang.Crucible.Backend as CB
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.A32.Location
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, GPRIdent )
@@ -480,17 +481,19 @@ instance A.Architecture A32 where
 --
 -- Note that this doesn't need to be polymorphic across architectures, as Thumb
 -- mode can't access r15 this way.
-eval_isR15 :: forall t st fs sh u tp sym
-            . (sym ~ WEB.ExprBuilder t st fs)
-           => sym
+eval_isR15 :: forall t st fs sh u tp sym bak
+            . (sym ~ WEB.ExprBuilder t st fs, CB.IsBoolSolver sym bak)
+           => bak
            -> F.ParameterizedFormula (WEB.ExprBuilder t st fs) A32 sh
            -> SL.List (A.AllocatedOperand A32 sym) sh
            -> Ctx.Assignment (WEB.Expr t) u
            -> (forall tp' . Location A32 tp' -> IO (S.SymExpr (WEB.ExprBuilder t st fs) tp'))
            -> BaseTypeRepr tp
            -> IO (WEB.Expr t tp)
-eval_isR15 sym pf operands ufArguments _locToExpr resultRepr = do
-  let typedReturn :: forall tp' . WEB.Expr t tp' -> IO (WEB.Expr t tp)
+eval_isR15 bak pf operands ufArguments _locToExpr resultRepr = do
+  let sym = CB.backendGetSym bak
+
+      typedReturn :: forall tp' . WEB.Expr t tp' -> IO (WEB.Expr t tp)
       typedReturn e =
         case testEquality (S.exprType e) resultRepr of
           Just Refl -> return e

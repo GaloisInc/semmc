@@ -59,6 +59,7 @@ import qualified Dismantle.PPC as PPC
 import           GHC.TypeLits
 import           Numeric.Natural ( Natural )
 
+import qualified Lang.Crucible.Backend as CB
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.PPC.Eval as E
 import           SemMC.Architecture.PPC.Location
@@ -197,19 +198,20 @@ symbolicTemplatedOperand Proxy _signed name constr =
               recover evalFn = constr <$> BV.asUnsigned <$> evalFn v
           return (A.ValueOperand v, T.RecoverOperandFn recover)
 
-isR0 :: forall t st fs sh u tp arch sym
+isR0 :: forall t st fs sh u tp arch sym bak
       . ( A.Location arch ~ Location arch
         , A.Operand arch ~ PPC.Operand
         , sym ~ S.ExprBuilder t st fs
+        , CB.IsBoolSolver sym bak
         )
-     => sym
+     => bak
      -> F.ParameterizedFormula sym arch sh
      -> PL.List (A.AllocatedOperand arch sym) sh
      -> Ctx.Assignment (S.Expr t) u
      -> (forall tp' . Location arch tp' -> IO (S.SymExpr sym tp'))
      -> BaseTypeRepr tp
      -> IO (S.Expr t tp)
-isR0 sym pf ops actuals _locToExpr repr = do
+isR0 bak pf ops actuals _locToExpr repr = do
   let typedReturn :: forall tp' . S.Expr t tp' -> IO (S.Expr t tp)
       typedReturn e =
         case testEquality (S.exprType e) repr of
@@ -232,6 +234,8 @@ isR0 sym pf ops actuals _locToExpr repr = do
             _ -> typedReturn (S.falsePred sym)
     _ -> error "Unexpected argument list to isR0"
   where
+    sym = CB.backendGetSym bak
+
     r0 :: Location arch (BaseBVType (A.RegWidth arch))
     r0 = LocGPR (PPC.GPR 0x0)
 

@@ -28,6 +28,7 @@ import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Context as Ctx
 import qualified Lang.Crucible.Backend as B
+import           Lang.Crucible.Simulator.ExecutionTree (SomeBackend(..))
 
 import qualified What4.Interface as S
 import qualified What4.Expr.Builder as WE
@@ -40,7 +41,7 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Synthesis.Cegis.Types as T
 import qualified SemMC.Synthesis.Cegis.MemAccesses as MA
 
-data MemData sym arch = MemData { memSym :: sym
+data MemData sym arch = MemData { memBackend :: SomeBackend sym
                                 , memImpl :: LLVM.MemImpl sym
                                 , memBase :: LLVM.LLVMPtr sym (A.RegWidth arch)
                                 , memAlignment :: LLVM.Alignment
@@ -59,7 +60,12 @@ instance T.HasMemExpr MemM
 
 instance T.HasSym MemM
   where
-    askSym = MemM $ memSym <$> get
+    askSym = MemM $
+      do SomeBackend bak <- memBackend <$> get
+         return (B.backendGetSym bak)
+      
+askBackend :: MemM sym w (SomeBackend sym)
+askBackend = MemM$ memBackend <$> get
 
 askImpl :: MemM sym w (LLVM.MemImpl sym)
 askImpl = MemM $ memImpl <$> get
@@ -78,14 +84,14 @@ putImpl m = MemM $ do
 -- | Start an LLVM memory model instance consisting of a single block of memory
 -- of size 2^w where w is the width of registers in the architecture. All values
 -- in memory are initialized to the values of an uninterpreted symbolic array.
-withMem :: forall arch sym a.
-           ( A.Architecture arch, B.IsSymInterface sym
+withMem :: forall arch sym bak a.
+           ( A.Architecture arch, B.IsSymInterface sym, B.IsBoolSolver sym bak
            , ?memOpts :: LLVM.MemOptions )
-        => sym
+        => bak
         -> S.SymExpr sym (A.MemType arch)
         -> (LLVM.HasPtrWidth (A.RegWidth arch) => MemM sym arch a)
         -> IO a
-withMem sym memExp op = do
+withMem bak memExp op = do
   let w = A.regWidth @arch in LLVM.withPtrWidth w $ do
     let ?recordLLVMAnnotation = \_ _ _ -> pure ()
 
@@ -93,14 +99,14 @@ withMem sym memExp op = do
     initMem <- LLVM.emptyMem (A.archEndianForm (Proxy @arch))
 
     -- 2) Allocate a block of uninitialized memory
-    (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem"
+    (base,mem) <- LLVM.doMallocUnbounded bak LLVM.GlobalAlloc LLVM.Mutable "Mem"
                                 initMem LLVM.noAlignment
 
     -- 3) Write the initial memory expression array to the allocated block
-    mem' <- LLVM.doArrayStoreUnbounded sym mem base LLVM.noAlignment memExp
+    mem' <- LLVM.doArrayStoreUnbounded bak mem base LLVM.noAlignment memExp
 
     -- 4) Execute the operation with these starting conditions
-    evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp)
+    evalStateT (runMemM op) (MemData (SomeBackend bak) mem' base LLVM.noAlignment memExp)
 
 
 -- Input: a bit vector representing the offset from the base ptr for memory
@@ -132,7 +138,8 @@ readMemNoOF :: ( LLVM.HasPtrWidth (A.RegWidth arch)
             -- ^ The address in memory at which to read
             -> MemM sym arch (S.SymBV sym bits)
 readMemNoOF bits offset = do
-  sym <- T.askSym
+  SomeBackend bak <- askBackend
+  let sym = B.backendGetSym bak
   ptr <- mkPtr offset
   mem <- askImpl
   -- liftIO . print $ PP.text "Attempting to read " <+> PP.text (show bits) <+> PP.text " bits "
@@ -142,7 +149,7 @@ readMemNoOF bits offset = do
   sType <- bvType bits
 
   pv <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
-  v <- liftIO $ LLVM.assertSafe sym pv
+  v <- liftIO $ LLVM.assertSafe bak pv
   let v' = llvmValToSymBV bits v
 
   -- liftIO . print $ PP.text "Successfully read value " --  <+> S.printSymExpr v'
@@ -196,13 +203,14 @@ readMem :: forall arch sym bits.
         -> MemM sym arch (S.SymBV sym bits)
 readMem bits addr = readMemNoOF bits addr
 
-readMemIO :: forall arch sym bits.
+readMemIO :: forall arch sym bak bits.
              ( A.Architecture arch
              , B.IsSymInterface sym
+             , B.IsBoolSolver sym bak
              , 1 S.<= bits
              , ?memOpts :: LLVM.MemOptions
              )
-          => sym
+          => bak
           -> S.NatRepr bits
           -- ^ The number of bits to read
           -> S.SymBV sym (A.RegWidth arch)
@@ -210,8 +218,8 @@ readMemIO :: forall arch sym bits.
           -> S.SymExpr sym (A.MemType arch)
           -- ^ The memory expression from which to read
           -> IO (S.SymBV sym bits)
-readMemIO sym bits i mem = do
-  withMem @arch sym mem $ do
+readMemIO bak bits i mem = do
+  withMem @arch bak mem $ do
     let ?recordLLVMAnnotation = \_ _ _ -> pure ()
     readMem bits i
 
@@ -330,8 +338,8 @@ writeMem offset v = do
 
   v' <- symBVToLLVMVal v
 
-  sym <- T.askSym
-  mem' <- liftIO $ LLVM.storeRaw sym mem ptr sType align v'
+  SomeBackend bak <- askBackend
+  mem' <- liftIO $ LLVM.storeRaw bak mem ptr sType align v'
 
   -- liftIO . print $ PP.text "Successfully wrote value"
   putImpl mem'

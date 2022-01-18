@@ -26,10 +26,8 @@ import           Data.Word ( Word64 )
 import           Data.Proxy ( Proxy(..) )
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes, fromMaybe, isNothing)
-import           Data.Monoid ((<>))
 import qualified Data.Map as M
 import           Data.EnumF (EnumF)
-import           Data.Proxy (Proxy(Proxy))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Text.Printf (printf)
@@ -51,7 +49,7 @@ import           Data.Parameterized.HasRepr (HasRepr)
 import qualified Data.Parameterized.List as L
 
 import qualified Lang.Crucible.Backend.Simple as SB
-import qualified What4.Expr.Builder as SB
+import qualified What4.Expr.Builder as WEB
 
 import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
@@ -384,9 +382,9 @@ main = do
             -- 'startHostThreads' fails with an SSH exception, that
             -- exception gets reraised when we wait on the 'logThread'
             -- here.
-            CA.wait logThread `E.catch` \(e :: E.SomeException) ->
+            CA.wait logThread `E.catch` \(e' :: E.SomeException) ->
                 traceIO $ printf "Exception in 'wait logThread': %s"
-                (show e)
+                (show e')
             IO.exitFailure
     startHostThreads logCfg atc `E.catch` handler
     CA.wait logThread
@@ -476,6 +474,8 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
 
 
 
+data SemMCFuzzerData t = SemMCFuzzerData
+
 testRunner :: forall arch .
               ( TemplatableOperand arch
               , A.Architecture arch
@@ -517,9 +517,9 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
 
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
-      sym :: SB.SimpleBackend s (SB.Flags SB.FloatIEEE)
-          <- SB.newSimpleBackend SB.FloatIEEERepr nonceGen
-      SB.stopCaching sym
+      sym <- WEB.newExprBuilder WEB.FloatIEEERepr SemMCFuzzerData nonceGen
+      bak <- SB.newSimpleBackend sym
+      WEB.stopCaching sym
 
       env <- F.formulaEnv proxy sym
       lib <- F.loadLibrary proxy sym env funcs
@@ -538,7 +538,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
 
                     let instBytes = assemble inst
                     nonce <- N.indexValue <$> N.freshNonce nonceGen
-                    evalResult <- E.try $ evaluateInstruction sym sems inst initialState
+                    evalResult <- E.try $ evaluateInstruction bak sems inst initialState
 
                     case evalResult of
                         Left (e::E.SomeException) -> do

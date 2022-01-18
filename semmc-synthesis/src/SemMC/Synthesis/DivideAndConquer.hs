@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MonoLocalBinds #-}
@@ -32,11 +33,11 @@ import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.Template
 import           SemMC.Util
 
-truncateFormula :: forall t solver fs arch.
-                   (OrdF (Location arch))
-                => Formula (CBO.OnlineBackend t solver fs) arch
+truncateFormula :: forall sym t st fs arch.
+                   (OrdF (Location arch), sym ~ WE.ExprBuilder t st fs)
+                => Formula sym arch
                 -> Set.Set (Some (Location arch))
-                -> Formula (CBO.OnlineBackend t solver fs) arch
+                -> Formula sym arch
 truncateFormula form keepLocs =
   let filterDef :: Location arch tp
                 -> WE.Expr t tp
@@ -51,10 +52,10 @@ truncateFormula form keepLocs =
              , formDefs = newDefs
              }
 
-makeSplit :: (OrdF (Location arch))
-          => Formula (CBO.OnlineBackend t solver fs) arch
+makeSplit :: (OrdF (Location arch), sym ~ WE.ExprBuilder t st fs)
+          => Formula sym arch
           -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
-          -> Maybe (Formula (CBO.OnlineBackend t solver fs) arch, Formula (CBO.OnlineBackend t solver fs) arch)
+          -> Maybe (Formula sym arch, Formula sym arch)
 makeSplit form (locs1, locs2)
   | Set.null locs1 || Set.null locs2 = Nothing
   | otherwise = let form1 = truncateFormula form locs1
@@ -68,9 +69,9 @@ splits [] = [(Set.empty, Set.empty)]
 splits (x:xs) = [ s' | (left, right) <- splits xs
                      , s' <- [(Set.insert x left, right), (left, Set.insert x right)]]
 
-enumerateSplits :: (OrdF (Location arch), WPO.OnlineSolver solver)
-                => Formula (CBO.OnlineBackend t solver fs) arch
-                -> [(Formula (CBO.OnlineBackend t solver fs) arch, Formula (CBO.OnlineBackend t solver fs) arch)]
+enumerateSplits :: (OrdF (Location arch), sym ~ WE.ExprBuilder t st fs)
+                => Formula sym arch
+                -> [(Formula sym arch, Formula sym arch)]
 enumerateSplits form = mapMaybe (makeSplit form)
                      $ splits (MapF.keys (formDefs form))
 
@@ -79,18 +80,20 @@ divideAndConquer :: (Architecture arch,
                      ArchRepr arch,
                      Architecture (TemplatedArch arch),
                      Typeable arch,
+                     sym ~ WE.ExprBuilder t st fs,
+                     CB.IsSymInterface sym,
                      WPO.OnlineSolver solver,
-                     CB.IsSymInterface (CBO.OnlineBackend t solver fs),
                      ?memOpts :: LLVM.MemOptions
                      )
-                 => SynthesisParams (CBO.OnlineBackend t solver fs) arch
-                 -> Formula (CBO.OnlineBackend t solver fs) arch
+                 => CBO.OnlineBackend solver t st fs
+                 -> SynthesisParams sym arch
+                 -> Formula sym arch
                  -- ^ Formula to synthesize.
                  -> IO (Maybe [Instruction arch])
-divideAndConquer params form =
+divideAndConquer bak params form =
   sequenceMaybes (map trySplit (enumerateSplits form))
-    >>= maybe (synthesizeFormula params form) (return . Just)
+    >>= maybe (synthesizeFormula bak params form) (return . Just)
   where trySplit (form1, form2) = runMaybeT $ do
-          Just insns1 <- liftIO $ divideAndConquer params form1
-          Just insns2 <- liftIO $ divideAndConquer params form2
+          Just insns1 <- liftIO $ divideAndConquer bak params form1
+          Just insns2 <- liftIO $ divideAndConquer bak params form2
           return (insns1 ++ insns2)

@@ -57,7 +57,6 @@ import           Data.Parameterized.HasRepr
 -- from asl translator
 import           Data.Parameterized.CtxFuns
 
-import qualified Lang.Crucible.Backend.Simple as CBS
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 import           Language.ASL.Globals ( UnitType )
@@ -609,10 +608,11 @@ postProcess opts pf =
       in pf { SF.pfDefs = defs' }
     False -> pf
 
-loadSemantics :: forall t fs
-               . CBS.SimpleBackend t fs
-              -> ASLSemanticsOpts
-              -> IO (ASLSemantics (CBS.SimpleBackend t fs))
+loadSemantics :: forall sym t st fs.
+  sym ~ WB.ExprBuilder t st fs =>
+  sym ->
+  ASLSemanticsOpts ->
+  IO (ASLSemantics sym)
 loadSemantics sym opts = do
   initenv <- formulaEnv (Proxy @ARM.AArch32) sym
   ufBundle <- mkUFBundle sym initenv
@@ -632,9 +632,9 @@ loadSemantics sym opts = do
 
   let fformulas = map (mkFormula sym) funcFormulas
 
-  let addFunctionFormula :: (String, Some (SF.FunctionFormula (CBS.SimpleBackend t fs)))
-                         -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
-                         -> MapF.MapF SF.FunctionRef (SF.FunctionFormula (CBS.SimpleBackend t fs))
+  let addFunctionFormula :: (String, Some (SF.FunctionFormula sym))
+                         -> MapF.MapF SF.FunctionRef (SF.FunctionFormula sym)
+                         -> MapF.MapF SF.FunctionRef (SF.FunctionFormula sym)
       addFunctionFormula (_nm, Some f) l =
         MapF.insert (SF.functionRef f) f l
   let lib = foldr addFunctionFormula SF.emptyLibrary fformulas

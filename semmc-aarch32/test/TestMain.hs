@@ -55,8 +55,8 @@ data Flag = N | Z | C | V | Q
   deriving (Show, Eq)
 
 -- | Given a list of flags initializes a CPSR set to user mode
-mkCPSR :: [Flag] -> Word32
-mkCPSR flags = foldr (.|.) 16 [n,z,c,v,q]
+_mkCPSR :: [Flag] -> Word32
+_mkCPSR flags = foldr (.|.) 16 [n,z,c,v,q]
   where n = if N `elem` flags then (2 ^ (31 :: Word32)) else 0
         z = if Z `elem` flags then (2 ^ (30 :: Word32)) else 0
         c = if C `elem` flags then (2 ^ (29 :: Word32)) else 0
