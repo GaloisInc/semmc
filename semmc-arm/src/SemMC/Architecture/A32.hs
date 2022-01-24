@@ -482,7 +482,7 @@ instance A.Architecture A32 where
 -- Note that this doesn't need to be polymorphic across architectures, as Thumb
 -- mode can't access r15 this way.
 eval_isR15 :: forall t st fs sh u tp sym bak
-            . (sym ~ WEB.ExprBuilder t st fs, CB.IsBoolSolver sym bak)
+            . (sym ~ WEB.ExprBuilder t st fs, CB.IsSymBackend sym bak)
            => bak
            -> F.ParameterizedFormula (WEB.ExprBuilder t st fs) A32 sh
            -> SL.List (A.AllocatedOperand A32 sym) sh

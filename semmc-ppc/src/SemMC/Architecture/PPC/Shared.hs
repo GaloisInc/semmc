@@ -202,7 +202,7 @@ isR0 :: forall t st fs sh u tp arch sym bak
       . ( A.Location arch ~ Location arch
         , A.Operand arch ~ PPC.Operand
         , sym ~ S.ExprBuilder t st fs
-        , CB.IsBoolSolver sym bak
+        , CB.IsSymBackend sym bak
         )
      => bak
      -> F.ParameterizedFormula sym arch sh

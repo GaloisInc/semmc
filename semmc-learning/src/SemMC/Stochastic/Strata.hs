@@ -36,6 +36,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Instruction as D
 
 import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend as CB
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -52,6 +53,7 @@ import           SemMC.Stochastic.Initialize ( withInitialState, Config(..), Syn
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Stochastic.Synthesize ( synthesize )
+import           SemMC.Symbolic ( Sym )
 
 {-
 
@@ -68,7 +70,8 @@ caller controls the number and placement of threads.
 -- all draw work (opcodes to synthesize semantics for) from the same
 -- shared work list.
 stratifiedSynthesis :: forall arch t solver fs
-                     . (SynC arch, L.HasCallStack, L.HasLogCfg, WPO.OnlineSolver solver)
+                     . (SynC arch, L.HasCallStack, L.HasLogCfg
+                       , CB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver)
                     => SynEnv solver t fs arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t fs) arch))
 stratifiedSynthesis env0 = do
@@ -85,7 +88,7 @@ stratifiedSynthesis env0 = do
 -- list, because some instructions can't be learned effectively
 -- yet. This "timing out" is handled by the orchestration code (not in
 -- this module) that calls 'stratifiedSynthesis' itself.
-processWorklist :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
+processWorklist :: (SynC arch, L.HasCallStack, CB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver)
                 => Syn solver t fs arch ()
 processWorklist = do
   mwork <- takeWork
@@ -98,7 +101,7 @@ processWorklist = do
 
 -- | Process a single opcode, requeueing it on the work list if
 -- synthesis times out.
-processOpcode :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
+processOpcode :: (SynC arch, L.HasCallStack, CB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver)
               => A.Opcode arch (A.Operand arch) sh -> Syn solver t fs arch ()
 processOpcode op = do
   rinstr <- instantiateInstruction op
@@ -132,14 +135,14 @@ processOpcode op = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we timed out before learning any candidates.
-strataOne :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
+strataOne :: (SynC arch, L.HasCallStack, CB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver)
           => A.Opcode arch (A.Operand arch) sh
           -> AC.RegisterizedInstruction arch
           -> Syn solver t fs arch (Maybe (F.ParameterizedFormula (Sym t fs) arch sh ))
 strataOne op rinstr = strataOneLoop op rinstr (C.emptyEquivalenceClasses)
 
 -- | Main loop of stratified synthesis for a single instruction.
-strataOneLoop :: (SynC arch, L.HasCallStack, WPO.OnlineSolver solver)
+strataOneLoop :: (SynC arch, L.HasCallStack, CB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver)
               => A.Opcode arch (A.Operand arch) sh
               -> AC.RegisterizedInstruction arch
               -> C.EquivalenceClasses (CP.CandidateProgram t fs arch)

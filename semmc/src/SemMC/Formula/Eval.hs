@@ -153,7 +153,7 @@ evalBitvectorExtractorWith wrapResultWith operationName litRep match =
 -- | See `evaluateFunctions'`
 evaluateFunctions
   :: MapF.OrdF (Location arch)
-  => B.IsBoolSolver (Sym t st fs) bak
+  => B.IsSymBackend (Sym t st fs) bak
   => bak
   -> ParameterizedFormula (Sym t st fs) arch sh
   -> SL.List (A.AllocatedOperand arch (Sym t st fs)) sh
@@ -167,7 +167,7 @@ evaluateFunctions bak pf operands locExpr rewriters elt =
 -- | Recursively applies rewrite rules to all uninterpreted functions present in a formula.
 evaluateFunctions'
   :: MapF.OrdF (Location arch)
-  => B.IsBoolSolver (Sym t st fs) bak
+  => B.IsSymBackend (Sym t st fs) bak
   => bak
   -> ParameterizedFormula (Sym t st fs) arch sh
   -> SL.List (A.AllocatedOperand arch (Sym t st fs)) sh

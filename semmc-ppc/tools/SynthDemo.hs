@@ -102,7 +102,7 @@ makePlain = MapF.foldrWithKey f MapF.empty
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
         f op pf = MapF.insert op (unTemplate pf)
 
-instantiateFormula' :: (Architecture arch, CRUB.IsBoolSolver (WEB.ExprBuilder t st fs) bak)
+instantiateFormula' :: (Architecture arch, CRUB.IsSymBackend (WEB.ExprBuilder t st fs) bak)
                     => bak
                     -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (WEB.ExprBuilder t st fs) arch)
                     -> Instruction arch
@@ -141,7 +141,7 @@ loadBaseSet ops bak = do
 
 
 symbolicallyExecute
-  :: (Architecture arch, Traversable t1, CRUB.IsBoolSolver (WEB.ExprBuilder t2 st fs) bak)
+  :: (Architecture arch, Traversable t1, CRUB.IsSymBackend (WEB.ExprBuilder t2 st fs) bak)
   => bak
   -> MapF.MapF
        (SemMC.Architecture.Opcode arch (SemMC.Architecture.Operand arch))

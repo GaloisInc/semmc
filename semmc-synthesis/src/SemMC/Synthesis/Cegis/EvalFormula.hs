@@ -21,7 +21,6 @@ import qualified Data.Parameterized.TraversableF as TF
 
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
-import           Lang.Crucible.Simulator.ExecutionTree (SomeBackend(..))
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 
@@ -114,8 +113,7 @@ evalFormula' sym (Formula vars defs) el = do
 -- | instantiate all calls to read_mem in the formula
 simplifyReadMem' :: forall arch t st fs sym bak.
                 ( sym ~ WE.ExprBuilder t st fs
-                , CB.IsSymInterface sym
-                , CB.IsBoolSolver sym bak
+                , CB.IsSymBackend sym bak
                 , A.Architecture arch
                 , ?memOpts :: LLVM.MemOptions
                 )
@@ -131,8 +129,7 @@ simplifyReadMem' bak f@(Formula vars defs) (LocEval el) = do
 -- simplifying occurrences of @read_mem@ in the formula.
 evalFormulaMem' :: forall arch t st fs sym bak.
                 ( sym ~ WE.ExprBuilder t st fs
-                , CB.IsSymInterface sym
-                , CB.IsBoolSolver sym bak
+                , CB.IsSymBackend sym bak
                 , A.Architecture arch
                 , ?memOpts :: LLVM.MemOptions
                 )
@@ -160,7 +157,7 @@ evalFormulaMem :: forall arch t st fs sym.
              -> L.ArchState arch (WE.Expr t)
              -> T.Cegis sym arch (Formula sym arch)
 evalFormulaMem f st = do
-  SomeBackend bak <- T.askBackend
+  CB.SomeBackend bak <- T.askBackend
   let sym = CB.backendGetSym bak
   memExpr <- T.askMemExpr
   let locEval = mkMemEvalLoc @arch sym st memExpr
@@ -186,7 +183,7 @@ instantiateFormula' :: A.Architecture arch
                     => T.TemplatableInstruction arch
                     -> T.Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
 instantiateFormula' (T.TemplatableInstruction op oplist) = do
-  SomeBackend bak <- T.askBackend
+  CB.SomeBackend bak <- T.askBackend
   semantics <- T.askSemantics
   case MapF.lookup op semantics of
     Nothing -> error ("Missing semantics for opcode " ++ MapF.showF op)

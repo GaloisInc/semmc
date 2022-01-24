@@ -28,7 +28,6 @@ import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Context as Ctx
 import qualified Lang.Crucible.Backend as B
-import           Lang.Crucible.Simulator.ExecutionTree (SomeBackend(..))
 
 import qualified What4.Interface as S
 import qualified What4.Expr.Builder as WE
@@ -41,7 +40,7 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Synthesis.Cegis.Types as T
 import qualified SemMC.Synthesis.Cegis.MemAccesses as MA
 
-data MemData sym arch = MemData { memBackend :: SomeBackend sym
+data MemData sym arch = MemData { memBackend :: B.SomeBackend sym
                                 , memImpl :: LLVM.MemImpl sym
                                 , memBase :: LLVM.LLVMPtr sym (A.RegWidth arch)
                                 , memAlignment :: LLVM.Alignment
@@ -61,10 +60,10 @@ instance T.HasMemExpr MemM
 instance T.HasSym MemM
   where
     askSym = MemM $
-      do SomeBackend bak <- memBackend <$> get
+      do B.SomeBackend bak <- memBackend <$> get
          return (B.backendGetSym bak)
       
-askBackend :: MemM sym w (SomeBackend sym)
+askBackend :: MemM sym w (B.SomeBackend sym)
 askBackend = MemM$ memBackend <$> get
 
 askImpl :: MemM sym w (LLVM.MemImpl sym)
@@ -85,7 +84,7 @@ putImpl m = MemM $ do
 -- of size 2^w where w is the width of registers in the architecture. All values
 -- in memory are initialized to the values of an uninterpreted symbolic array.
 withMem :: forall arch sym bak a.
-           ( A.Architecture arch, B.IsSymInterface sym, B.IsBoolSolver sym bak
+           ( A.Architecture arch, B.IsSymInterface sym, B.IsSymBackend sym bak
            , ?memOpts :: LLVM.MemOptions )
         => bak
         -> S.SymExpr sym (A.MemType arch)
@@ -106,7 +105,7 @@ withMem bak memExp op = do
     mem' <- LLVM.doArrayStoreUnbounded bak mem base LLVM.noAlignment memExp
 
     -- 4) Execute the operation with these starting conditions
-    evalStateT (runMemM op) (MemData (SomeBackend bak) mem' base LLVM.noAlignment memExp)
+    evalStateT (runMemM op) (MemData (B.SomeBackend bak) mem' base LLVM.noAlignment memExp)
 
 
 -- Input: a bit vector representing the offset from the base ptr for memory
@@ -138,7 +137,7 @@ readMemNoOF :: ( LLVM.HasPtrWidth (A.RegWidth arch)
             -- ^ The address in memory at which to read
             -> MemM sym arch (S.SymBV sym bits)
 readMemNoOF bits offset = do
-  SomeBackend bak <- askBackend
+  B.SomeBackend bak <- askBackend
   let sym = B.backendGetSym bak
   ptr <- mkPtr offset
   mem <- askImpl
@@ -206,7 +205,7 @@ readMem bits addr = readMemNoOF bits addr
 readMemIO :: forall arch sym bak bits.
              ( A.Architecture arch
              , B.IsSymInterface sym
-             , B.IsBoolSolver sym bak
+             , B.IsSymBackend sym bak
              , 1 S.<= bits
              , ?memOpts :: LLVM.MemOptions
              )
@@ -338,7 +337,7 @@ writeMem offset v = do
 
   v' <- symBVToLLVMVal v
 
-  SomeBackend bak <- askBackend
+  B.SomeBackend bak <- askBackend
   mem' <- liftIO $ LLVM.storeRaw bak mem ptr sType align v'
 
   -- liftIO . print $ PP.text "Successfully wrote value"

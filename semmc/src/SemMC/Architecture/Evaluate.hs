@@ -34,7 +34,7 @@ import qualified SemMC.Formula as F
 -- final state.
 evaluateInstruction :: (A.Architecture arch
                        , MapF.OrdF (A.Opcode arch (A.Operand arch))
-                       , B.IsBoolSolver (S.ExprBuilder t st fs) bak
+                       , B.IsSymBackend (S.ExprBuilder t st fs) bak
                        )
                     => bak
                     -- ^ The symbolic backend
@@ -66,7 +66,7 @@ evaluateFormula :: forall t st fs bak arch .
                    (MapF.OrdF (A.Location arch)
                    , ShowF (A.Location arch)
                    , A.IsLocation (A.Location arch)
-                   , B.IsBoolSolver (S.ExprBuilder t st fs) bak
+                   , B.IsSymBackend (S.ExprBuilder t st fs) bak
                    )
                 => bak
                 -> F.Formula (S.ExprBuilder t st fs) arch

@@ -35,7 +35,6 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Context as Ctx
 
 import qualified Lang.Crucible.Backend as CB
-import           Lang.Crucible.Simulator.ExecutionTree (SomeBackend(..))
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
@@ -234,7 +233,7 @@ simplifyWithTestMem Nothing _ _ = do
   return $ S.truePred sym
 simplifyWithTestMem (Just (L.MemLoc w_mem mem)) f test
   | Just S.Refl <- S.testEquality w_mem (S.knownNat @(A.RegWidth arch)) = do
-  SomeBackend bak <- T.askBackend
+  CB.SomeBackend bak <- T.askBackend
   let sym = CB.backendGetSym bak
   memExpr <- T.askMemExpr
   liftIO $ LLVM.withMem @arch bak memExpr $ do
@@ -309,8 +308,7 @@ stripMemLoc = MapF.filterWithKey (\l _ -> not (L.isMemoryLocation l))
 -- memory locations (e.g. A32)
 mkTest :: forall sym bak arch t st fs.
           (A.Architecture arch, sym ~ WE.ExprBuilder t st fs
-          , CB.IsSymInterface sym
-          , CB.IsBoolSolver sym bak
+          , CB.IsSymBackend sym bak
           , ?memOpts :: LLVM.MemOptions
           )
        => bak

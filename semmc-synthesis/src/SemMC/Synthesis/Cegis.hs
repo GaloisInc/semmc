@@ -182,8 +182,7 @@ checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
 checkNoDuplicates :: forall arch sym bak t st fs.
              ( S.IsExprBuilder sym
              , A.Architecture arch
-             , CB.IsSymInterface sym
-             , CB.IsBoolSolver sym bak
+             , CB.IsSymBackend sym bak
              , sym ~ WE.ExprBuilder t st fs
              , ?memOpts :: LLVM.MemOptions
              )

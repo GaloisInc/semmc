@@ -57,6 +57,7 @@ import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.Synthesize as S
+import           SemMC.Symbolic (Sym)
 import           SemMC.Synthesis
 import           SemMC.Synthesis.Template
 import           SemMC.Toy as T
@@ -285,7 +286,9 @@ defaultRunSynToyCfg = RunSynToyCfg
 runSynToy :: (U.HasLogCfg)
           => RunSynToyCfg
           -> FilePath -- ^ Root dir for test data, e.g. semantics.
-          -> (forall solver t fs . WPO.OnlineSolver solver => Syn solver t fs Toy a)
+          -> (forall solver t fs.
+               (SB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver) =>
+               Syn solver t fs Toy a)
           -> IO a
 runSynToy rstCfg dataRoot action = do
   stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")

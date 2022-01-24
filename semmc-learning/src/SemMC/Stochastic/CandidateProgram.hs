@@ -46,7 +46,7 @@ deriving instance (SynC arch) => Show (CandidateProgram t fs arch)
 
 -- | Convert an instruction into a 'F.Formula'
 instructionFormula :: forall arch t solver fs .
-                      (SynC arch, OnlineSolver solver)
+                      (SynC arch, CB.IsSymInterface (Sym t fs), OnlineSolver solver)
                    => Backend solver t fs
                    -> AP.SynthInstruction arch
                    -> Syn solver t fs arch (F.Formula (Sym t fs) arch)
@@ -110,7 +110,7 @@ instructionFormula bak i = do
       U.throwIO (userError msg)
 
 -- | Convert a program into a formula
-programFormula :: (SynC arch, OnlineSolver solver)
+programFormula :: (SynC arch, CB.IsSymInterface (Sym t fs), OnlineSolver solver)
                => Backend solver t fs
                -> [AP.SynthInstruction arch]
                -> Syn solver t fs arch (F.Formula (Sym t fs) arch)

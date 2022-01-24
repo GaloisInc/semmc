@@ -167,7 +167,7 @@ templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix
   fi ops' (WrappedOperand orep ix) rep
 
 templatedEvaluator :: forall arch t st fs bak sh u tp
-                    . (PC.OrdF (Location arch), B.IsBoolSolver (S.ExprBuilder t st fs) bak)
+                    . (PC.OrdF (Location arch), B.IsSymBackend (S.ExprBuilder t st fs) bak)
                    => Evaluator arch t st fs
                    -> bak
                    -> ParameterizedFormula (S.ExprBuilder t st fs) (TemplatedArch arch) sh
@@ -447,7 +447,7 @@ tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
 
 genTemplatedFormula :: (TemplateConstraints arch
                        , S.IsSymExprBuilder (S.ExprBuilder t st fs)
-                       , B.IsBoolSolver (S.ExprBuilder t st fs) bak)
+                       , B.IsSymBackend (S.ExprBuilder t st fs) bak)
                     => bak
                     -> TemplatedInstruction (S.ExprBuilder t st fs) arch sh
                     -> IO (TemplatedInstructionFormula (S.ExprBuilder t st fs) arch)

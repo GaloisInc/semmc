@@ -23,6 +23,7 @@ import qualified Data.Text as T
 import           Hedgehog
 import           Hedgehog.Internal.Property ( forAllT )
 import           HedgehogUtil ( )
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param, ite, uf
                            , bvadd, bvmul, bvshl, bvnot
@@ -63,7 +64,7 @@ data SemMCTestData t = SemMCTestData
 withYices ::
   (MonadIO m, E.MonadMask m) =>
   NonceGenerator IO t ->
-  (forall solver st fs. OnlineSolver solver =>
+  (forall solver st fs. (CB.IsSymInterface (ExprBuilder t st fs), OnlineSolver solver) =>
     ExprBuilder t st fs -> CBO.OnlineBackend solver t st fs -> m a) ->
   m a
 withYices gen k =

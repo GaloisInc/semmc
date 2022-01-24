@@ -52,7 +52,6 @@ import qualified What4.Symbol as WS
 import qualified What4.Expr.GroundEval as GE
 import qualified What4.SatResult as SAT
 import qualified Lang.Crucible.Backend as B
-import           Lang.Crucible.Simulator.ExecutionTree ( SomeBackend(..) )
 
 import qualified Dismantle.Instruction as D
 
@@ -66,7 +65,7 @@ import qualified SemMC.Synthesis.Template as T
 
 -- | Parameters given to call cegis.
 data CegisParams sym arch =
-  CegisParams { cpBackend :: SomeBackend sym
+  CegisParams { cpBackend :: B.SomeBackend sym
               -- ^ The symbolic expression builder.
               , cpSemantics :: T.TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics.
@@ -83,7 +82,7 @@ class HasMemExpr m where
   askMemExpr :: m sym arch (S.SymExpr sym (A.MemType arch))
 
 -- | Construct parameters for Cegis
-mkCegisParams :: (S.IsSymExprBuilder sym, B.IsBoolSolver sym bak, A.Architecture arch)
+mkCegisParams :: (S.IsSymExprBuilder sym, B.IsSymBackend sym bak, A.Architecture arch)
               => bak 
               -> T.TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics
@@ -95,7 +94,7 @@ mkCegisParams bak sem target = case S.userSymbol "Mem" of
     Right memSymbol -> do
       let sym = B.backendGetSym bak
       memExpr <- S.freshConstant sym memSymbol S.knownRepr
-      return $ CegisParams { cpBackend = SomeBackend bak
+      return $ CegisParams { cpBackend = B.SomeBackend bak
                            , cpSemantics = sem
                            , cpTarget = target
                            , cpMem   = memExpr
@@ -124,7 +123,7 @@ runCegis params st (Cegis op) = evalStateT (runReaderT op params) st
 
 instance HasSym Cegis where
   askSym = Cegis $
-             do SomeBackend bak <- reader cpBackend
+             do B.SomeBackend bak <- reader cpBackend
                 return (B.backendGetSym bak)
 
 askSemantics :: Cegis sym arch (T.TemplatedSemantics sym arch)
@@ -139,7 +138,7 @@ askTests = Cegis . lift $ csTests <$> get
 askCheck :: Cegis sym arch (S.Pred sym)
 askCheck = Cegis . lift $ csCheck <$> get
 
-askBackend :: Cegis sym arch (SomeBackend sym)
+askBackend :: Cegis sym arch (B.SomeBackend sym)
 askBackend = Cegis $ reader cpBackend
 
 putCheck :: S.Pred sym -> Cegis sym arch ()

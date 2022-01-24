@@ -81,6 +81,7 @@ symbolicallySimulateProgram :: forall proxy sym solver t st fs arch
                              . ( A.Architecture arch
                                , WPO.OnlineSolver solver
                                , sym ~ WE.ExprBuilder t st fs
+                               , CB.IsSymInterface sym
                                )
                             => proxy arch
                             -> CBO.OnlineBackend solver t st fs

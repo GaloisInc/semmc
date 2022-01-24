@@ -292,7 +292,7 @@ taggedExprImmediate _ _ = error "Other tagged operand"
 -- call site that the expression produced by the evaluator is correctly-typed.
 data Evaluator arch t st fs =
   Evaluator (forall tp u sh bak.
-              B.IsBoolSolver (Sym t st fs) bak
+              B.IsSymBackend (Sym t st fs) bak
               => bak
               -> ParameterizedFormula (Sym t st fs) arch sh
               -> SL.List (AllocatedOperand arch (Sym t st fs)) sh

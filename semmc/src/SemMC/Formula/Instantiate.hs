@@ -167,7 +167,7 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
 instantiateFormula :: forall arch t st fs bak sh.
                       ( A.Architecture arch
                       , S.IsSymExprBuilder (SB t st fs)
-                      , B.IsBoolSolver (SB t st fs) bak
+                      , B.IsSymBackend (SB t st fs) bak
                       )
                    => bak
                    -> ParameterizedFormula (SB t st fs) arch sh
@@ -182,7 +182,7 @@ instantiateFormula bak pf opVals
 instantiateFormula' :: forall arch t st fs bak sh.
                       ( A.Architecture arch
                       , S.IsSymExprBuilder (SB t st fs)
-                      , B.IsBoolSolver (SB t st fs) bak) 
+                      , B.IsSymBackend (SB t st fs) bak) 
                    => bak
                    -> ParameterizedFormula (SB t st fs) arch sh
                    -> SL.List (A.Operand arch) sh

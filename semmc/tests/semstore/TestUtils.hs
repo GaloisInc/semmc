@@ -116,6 +116,7 @@ compareParameterizedFormulasSymbolically
      , SA.Architecture arch
      , SA.Location arch ~ TestLocation
      , sym ~ WE.ExprBuilder t st fs
+     , CB.IsSymInterface sym
      , WPO.OnlineSolver solver
      ) =>
      CBO.OnlineBackend solver t st fs

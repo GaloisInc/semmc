@@ -31,8 +31,7 @@ import qualified SemMC.Synthesis.Cegis.LLVMMem as LLVM
 -- | Instantiate occurrences of 'read_mem' that occur in an expression
 instantiateReadMem :: forall arch t st fs sym bak tp.
                    ( sym ~ WE.ExprBuilder t st fs
-                   , B.IsSymInterface sym
-                   , B.IsBoolSolver sym bak
+                   , B.IsSymBackend sym bak
                    , A.Architecture arch
                    , ?memOpts :: LLVM.MemOptions
                    )
@@ -81,8 +80,7 @@ readMemInterp n = ( A.createSymbolicName (A.readMemUF @arch n)
 -- read_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
 readMemEvaluator :: forall arch sym bak t st fs sh u tp.
                        ( sym ~ WE.ExprBuilder t st fs
-                       , B.IsSymInterface sym
-                       , B.IsBoolSolver sym bak
+                       , B.IsSymBackend sym bak
                        , A.Architecture arch
                        , ?memOpts :: LLVM.MemOptions
                        )
@@ -112,8 +110,7 @@ readMemEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments a
 -- as a sequence of reads of primitive memory
 readMemEvaluatorTotal :: forall arch sym bak w t st fs.
                        ( sym ~ WE.ExprBuilder t st fs
-                       , B.IsSymInterface sym
-                       , B.IsBoolSolver sym bak
+                       , B.IsSymBackend sym bak
                        , A.Architecture arch
                        , 1 S.<= w
                        , ?memOpts :: LLVM.MemOptions

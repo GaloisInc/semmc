@@ -57,6 +57,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
 import           What4.Protocol.Online (OnlineSolver)
+import qualified Lang.Crucible.Backend as CB
 
 import           SemMC.Architecture ( Instruction, Opcode, Operand, ShapeRepr, OperandTypeRepr )
 import qualified SemMC.Architecture.Concrete as AC
@@ -72,6 +73,7 @@ import           SemMC.Stochastic.Pseudo
                  )
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.RvwpOptimization as R
+import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Util as U
 import qualified UnliftIO as U
 
@@ -79,7 +81,7 @@ import qualified UnliftIO as U
 -- the same semantics as the given instruction.
 --
 -- This function can loop forever, and should be called under a timeout
-synthesize :: (SynC arch, U.HasCallStack, OnlineSolver solver)
+synthesize :: (SynC arch, U.HasCallStack, CB.IsSymInterface (Sym t fs), OnlineSolver solver)
            => AC.RegisterizedInstruction arch
            -> Syn solver t fs arch (CP.CandidateProgram t fs arch)
 synthesize target = do

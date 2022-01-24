@@ -131,7 +131,9 @@ withInitialState :: forall arch a
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
-                 -> (forall t solver fs . (WPO.OnlineSolver solver) => SynEnv solver t fs arch -> IO a)
+                 -> (forall t solver fs.
+                       (CB.IsSymInterface (Sym t fs), WPO.OnlineSolver solver) =>
+                       SynEnv solver t fs arch -> IO a)
                  -- ^ Computation to pass run with access to the 'SynEnv'
                  -> IO a
 withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
