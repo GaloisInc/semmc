@@ -66,7 +66,7 @@ import qualified SemMC.Synthesis.Template as T
 -- | Parameters given to call cegis.
 data CegisParams sym arch =
   CegisParams { cpBackend :: B.SomeBackend sym
-              -- ^ The symbolic expression builder.
+              -- ^ The symbolic backend.
               , cpSemantics :: T.TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics.
               , cpTarget :: Formula sym arch

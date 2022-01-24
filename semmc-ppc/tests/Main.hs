@@ -185,7 +185,7 @@ loadBaseSet :: forall sym solver t st fs.
             -> IO (MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC),
                    SS.SynthesisEnvironment sym PPC64.PPC)
 loadBaseSet funcs ops bak = do
-  let sym = (CB.backendGetSym bak)
+  let sym = CB.backendGetSym bak
   lcfg <- SL.mkNonLogCfg
   let ?logCfg = lcfg
   env <- SF.formulaEnv (Proxy @PPC64.PPC) sym

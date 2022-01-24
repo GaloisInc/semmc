@@ -64,7 +64,7 @@ instance T.HasSym MemM
          return (B.backendGetSym bak)
       
 askBackend :: MemM sym w (B.SomeBackend sym)
-askBackend = MemM$ memBackend <$> get
+askBackend = MemM $ memBackend <$> get
 
 askImpl :: MemM sym w (LLVM.MemImpl sym)
 askImpl = MemM $ memImpl <$> get
