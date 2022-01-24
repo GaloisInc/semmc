@@ -49,16 +49,3 @@ testRunner caseChan resChan = do
         CE.TestSuccess tr -> do
           printf "Received test result with nonce %d\n" (CE.resultNonce tr)
           print (CE.resultContext tr)
-
--- | Data representation of CPSR flags
-data Flag = N | Z | C | V | Q
-  deriving (Show, Eq)
-
--- | Given a list of flags initializes a CPSR set to user mode
-_mkCPSR :: [Flag] -> Word32
-_mkCPSR flags = foldr (.|.) 16 [n,z,c,v,q]
-  where n = if N `elem` flags then (2 ^ (31 :: Word32)) else 0
-        z = if Z `elem` flags then (2 ^ (30 :: Word32)) else 0
-        c = if C `elem` flags then (2 ^ (29 :: Word32)) else 0
-        v = if V `elem` flags then (2 ^ (28 :: Word32)) else 0
-        q = if Q `elem` flags then (2 ^ (27 :: Word32)) else 0
