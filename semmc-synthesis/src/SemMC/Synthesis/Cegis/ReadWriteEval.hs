@@ -29,18 +29,19 @@ import qualified SemMC.Synthesis.Cegis.LLVMMem as LLVM
 
 
 -- | Instantiate occurrences of 'read_mem' that occur in an expression
-instantiateReadMem :: forall arch t st fs sym tp.
-                   ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
+instantiateReadMem :: forall arch t st fs sym bak tp.
+                   ( sym ~ WE.ExprBuilder t st fs
+                   , B.IsSymBackend sym bak
                    , A.Architecture arch
                    , ?memOpts :: LLVM.MemOptions
                    )
-                   => sym
+                   => bak
                    -> F.Formula sym arch
                    -> (forall tp'. AL.Location arch tp' -> IO (WE.Expr t tp'))
                    -> S.SymExpr sym tp
                    -> IO (S.SymExpr sym tp)
-instantiateReadMem sym f evalLoc e =
-    E.evaluateFunctions sym
+instantiateReadMem bak f evalLoc e =
+    E.evaluateFunctions bak
                         (trivialParameterizedFormula f)
                         L.Nil
                         evalLoc
@@ -66,7 +67,8 @@ mapFKeys :: forall keys keys' res.
 mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
 
 readMemInterp :: forall arch t st fs sym.
-                ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
+                ( sym ~ WE.ExprBuilder t st fs
+                , B.IsSymInterface sym
                 , A.Architecture arch
                 , ?memOpts :: LLVM.MemOptions
                 )
@@ -76,12 +78,13 @@ readMemInterp n = ( A.createSymbolicName (A.readMemUF @arch n)
                   , A.Evaluator readMemEvaluator)
 
 -- read_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
-readMemEvaluator :: forall arch sym t st fs sh u tp.
-                       ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
+readMemEvaluator :: forall arch sym bak t st fs sh u tp.
+                       ( sym ~ WE.ExprBuilder t st fs
+                       , B.IsSymBackend sym bak
                        , A.Architecture arch
                        , ?memOpts :: LLVM.MemOptions
                        )
-                 => sym
+                 => bak
                  -> F.ParameterizedFormula sym arch sh
                  -> L.List (A.AllocatedOperand arch sym) sh
                  -- ^ We expect this list to be empty
@@ -92,12 +95,12 @@ readMemEvaluator :: forall arch sym t st fs sh u tp.
                  -> S.BaseTypeRepr tp
                  -- ^ The result type, a bit-vector of size w
                  -> IO (WE.Expr t tp)
-readMemEvaluator sym _f L.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i) evalLoc (S.BaseBVRepr w)
+readMemEvaluator bak _f L.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i) evalLoc (S.BaseBVRepr w)
   | Just S.Refl <- S.testEquality (S.exprType mem) (A.memTypeRepr @arch)
   , S.BaseBVRepr iType <- S.exprType i
   , S.NatEQ <- S.compareNat iType (S.knownNat @(A.RegWidth arch))
   , S.NonZeroNat <- S.isZeroNat iType
-    = readMemEvaluatorTotal @arch sym evalLoc w mem i
+    = readMemEvaluatorTotal @arch bak evalLoc w mem i
 readMemEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments and cannot be evaluated"
 
 
@@ -105,13 +108,14 @@ readMemEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments a
 
 -- | Interprets a 'readMem' as a function over well-typed symbolic expressions
 -- as a sequence of reads of primitive memory
-readMemEvaluatorTotal :: forall arch sym w t st fs.
-                       ( sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
+readMemEvaluatorTotal :: forall arch sym bak w t st fs.
+                       ( sym ~ WE.ExprBuilder t st fs
+                       , B.IsSymBackend sym bak
                        , A.Architecture arch
                        , 1 S.<= w
                        , ?memOpts :: LLVM.MemOptions
                        )
-                     => sym
+                     => bak
                      -- ^ The expression builder
                      -> (forall ltp . A.Location arch ltp -> IO (WE.Expr t ltp))
                      -> S.NatRepr w
@@ -122,11 +126,11 @@ readMemEvaluatorTotal :: forall arch sym w t st fs.
                      -> S.SymExpr sym (S.BaseBVType (A.RegWidth arch))
                      -- ^ The index at which to start reading bits
                      -> IO (S.SymExpr sym (S.BaseBVType w))
-readMemEvaluatorTotal sym evalLoc w memExpr i
+readMemEvaluatorTotal bak evalLoc w memExpr i
   | [AL.MemLoc w' memLoc] <- AL.memLocation @(AL.Location arch)
   , Just S.Refl <- testEquality w' (S.knownNat @(A.RegWidth arch)) = do
     startingMem <- evalLoc memLoc
-    LLVM.withMem @arch sym startingMem $ do
+    LLVM.withMem @arch bak startingMem $ do
       LLVM.instantiateMemOps memExpr
       let ?recordLLVMAnnotation = \_ _ _ -> pure ()
       LLVM.readMem w i

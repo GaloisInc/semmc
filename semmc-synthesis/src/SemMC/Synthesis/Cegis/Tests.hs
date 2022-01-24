@@ -233,9 +233,10 @@ simplifyWithTestMem Nothing _ _ = do
   return $ S.truePred sym
 simplifyWithTestMem (Just (L.MemLoc w_mem mem)) f test
   | Just S.Refl <- S.testEquality w_mem (S.knownNat @(A.RegWidth arch)) = do
-  sym <- T.askSym
+  CB.SomeBackend bak <- T.askBackend
+  let sym = CB.backendGetSym bak
   memExpr <- T.askMemExpr
-  liftIO $ LLVM.withMem @arch sym memExpr $ do
+  liftIO $ LLVM.withMem @arch bak memExpr $ do
     -- 1) Instantiate the non-mem, non-IP variables in the formula
     F.Formula _ defs' <- liftIO $ CE.evalFormula' sym f $ CE.mkEvalLoc @arch sym (T.testInput test)
 
@@ -305,24 +306,25 @@ stripMemLoc = MapF.filterWithKey (\l _ -> not (L.isMemoryLocation l))
 --
 -- TODO: adapt this to deal with the case when the architecture has several
 -- memory locations (e.g. A32)
-mkTest :: forall sym arch t st fs.
+mkTest :: forall sym bak arch t st fs.
           (A.Architecture arch, sym ~ WE.ExprBuilder t st fs
-          , CB.IsSymInterface sym
+          , CB.IsSymBackend sym bak
           , ?memOpts :: LLVM.MemOptions
           )
-       => sym
+       => bak
        -> F.Formula sym arch
        -> L.ArchState arch (S.SymExpr sym)
        -> S.SymExpr sym (A.MemType arch)
        -> IO (T.ConcreteTest sym arch)
-mkTest sym targetFormula ctrExample memExpr = do
+mkTest bak targetFormula ctrExample memExpr = do
+    let sym = CB.backendGetSym bak
 
     -- Substitute the non-memory locations from the test into the target
     -- formula, and evaluate @readMem@s that occur. For non-memory locations,
     -- this gives us the testOutput.
     let testInput' = stripMemLoc @arch @sym ctrExample
     let el = CE.mkMemEvalLoc @arch sym testInput' memExpr
-    F.Formula _ ctrExampleOut <- CE.evalFormulaMem' @arch sym targetFormula el
+    F.Formula _ ctrExampleOut <- CE.evalFormulaMem' @arch bak targetFormula el
     let testOutput' = stripMemLoc @arch @sym ctrExampleOut
 
     -- To construct the memInput/memOutput, find all memory locations that occur

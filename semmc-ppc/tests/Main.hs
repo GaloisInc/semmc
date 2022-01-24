@@ -26,6 +26,7 @@ import qualified Dismantle.PPC as D
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
+import qualified What4.Expr.Builder as WEB
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
 import qualified What4.InterpretedFloatingPoint as WIF
@@ -53,31 +54,34 @@ nonmemtest :: IO ()
 nonmemtest = executeTests nonMemProgs
 
 -- synthesize a "long" sequence of memory instructions
-longtest :: IO ()
-longtest = executeTests [longProg]
+_longtest :: IO ()
+_longtest = executeTests [longProg]
 
+data SemMCPPCData t = SemMCPPCData
 
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
-  PN.withIONonceGenerator $ \ng ->
-    CBO.withZ3OnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
+  PN.withIONonceGenerator $ \ng -> do
+    sym <- WEB.newExprBuilder WEB.FloatRealRepr SemMCPPCData ng
+    CBO.withZ3OnlineBackend sym CBO.NoUnsatFeatures WPF.noFeatures $ \bak -> do
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
-      (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
+      (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems bak
       let ?memOpts = LLVM.defaultMemOptions
-      T.defaultMain (allTests baseSet synthEnv progsToTest)
+      T.defaultMain (allTests bak baseSet synthEnv progsToTest)
 
-allTests :: ( sym ~ CBO.OnlineBackend scope solver fs
+allTests :: ( sym ~ WEB.ExprBuilder scope st fs
             , WPO.OnlineSolver solver
             , WIF.IsInterpretedFloatExprBuilder sym
             , ?memOpts :: LLVM.MemOptions
             )
-         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
+         => CBO.OnlineBackend solver scope st fs
+         -> MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
          -> SS.SynthesisEnvironment sym PPC64.PPC
          -> [(String, [D.Instruction])]
          -> T.TestTree
-allTests baseSet synthEnv progsToTest =
+allTests bak baseSet synthEnv progsToTest =
   T.adjustOption @T.Timeout (\_ -> T.mkTimeout 1000000000) $
-    T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progsToTest)
+    T.testGroup "synthesis" (map (toSynthesisTest bak baseSet synthEnv) progsToTest)
 
 insns :: S.Set (Some (D.Opcode o))
 insns = S.fromList
@@ -156,15 +160,16 @@ mkMemRI n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 
 toSynthesisTest :: ( WPO.OnlineSolver solver
                    , CB.IsSymInterface sym
-                   , sym ~ CBO.OnlineBackend t solver fs
+                   , sym ~ WEB.ExprBuilder t st fs
                    , ?memOpts :: LLVM.MemOptions
                    )
-                => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
+                => CBO.OnlineBackend solver t st fs
+                -> MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
                 -> SS.SynthesisEnvironment sym PPC64.PPC
                 -> (String, [D.Instruction])
                 -> T.TestTree
-toSynthesisTest baseSet synthEnv (name, p) = T.testCase name $ do
-  res <- SST.synthesizeAndCheck (Proxy @PPC64.PPC) synthEnv baseSet matchInsn p
+toSynthesisTest bak baseSet synthEnv (name, p) = T.testCase name $ do
+  res <- SST.synthesizeAndCheck (Proxy @PPC64.PPC) bak synthEnv baseSet matchInsn p
   T.assertEqual "Expected equivalence" SST.Equivalent res
 
 matchInsn :: D.Instruction
@@ -172,20 +177,21 @@ matchInsn :: D.Instruction
           -> a
 matchInsn (D.Instruction opc operands) k = k opc operands
 
-loadBaseSet :: forall sym t solver fs.
-               (WPO.OnlineSolver solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)
+loadBaseSet :: forall sym solver t st fs.
+               (WPO.OnlineSolver solver, sym ~ WEB.ExprBuilder t st fs, CB.IsSymInterface sym)
             => [(String, BS8.ByteString)]
             -> [(Some (D.Opcode D.Operand), BS8.ByteString)]
-            -> sym
+            -> CBO.OnlineBackend solver t st fs
             -> IO (MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC),
                    SS.SynthesisEnvironment sym PPC64.PPC)
-loadBaseSet funcs ops sym = do
+loadBaseSet funcs ops bak = do
+  let sym = CB.backendGetSym bak
   lcfg <- SL.mkNonLogCfg
   let ?logCfg = lcfg
   env <- SF.formulaEnv (Proxy @PPC64.PPC) sym
   lib <- SF.loadLibrary (Proxy @PPC64.PPC) sym env funcs
   baseSet <- SF.loadFormulas sym (templateEnv env) lib ops
-  let synthEnv = SS.setupEnvironment sym baseSet
+  let synthEnv = SS.setupEnvironment bak baseSet
   return (removeTemplates baseSet, synthEnv)
   where
     templateEnv :: SF.FormulaEnv sym arch -> SF.FormulaEnv sym (SS.TemplatedArch arch)

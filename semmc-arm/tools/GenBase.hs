@@ -19,7 +19,6 @@ import           Data.Proxy
 import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
 import qualified Lang.Crucible.Backend as CRUB
-import qualified Lang.Crucible.Backend.Simple as S
 import qualified Options.Applicative as O
 import qualified Options.Applicative.Help as OH
 import           SemMC.Architecture
@@ -71,10 +70,12 @@ main = O.execParser optParser >>= mainWithOptions
                     }
 
 
+data SemMCArmData t = SemMCArmData
+
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
-  sym <- S.newSimpleBackend S.FloatIEEERepr ng
+  sym <- WEB.newExprBuilder WEB.FloatIEEERepr SemMCArmData ng
   env <- FL.formulaEnv (Proxy @ARMSem.AArch32) sym
   let odir = oRootDir opts
       genFunsTo d l = do

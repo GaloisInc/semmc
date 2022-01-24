@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -25,6 +26,7 @@ import           Data.Typeable
 
 import qualified What4.Protocol.Online as WPO
 import qualified What4.Interface as S
+import qualified What4.Expr.Builder as WE
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
@@ -62,9 +64,6 @@ data SynthesisState sym arch =
 
 type Synth sym arch = ReaderT (SynthesisParams sym arch) (StateT (SynthesisState sym arch) IO)
 
-askSym :: Synth sym arch sym
-askSym = reader (synthSym . synthEnv)
-
 askInsns :: Synth sym arch [Some (TemplatedInstruction sym arch)]
 askInsns = reader (synthInsns . synthEnv)
 
@@ -96,16 +95,19 @@ footprintFilter target candidate =
 
 
 
-instantiate :: ( TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs)
+instantiate :: ( TemplateConstraints arch, ArchRepr arch
+               , sym ~ WE.ExprBuilder t st fs
+               , WPO.OnlineSolver solver
+               , CB.IsSymInterface sym
                , ?memOpts :: LLVM.MemOptions
                )
-            => CegisParams (CBO.OnlineBackend t solver fs) arch
-            -> Formula (CBO.OnlineBackend t solver fs) arch
-            -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver fs) arch)]
-            -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
-instantiate params target trial
+            => CBO.OnlineBackend solver t st fs
+            -> CegisParams sym arch
+            -> Formula sym arch
+            -> [Some (TemplatedInstruction sym arch)]
+            -> Synth sym arch (Maybe [Instruction arch])
+instantiate bak params target trial
   | footprintFilter target trial = do
-      sym <- askSym
       -- Instantiate the templated formulas for the templated instructions we're
       -- trying. Ideally we'd like to cache these somewhere, but this is hard
       -- due to the implementation of 'TemplatedInstruction'. (It stores a list
@@ -113,9 +115,9 @@ instantiate params target trial
       -- non-trivial to either make it not use a function or come up with a
       -- surrogate key.)
       liftIO $ putStrLn $ "\nTrial: " ++ show (prettyTrialInsns trial)
-      tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
+      tifs <- liftIO $ traverse (viewSome (genTemplatedFormula bak)) trial
       st <- get
-      cegisResult <- liftIO $ cegis params (synthTests st) tifs
+      cegisResult <- liftIO $ cegis bak params (synthTests st) tifs
       case cegisResult of
         -- If we find an equivalent instantiation, we're done!
         CegisEquivalent insns -> do
@@ -144,13 +146,15 @@ synthesizeFormula' :: (Architecture arch,
                        ArchRepr arch,
                        Architecture (TemplatedArch arch),
                        WPO.OnlineSolver solver,
-                       CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+                       sym ~ WE.ExprBuilder t st fs,
+                       CB.IsSymInterface sym,
                        ?memOpts :: LLVM.MemOptions
                        )
-                   => CegisParams (CBO.OnlineBackend t solver fs) arch
-                   -> Formula (CBO.OnlineBackend t solver fs) arch
-                   -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
-synthesizeFormula' params target = do
+                   => CBO.OnlineBackend solver t st fs
+                   -> CegisParams sym arch
+                   -> Formula sym arch
+                   -> Synth sym arch (Maybe [Instruction arch])
+synthesizeFormula' bak params target = do
   liftIO . putStrLn $ "Calling synthesizeFormula' on target " ++ show target
   st <- get
   case Seq.viewl (synthPrefixes st) of
@@ -163,32 +167,33 @@ synthesizeFormula' params target = do
         -- saving. I'm not a big fan of MonadState here, but it was the nicest
         -- solution I could come up with.
         result <- sequenceMaybes $
-          map (\insn -> instantiate params target (prefix ++ [insn])) possibleInsns
+          map (\insn -> instantiate bak params target (prefix ++ [insn])) possibleInsns
         case result of
           Just insns -> return (Just insns)
-          Nothing -> synthesizeFormula' params target
+          Nothing -> synthesizeFormula' bak params target
     -- If there are no more possible prefixes, we can't synthesize this formula.
     Seq.EmptyL -> return Nothing
 
-synthesizeFormula :: forall t solver fs arch .
+synthesizeFormula :: forall solver t st fs sym arch .
                      (Architecture arch,
                       TemplatableOperand arch,
                       ArchRepr arch,
                       Architecture (TemplatedArch arch),
                       Typeable arch,
                       WPO.OnlineSolver solver,
-                      CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+                      sym ~ WE.ExprBuilder t st fs,
+                      CB.IsSymInterface sym,
                       ?memOpts :: LLVM.MemOptions
                      )
-                  => SynthesisParams (CBO.OnlineBackend t solver fs) arch
-                  -> Formula (CBO.OnlineBackend t solver fs) arch
+                  => CBO.OnlineBackend solver t st fs
+                  -> SynthesisParams sym arch
+                  -> Formula sym arch
                   -> IO (Maybe [Instruction arch])
-synthesizeFormula params target = do
+synthesizeFormula bak params target = do
   putStrLn $ "Calling synthesizeFormula on target " ++ show target
-  let sym = synthSym $ synthEnv params
   let baseSet = synthBaseSet $ synthEnv params
-  cegisParams <- liftIO $ mkCegisParams sym baseSet target
-  evalStateT (runReaderT (synthesizeFormula' cegisParams target) params) $
+  cegisParams <- liftIO $ mkCegisParams bak baseSet target
+  evalStateT (runReaderT (synthesizeFormula' bak cegisParams target) params) $
     SynthesisState { synthTests = []
                    , synthPrefixes = Seq.singleton []
                    }

@@ -19,6 +19,7 @@ import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableFC
 import           GHC.TypeLits ( Symbol )
 import           Hedgehog
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
@@ -114,17 +115,20 @@ compareParameterizedFormulasSymbolically
      , WI.BoundVar sym ~ WE.ExprBoundVar t
      , SA.Architecture arch
      , SA.Location arch ~ TestLocation
-     , sym ~ CBO.OnlineBackend t solver fs
+     , sym ~ WE.ExprBuilder t st fs
+     , CB.IsSymInterface sym
      , WPO.OnlineSolver solver
      ) =>
-     sym
+     CBO.OnlineBackend solver t st fs
   -> PL.List (SA.Operand arch) sh
   -> Integer
   -> SF.ParameterizedFormula sym arch sh
   -> SF.ParameterizedFormula sym arch sh
   -> m ()
-compareParameterizedFormulasSymbolically sym operands ncycles origFormula resultFormula =
-  do on (===) SF.pfUses origFormula resultFormula
+compareParameterizedFormulasSymbolically bak operands ncycles origFormula resultFormula =
+  do let sym = CB.backendGetSym bak
+
+     on (===) SF.pfUses origFormula resultFormula
 
      compareOperandLists sym ncycles
        (SF.pfOperandVars origFormula)
@@ -136,13 +140,13 @@ compareParameterizedFormulasSymbolically sym operands ncycles origFormula result
 
      on (===) (MapF.size . SF.pfDefs) origFormula resultFormula
      on (===) (MapF.keys . SF.pfDefs) origFormula resultFormula
-     (_te1, f1) <- liftIO $ instantiateFormula sym origFormula operands
-     (_te2, f2) <- liftIO $ instantiateFormula sym resultFormula operands
+     (_te1, f1) <- liftIO $ instantiateFormula bak origFormula operands
+     (_te2, f2) <- liftIO $ instantiateFormula bak resultFormula operands
      -- NOTE: The test architecture doesn't even support memory, so we don't
      -- need to specify any memory locations to test here.  If we do need to
      -- check that, we'll have go carefully set up memory to make the test
      -- possible.
-     equiv <- liftIO $ formulasEquivSym sym [] f1 f2
+     equiv <- liftIO $ formulasEquivSym bak [] f1 f2
      case equiv of
        Equivalent -> success
        DifferentBehavior _ -> failure

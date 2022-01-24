@@ -69,6 +69,7 @@ import qualified What4.BaseTypes as WT
 import qualified What4.Interface as S
 import           What4.Expr.GroundEval
 import qualified What4.Expr.Builder as S
+import qualified Lang.Crucible.Backend as B
 
 import           SemMC.Architecture
 import qualified SemMC.BoundVar as BV
@@ -165,19 +166,19 @@ templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix
   let ops' = fmapFC fromTemplatedOperand operands
   fi ops' (WrappedOperand orep ix) rep
 
-templatedEvaluator :: forall arch t st fs sh u tp
-                    . (PC.OrdF (Location arch))
+templatedEvaluator :: forall arch t st fs bak sh u tp
+                    . (PC.OrdF (Location arch), B.IsSymBackend (S.ExprBuilder t st fs) bak)
                    => Evaluator arch t st fs
-                   -> S.ExprBuilder t st fs
+                   -> bak
                    -> ParameterizedFormula (S.ExprBuilder t st fs) (TemplatedArch arch) sh
                    -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st fs)) sh
                    -> Ctx.Assignment (S.Expr t) u
                    -> (forall ltp . Location (TemplatedArch arch) ltp -> IO (S.Expr t ltp))
                    -> WT.BaseTypeRepr tp
                    -> IO (S.Expr t tp)
-templatedEvaluator (Evaluator e0) = \sym pf ops actuals locExpr tp -> do
+templatedEvaluator (Evaluator e0) = \bak pf ops actuals locExpr tp -> do
   let ops' = fmapFC fromTemplatedOperand ops
-  e0 sym (unTemplate pf) ops' actuals locExpr tp
+  e0 bak (unTemplate pf) ops' actuals locExpr tp
 
 toTemplatedOperand :: AllocatedOperand arch sym s
                    -> AllocatedOperand (TemplatedArch arch) sym s
@@ -445,12 +446,13 @@ tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
 tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
 
 genTemplatedFormula :: (TemplateConstraints arch
-                       , S.IsSymExprBuilder (S.ExprBuilder t st fs))
-                    => S.ExprBuilder t st fs
+                       , S.IsSymExprBuilder (S.ExprBuilder t st fs)
+                       , B.IsSymBackend (S.ExprBuilder t st fs) bak)
+                    => bak
                     -> TemplatedInstruction (S.ExprBuilder t st fs) arch sh
                     -> IO (TemplatedInstructionFormula (S.ExprBuilder t st fs) arch)
-genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
-  TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
+genTemplatedFormula bak ti@(TemplatedInstruction _ pf oplist) =
+  TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula bak pf oplist
 
 {- Note [Evaluating Functions on Templated Operands]
 

@@ -15,6 +15,7 @@ module SemMC.Synthesis.Cegis.Types
   , askTarget
   , askTests
   , askCheck
+  , askBackend
   , putCheck
   , HasMemExpr(..)
   -- * Templatable Instructions
@@ -50,6 +51,7 @@ import qualified What4.Expr as WE
 import qualified What4.Symbol as WS
 import qualified What4.Expr.GroundEval as GE
 import qualified What4.SatResult as SAT
+import qualified Lang.Crucible.Backend as B
 
 import qualified Dismantle.Instruction as D
 
@@ -63,8 +65,8 @@ import qualified SemMC.Synthesis.Template as T
 
 -- | Parameters given to call cegis.
 data CegisParams sym arch =
-  CegisParams { cpSym :: sym
-              -- ^ The symbolic expression builder.
+  CegisParams { cpBackend :: B.SomeBackend sym
+              -- ^ The symbolic backend.
               , cpSemantics :: T.TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics.
               , cpTarget :: Formula sym arch
@@ -80,18 +82,19 @@ class HasMemExpr m where
   askMemExpr :: m sym arch (S.SymExpr sym (A.MemType arch))
 
 -- | Construct parameters for Cegis
-mkCegisParams :: (S.IsSymExprBuilder sym, A.Architecture arch)
-              => sym 
+mkCegisParams :: (S.IsSymExprBuilder sym, B.IsSymBackend sym bak, A.Architecture arch)
+              => bak 
               -> T.TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics
               -> Formula sym arch
               -- ^ The target formula we're trying to match
               -> IO (CegisParams sym arch)
-mkCegisParams sym sem target = case S.userSymbol "Mem" of
+mkCegisParams bak sem target = case S.userSymbol "Mem" of
     Left  err       -> error (show $ WS.ppSolverSymbolError err)
     Right memSymbol -> do
+      let sym = B.backendGetSym bak
       memExpr <- S.freshConstant sym memSymbol S.knownRepr
-      return $ CegisParams { cpSym = sym
+      return $ CegisParams { cpBackend = B.SomeBackend bak
                            , cpSemantics = sem
                            , cpTarget = target
                            , cpMem   = memExpr
@@ -119,7 +122,9 @@ runCegis :: CegisParams sym arch -> CegisState sym arch -> Cegis sym arch a -> I
 runCegis params st (Cegis op) = evalStateT (runReaderT op params) st
 
 instance HasSym Cegis where
-  askSym = Cegis $ reader cpSym
+  askSym = Cegis $
+             do B.SomeBackend bak <- reader cpBackend
+                return (B.backendGetSym bak)
 
 askSemantics :: Cegis sym arch (T.TemplatedSemantics sym arch)
 askSemantics = Cegis $ reader cpSemantics
@@ -132,6 +137,9 @@ askTests = Cegis . lift $ csTests <$> get
 
 askCheck :: Cegis sym arch (S.Pred sym)
 askCheck = Cegis . lift $ csCheck <$> get
+
+askBackend :: Cegis sym arch (B.SomeBackend sym)
+askBackend = Cegis $ reader cpBackend
 
 putCheck :: S.Pred sym -> Cegis sym arch ()
 putCheck check = Cegis . lift $ do

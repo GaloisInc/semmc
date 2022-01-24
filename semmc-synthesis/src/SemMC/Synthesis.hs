@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MonoLocalBinds #-}
 module SemMC.Synthesis
@@ -20,6 +21,7 @@ import           Control.Monad (join)
 import           System.Timeout (timeout)
 import           Control.Exception.Base (finally)
 
+import qualified What4.Expr.Builder as WE
 import qualified What4.Protocol.Online as WPO
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
@@ -51,13 +53,15 @@ setupEnvironment :: (Architecture arch,
                      Architecture (TemplatedArch arch),
                      ArchRepr arch,
                      TemplatableOperand arch,
+                     sym ~ WE.ExprBuilder t st fs,
+                     WPO.OnlineSolver solver,
                      Typeable arch)
-                 => CBO.OnlineBackend t solver fs
-                 -> BaseSet (CBO.OnlineBackend t solver fs) arch
-                 -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
-setupEnvironment sym baseSet =
+                 => CBO.OnlineBackend solver t st fs
+                 -> BaseSet sym arch
+                 -> SynthesisEnvironment sym arch
+setupEnvironment bak baseSet =
   let insns = templatedInstructions baseSet
-  in SynthesisEnvironment { synthSym = sym
+  in SynthesisEnvironment { synthSym = CB.backendGetSym bak
                           , synthBaseSet = baseSet
                           , synthInsns = insns
                           }
@@ -68,13 +72,15 @@ setupEnvironment sym baseSet =
 mcSynth :: (TemplateConstraints arch,
             ArchRepr arch,
             WPO.OnlineSolver solver,
-            CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+            CB.IsSymInterface sym,
+            sym ~ WE.ExprBuilder t st fs,
             ?memOpts :: LLVM.MemOptions
            )
-        => SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
-        -> Formula (CBO.OnlineBackend t solver fs) arch
+        => CBO.OnlineBackend solver t st fs
+        -> SynthesisEnvironment sym arch
+        -> Formula sym arch
         -> IO (Maybe [Instruction arch])
-mcSynth env target = do
+mcSynth bak env target = do
 
   -- Synthesize the target without considering the behavior of the instruction pointer
   let target' = formStripIP target
@@ -83,35 +89,37 @@ mcSynth env target = do
   let params = SynthesisParams { synthEnv = env
                                , synthMaxLength = 0
                                }
-  safeAssumptionFrame (synthSym env) $ do
+  safeAssumptionFrame $ do
    --  synthesizeFormula (params {synthMaxLength = 1}) target'
-    ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target'
+    ret1 <- divideAndConquer bak (params { synthMaxLength = 1 }) target'
     case ret1 of
       Just _ -> return ret1
       Nothing -> do
       -- Instead of repeating each call, perhaps we can only recurse if the result
       -- ran out of space, which could be tracked in 'synthesizeFormula'
-        ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target'
+        ret2 <- divideAndConquer bak (params { synthMaxLength = 2 }) target'
         case ret2 of
           Just _ -> return ret2
-          Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target'
+          Nothing -> synthesizeFormula bak (params { synthMaxLength = 1000 }) target'
   where
     -- Isolate the solver environment using pushFrame and popFrame
-    safeAssumptionFrame sym op = do
-      frame <- CB.pushAssumptionFrame sym
-      finally op (CB.popAssumptionFrame sym frame)
+    safeAssumptionFrame op = do
+      frame <- CB.pushAssumptionFrame bak
+      finally op (CB.popAssumptionFrame bak frame)
 
 
 -- | Synthesizes a list of instructions from a formula, within a particular
 -- timeout limit.
 mcSynthTimeout :: (TemplateConstraints arch,
                    ArchRepr arch,
+                   CB.IsSymInterface sym,
                    WPO.OnlineSolver solver,
-                   CB.IsSymInterface (CBO.OnlineBackend t solver fs),
+                   sym ~ WE.ExprBuilder t st fs,
                    ?memOpts :: LLVM.MemOptions
                   )
                => Int
-               -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
-               -> Formula (CBO.OnlineBackend t solver fs) arch
+               -> CBO.OnlineBackend solver t st fs
+               -> SynthesisEnvironment sym arch
+               -> Formula sym arch
                -> IO (Maybe [Instruction arch])
-mcSynthTimeout t env f = join <$> (timeout t $ mcSynth env f)
+mcSynthTimeout t bak env f = join <$> (timeout t $ mcSynth bak env f)

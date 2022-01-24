@@ -84,10 +84,12 @@ main = O.execParser optParser >>= mainWithOptions
                 <> O.header "semmc-ppc-genbase - Print out manually-written formulas"
                 )
 
+data SemMCPPCData t = SemMCPPCData
+
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
-  sym <- S.newSimpleBackend S.FloatIEEERepr ng
+  sym <- WEB.newExprBuilder WEB.FloatIEEERepr SemMCPPCData ng
   D.createDirectoryIfMissing True (oManualDir opts)
   D.createDirectoryIfMissing True (oBaseDir opts)
   D.createDirectoryIfMissing True (oPseudoDir opts)

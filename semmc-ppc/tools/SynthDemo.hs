@@ -1,6 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -31,7 +32,7 @@ import           Data.Parameterized.Some ( Some (..) )
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
-import qualified What4.Expr.Builder as SB
+import qualified What4.Expr.Builder as WEB
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
 
@@ -101,14 +102,14 @@ makePlain = MapF.foldrWithKey f MapF.empty
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
         f op pf = MapF.insert op (unTemplate pf)
 
-instantiateFormula' :: (Architecture arch, CRUB.IsBoolSolver (SB.ExprBuilder t st fs))
-                    => SB.ExprBuilder t st fs
-                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.ExprBuilder t st fs) arch)
+instantiateFormula' :: (Architecture arch, CRUB.IsSymBackend (WEB.ExprBuilder t st fs) bak)
+                    => bak
+                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (WEB.ExprBuilder t st fs) arch)
                     -> Instruction arch
-                    -> IO (F.Formula (SB.ExprBuilder t st fs) arch)
-instantiateFormula' sym m (DPPC.Instruction op params) = do
+                    -> IO (F.Formula (WEB.ExprBuilder t st fs) arch)
+instantiateFormula' bak m (DPPC.Instruction op params) = do
   case MapF.lookup op m of
-    Just pf -> snd <$> F.instantiateFormula sym pf params
+    Just pf -> snd <$> F.instantiateFormula bak pf params
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
 
 loadProgramBytes :: FilePath -> IO (E.Elf 32, E.ElfSection Word32)
@@ -122,16 +123,17 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver solver)
+loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver solver, sym ~ WEB.ExprBuilder t st fs)
             => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
-            -> CBO.OnlineBackend t solver fs
-            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC),
-                   SemMC.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC32.PPC)
-loadBaseSet ops sym = do
+            -> CBO.OnlineBackend solver t st fs
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula sym PPC32.PPC),
+                   SemMC.SynthesisEnvironment sym PPC32.PPC)
+loadBaseSet ops bak = do
+  let sym = CRUB.backendGetSym bak
   env <- F.formulaEnv (Proxy @PPC32.PPC) sym
   baseSet <- F.loadFormulas sym (templateEnv env) F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
-      synthEnv = SemMC.setupEnvironment sym baseSet
+      synthEnv = SemMC.setupEnvironment bak baseSet
   return (plainBaseSet, synthEnv)
   where
     templateEnv :: F.FormulaEnv sym arch -> F.FormulaEnv sym (SemMC.TemplatedArch arch)
@@ -139,16 +141,17 @@ loadBaseSet ops sym = do
 
 
 symbolicallyExecute
-  :: (Architecture arch, Traversable t1, CRUB.IsBoolSolver (SB.ExprBuilder t2 st fs))
-  => SB.ExprBuilder t2 st fs
+  :: (Architecture arch, Traversable t1, CRUB.IsSymBackend (WEB.ExprBuilder t2 st fs) bak)
+  => bak
   -> MapF.MapF
        (SemMC.Architecture.Opcode arch (SemMC.Architecture.Operand arch))
-       (F.ParameterizedFormula (SB.ExprBuilder t2 st fs) arch)
+       (F.ParameterizedFormula (WEB.ExprBuilder t2 st fs) arch)
   -> t1 (DPPC.GenericInstruction
            (SemMC.Architecture.Opcode arch) (SemMC.Architecture.Operand arch))
-  -> IO (F.Formula (SB.ExprBuilder t2 st fs) arch)
-symbolicallyExecute sym plainBaseSet insns = do
-  formulas <- traverse (instantiateFormula' sym plainBaseSet) insns
+  -> IO (F.Formula (WEB.ExprBuilder t2 st fs) arch)
+symbolicallyExecute bak plainBaseSet insns = do
+  let sym = CRUB.backendGetSym bak
+  formulas <- traverse (instantiateFormula' bak plainBaseSet) insns
   F.foldrM (F.sequenceFormulas sym) F.emptyFormula formulas
 
 rewriteElfText :: E.ElfSection w -> E.Elf 32 -> [DPPC.Instruction] -> BSL.ByteString
@@ -182,6 +185,8 @@ main = do
                          , O.header "SynthDemo"
                          ]
 
+data SemMCPPCData t = SemMCPPCData
+
 mainWith :: (U.HasLogCfg) => N.NonceGenerator IO s -> Options -> IO ()
 mainWith r opts = do
   -- Fetch the ELF from disk
@@ -197,11 +202,12 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
 
-  CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures WPF.noFeatures $ \sym -> do
-    (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
+  sym <- WEB.newExprBuilder WEB.FloatRealRepr SemMCPPCData r
+  CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures WPF.noFeatures $ \bak -> do
+    (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics bak
 
     -- Turn it into a formula
-    formula <- symbolicallyExecute sym plainBaseSet insns
+    formula <- symbolicallyExecute bak plainBaseSet insns
     putStrLn ""
     putStrLn "Here's the formula for the whole program:"
     print formula
@@ -210,7 +216,7 @@ mainWith r opts = do
     putStrLn ""
     putStrLn "Starting synthesis..."
     let ?memOpts = LLVM.defaultMemOptions
-    newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
+    newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth bak synthEnv formula
     putStrLn ""
     putStrLn "Here's the equivalent program:"
     putStrLn (printProgram newInsns)
