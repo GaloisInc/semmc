@@ -36,7 +36,6 @@ import qualified SemMC.Formula.Printer as FO
 import qualified SemMC.Log as Log
 import           Test.Tasty
 import           Test.Tasty.HUnit ( assertEqual, testCase, (@?=) )
-import           Test.Tasty.Hedgehog
 import           TestArch
 import           TestArchPropGen
 import           TestUtils

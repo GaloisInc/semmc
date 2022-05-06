@@ -17,6 +17,7 @@ import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableFC
+import qualified Data.String as String
 import           GHC.TypeLits ( Symbol )
 import           Hedgehog
 import qualified Lang.Crucible.Backend as CB
@@ -29,6 +30,8 @@ import           SemMC.Formula.Instantiate ( instantiateFormula )
 import           SemMC.Formula.Parser ( literalVarPrefix
                                       , operandVarPrefix )
 import           System.Directory
+import           Test.Tasty ( TestName, TestTree )
+import           Test.Tasty.Hedgehog ( testPropertyNamed )
 import           TestArch
 import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
@@ -321,3 +324,25 @@ compareBaseTypes ty1 ty2 =
   case testEquality ty1 ty2 of
     Just Refl -> success
     Nothing -> show ty1 === show ty2 -- fails, but reveals types
+
+
+----------------------------------------------------------------------
+-- BaseTypes
+
+
+-- | Create a 'T.TestTree' from a Hedgehog 'Property'.
+--
+-- Note that @tasty-hedgehog@'s version of 'testProperty' has been deprecated
+-- in favor of 'testPropertyNamed', whose second argument is intended to
+-- represent the name of a top-level 'Property' value to run in the event that
+-- the test fails. See https://github.com/qfpl/tasty-hedgehog/pull/42.
+--
+-- That being said, @semmc@ currently does not define any of the
+-- properties that it tests as top-level values. In the
+-- meantime, we avoid incurring deprecation warnings by defining our own
+-- version of 'testProperty'. The downside to this workaround is that if a
+-- property fails, the error message it will produce will likely suggest
+-- running ill-formed Haskell code, so users will have to use context clues to
+-- determine how to /actually/ reproduce the error.
+testProperty :: TestName -> Property -> TestTree
+testProperty name = testPropertyNamed name (String.fromString name)

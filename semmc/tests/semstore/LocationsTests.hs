@@ -8,9 +8,9 @@ module LocationsTests where
 import           Data.Parameterized.Classes
 import qualified SemMC.Architecture.Location as L
 import           Test.Tasty
-import           Test.Tasty.Hedgehog
 import           TestArch
 import           TestArchPropGen
+import           TestUtils
 import           What4.BaseTypes
 import           Hedgehog
 
