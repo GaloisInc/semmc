@@ -19,14 +19,18 @@ matchConstructor s = and [ notElem '8' s
                          , not (RE.hasMatches s erx)
                          ]
   where
-    Right erx = RE.mkRegex (L.intercalate "|" exclude)
+    erx = case RE.mkRegex (L.intercalate "|" exclude) of
+            Left err   -> error $ "matchConstructor: Failed to build exclude regex " ++ err
+            Right erx' -> erx'
     exclude = [ "^DIV.*E.*$"
               , "^ATTN$"
               , "^CMPEQB$"
               , "^CMPRB$"
               , "^CNTT.*"
               ]
-    Right rx = RE.mkRegex (L.intercalate "|" matchers)
+    rx = case RE.mkRegex (L.intercalate "|" matchers) of
+           Left err  -> error $ "matchConstructor: Failed to build matchers regex: " ++ err
+           Right rx' -> rx'
     matchers = [ "^A.*"
                , "^CNT.*"
                , "^DIV.*[^E]$"

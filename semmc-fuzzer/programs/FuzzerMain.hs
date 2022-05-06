@@ -664,7 +664,10 @@ testInfoForNonce :: forall arch .
                  -> (MapF.MapF (A.Location arch) V.Value -> TestOutcome)
                  -> TestInfo
 testInfoForNonce proxy ppInst caseMap nonce actualFinal mkOutcome =
-    let Just (inst, instBytes, initialState, expectedFinal) = M.lookup nonce caseMap
+    let (inst, instBytes, initialState, expectedFinal) =
+          case M.lookup nonce caseMap of
+            Just res -> res
+            Nothing  -> error $ "testInfoForNonce: Nonce not found in caseMap: " ++ show nonce
     in case inst of
         Instruction opcode operands ->
             let inputs = uncurry TestInput <$> statePairs proxy initialState

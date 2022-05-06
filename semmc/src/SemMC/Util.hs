@@ -88,17 +88,23 @@ asyncLinked action = do
   -- exception (e.g. via 'U.cancel') could arrive after
   -- @handleUnliftIO@ starts to run but before @action@ starts.
   U.mask $ \restore -> do
-  a <- U.async $ handleUnliftIO (\E.ThreadKilled -> return ()) (restore action)
+  a <- U.async $ handleUnliftIO threadKilledHandler (restore action)
   restore $ do
   U.link a
   return a
+
+-- | Handle asynchronous 'E.ThreadKilled' exceptions without killing the parent
+-- thread. All other forms of asynchronous exceptions are rethrown.
+threadKilledHandler :: Monad m => E.AsyncException -> m ()
+threadKilledHandler E.ThreadKilled = return ()
+threadKilledHandler e              = E.throw e
 
 -- | A version of 'U.withAsync' that safely links the child. See
 -- 'asyncLinked'.
 withAsyncLinked :: (U.MonadUnliftIO m) => m () -> (U.Async () -> m a) -> m a
 withAsyncLinked child parent = do
   U.mask $ \restore -> do
-  U.withAsync (handleUnliftIO (\E.ThreadKilled -> return ()) $ restore child) $ \a -> restore $ do
+  U.withAsync (handleUnliftIO threadKilledHandler $ restore child) $ \a -> restore $ do
   U.link a
   parent a
 
@@ -221,8 +227,8 @@ showGroundValues (rs :> r) (bs :> GE.GVW b) = showGroundValues rs bs ++ " :> " +
 -- equivalent to [(i,j) | i <- ls, j <- ls].
 --
 -- If idx represents data that are not bit vectors, allGroundAssign will throw
--- an error. 
-allGroundAssign :: Assignment BaseTypeRepr idx 
+-- an error.
+allGroundAssign :: Assignment BaseTypeRepr idx
                 -> [Integer]
                 -> [Assignment GE.GroundValueWrapper idx]
 allGroundAssign Empty                 _ = [Empty]
@@ -234,7 +240,7 @@ allGroundAssign _ _ = error "allGroundAssign is only defined for bit vectors"
 
 
 
--- | Support for converting symbolic expressions to ground values. 
+-- | Support for converting symbolic expressions to ground values.
 exprToGroundVal :: forall sym tp.
                    S.IsSymExprBuilder sym
                 => BaseTypeRepr tp
@@ -264,10 +270,10 @@ concreteToGroundVal (W.ConcreteString s) = s
 concreteToGroundVal (W.ConcreteComplex c) = c
 concreteToGroundVal (W.ConcreteBV _ i) = i
 concreteToGroundVal (W.ConcreteStruct ctx) = fmapFC (GE.GVW . concreteToGroundVal) ctx
-concreteToGroundVal (W.ConcreteArray _idx def m) = GE.ArrayConcrete (concreteToGroundVal def) $ 
+concreteToGroundVal (W.ConcreteArray _idx def m) = GE.ArrayConcrete (concreteToGroundVal def) $
                                                      Map.fromList (concToGV' <$> Map.toList m)
   where
-    concToGV' :: (Assignment W.ConcreteVal idx, W.ConcreteVal tp) 
+    concToGV' :: (Assignment W.ConcreteVal idx, W.ConcreteVal tp)
               -> (Assignment S.IndexLit idx, GE.GroundValue tp)
     concToGV' (args,v) = (fmapFC concreteToIndexLit args, concreteToGroundVal v)
 

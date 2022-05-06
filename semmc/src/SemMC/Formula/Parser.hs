@@ -167,7 +167,7 @@ buildOperandList' :: forall m proxy arch tps
                   -> A.ShapeRepr arch tps
                   -> [SExpr]
                   -> m (SL.List OpData (OperandTypes arch tps))
-buildOperandList' proxy rep ss = 
+buildOperandList' proxy rep ss =
   case (rep, ss) of
     (SL.Nil, []) -> return SL.Nil
     (SL.Nil, _) -> E.throwError $ "Expected [] but got " ++ show ss
@@ -225,7 +225,7 @@ readParameter :: forall tps m arch proxy .
   -> m (Some (ParsedParameter arch tps))
 readParameter _ oplist (WFSAtom (AId fullName)) =
   case splitId fullName of
-    ("op", op) -> 
+    ("op", op) ->
       maybe
       (E.throwError $ printf "couldn't find operand %s" op)
       (viewSome (\(IndexWithType tpRepr idx) -> return $ Some (ParsedOperandParameter tpRepr idx)))
@@ -267,7 +267,7 @@ data DefsInfo sym arch tps =
   , getOpVarList :: SL.List (S.BoundVar sym) tps
   -- ^ ShapedList used to retrieve the variable
   -- corresponding to a given literal.
-  , getOpNameList :: SL.List OpData tps 
+  , getOpNameList :: SL.List OpData tps
   -- ^ ShapedList used to look up the index given an
   -- operand's name.
   }
@@ -477,10 +477,13 @@ readFormulaFromFile sym env repr fp = do
   readFormula sym env repr =<< T.readFile fp
 
 -- | Splits @"foo.bar"@ into @("foo", "bar")@ (where
--- `"bar"` can have '.' in it as well).
+-- `"bar"` can have '.' in it as well). Throws an exception if the input does
+-- not contain a @.@ character.
 splitId :: Text -> (Text, Text)
 splitId t = (prefix, T.concat rest)
-  where (prefix:rest) = T.split (== '.') t
+  where (prefix, rest) = case T.split (== '.') t of
+          (prefix':rest') -> (prefix', rest')
+          [] -> error "splitId: Could not find '.' character to split"
 
 
 -- | Mapping from fresh names to original names. I.e.,

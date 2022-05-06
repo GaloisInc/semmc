@@ -305,10 +305,13 @@ compareLiteralVarMaps sym origMap resultMap = do
   forM_ (MapF.keys origMap) $ \(Some k) -> do
     let origBV = MapF.lookup k origMap
         resultBV = MapF.lookup k resultMap
-    assert $ isJust origBV
-    assert $ isJust resultBV
-    let Just o = origBV
-        Just r = resultBV
+    let o = case origBV of
+              Just o' -> o'
+              Nothing -> error "compareLiteralVarMaps: impossible"
+    let r = case resultBV of
+              Just r' -> r'
+              Nothing -> error $ "compareLiteralVarMaps: origMap contains "
+                              ++ show k ++ ", but resultMap does not"
     compareBVars (Just literalVarPrefix) sym 1 o r
 
 
