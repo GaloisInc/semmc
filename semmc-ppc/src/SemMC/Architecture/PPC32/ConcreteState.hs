@@ -133,14 +133,18 @@ serialize s = LB.toStrict (B.toLazyByteString b)
 --   case val of
 --     V.ValueMem bs -> B.byteString bs
 
+-- | Invariant: each 'Location' in the list is in the domain of the
+-- 'ConcreteState'. This function will throw an exception if the invariant is
+-- violated.
 extractLocs :: ConcreteState ppc
             -> [Location ppc tp]
             -> [V.Value tp]
 extractLocs s locs = map extractLoc locs
   where
     extractLoc l =
-      let Just v = MapF.lookup l s
-      in v
+      case MapF.lookup l s of
+        Just v -> v
+        Nothing -> error $ "extractLocs: Location not in ConcreteState: " ++ show l
 
 deserialize :: ( ArchRepr ppc
                , KnownNat (A.RegWidth ppc)

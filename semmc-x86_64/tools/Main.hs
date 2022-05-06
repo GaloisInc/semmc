@@ -1,9 +1,13 @@
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Data.ByteString.Lazy as LB
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Vector.Sized as V
+import           GHC.TypeNats ( KnownNat, natVal )
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO
@@ -65,22 +69,34 @@ testVector1 = CE.TestCase { CE.testNonce = 11
                        , mem1 = m1
                        , mem2 = m1
                        }
-    Just grs = V.fromList [ 11, 0, 0 , 0, 0
-                          , 20, 0, 0, 0, 0, 0
-                          , 0, 0, 0, 0, 0
-                          ]
-    Just mask = V.fromList (replicate 16 0)
-    Just frs = V.fromList (replicate 8 0)
-    Just vs = V.fromList (replicate 16 ymm0)
-    Just m1 = V.fromList (replicate 32 0)
+    grs = sizedVecFromList [ 11, 0, 0 , 0, 0
+                           , 20, 0, 0, 0, 0, 0
+                           , 0, 0, 0, 0, 0
+                           ]
+    mask = sizedVecFromList (replicate 16 0)
+    frs = sizedVecFromList (replicate 8 0)
+    vs = sizedVecFromList (replicate 16 ymm0)
+    m1 = sizedVecFromList (replicate 32 0)
     ymm0 = YMM 0 0 0 0
 
 testVector2 :: CE.TestCase MachineState Instruction
-testVector2 = testVector1 { CE.testNonce = 22
-                          , CE.testContext = (CE.testContext testVector1) { gprs = grs }
-                          }
+testVector2 =
+  testVector1 { CE.testNonce = 22
+              , CE.testContext = (CE.testContext testVector1) { gprs = grs }
+              }
   where
-    Just grs = V.fromList [ 200, 0, 0 , 0, 0
-                          , 99, 0, 0, 0, 0, 0
-                          , 0, 0, 0, 0, 0
-                          ]
+    grs = sizedVecFromList [ 200, 0, 0 , 0, 0
+                           , 99, 0, 0, 0, 0, 0
+                           , 0, 0, 0, 0, 0
+                           ]
+
+-- | Convert a list to a 'V.Vector' of length @n@. If the length of the list is
+-- not equal to @n@, throw an exception.
+sizedVecFromList :: forall n a. KnownNat n => [a] -> V.Vector n a
+sizedVecFromList l =
+  case V.fromList l of
+    Just v -> v
+    Nothing -> error $ "sizedVecFromList: Expected list of length "
+                    ++ show (natVal (Proxy @n))
+                    ++ ", received list of length "
+                    ++ show (length l)
