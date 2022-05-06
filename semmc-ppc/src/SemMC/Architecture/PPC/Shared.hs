@@ -56,7 +56,7 @@ import qualified Data.Set as S
 import           Data.Word ( Word16 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC as PPC
-import           GHC.TypeLits
+import           GHC.TypeLits ( KnownNat, Nat, type (<=) )
 import           Numeric.Natural ( Natural )
 
 import qualified Lang.Crucible.Backend as CB

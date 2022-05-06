@@ -26,7 +26,7 @@ module SemMC.Architecture.View (
   printView
   ) where
 
-import           GHC.TypeLits
+import           GHC.TypeLits ( KnownNat, Nat, SomeNat(..), someNatVal )
 import           Control.Applicative ( (<|>) )
 import           Control.Monad ( guard )
 import           Data.Bits
