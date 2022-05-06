@@ -7,9 +7,9 @@ module ParameterTests where
 
 import           Data.Parameterized.Classes
 import           Test.Tasty
-import           Test.Tasty.Hedgehog
 import qualified SemMC.Formula.Formula as F
 import           TestArchPropGen
+import           TestUtils
 import           What4.BaseTypes
 import           Hedgehog
 

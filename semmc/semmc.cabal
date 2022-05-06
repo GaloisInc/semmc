@@ -4,12 +4,12 @@
 name:                semmc
 version:             0.1.0.0
 synopsis:            Semantics synthesis for machine code
--- description:         
+-- description:
 license:             BSD3
 license-file:        LICENSE
 author:              Tristan Ravitch
 maintainer:          tristan@nochair.net
--- copyright:           
+-- copyright:
 category:            Compiler
 build-type:          Simple
 extra-source-files:  ChangeLog.md
@@ -160,7 +160,7 @@ test-suite semmc-semstore-tests
                , semmc
                , tasty
                , tasty-hunit
-               , tasty-hedgehog
+               , tasty-hedgehog >= 1.2
                , text
                , transformers
                , what4-serialize
