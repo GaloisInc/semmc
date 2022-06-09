@@ -62,7 +62,7 @@ instance T.HasSym MemM
     askSym = MemM $
       do B.SomeBackend bak <- memBackend <$> get
          return (B.backendGetSym bak)
-      
+
 askBackend :: MemM sym w (B.SomeBackend sym)
 askBackend = MemM $ memBackend <$> get
 
@@ -320,6 +320,7 @@ writeMem :: forall arch sym bits.
             , B.IsSymInterface sym
             , 1 S.<= bits
             , LLVM.HasLLVMAnn sym
+            , ?memOpts :: LLVM.MemOptions
             )
          => S.SymBV sym (A.RegWidth arch)
          -- ^ The address in memory at which to write
@@ -350,6 +351,7 @@ doWrites :: ( A.Architecture arch
             , B.IsSymInterface sym
             , LLVM.HasPtrWidth (A.RegWidth arch)
             , LLVM.HasLLVMAnn sym
+            , ?memOpts :: LLVM.MemOptions
             )
               => [A.AccessData sym arch]
               -> MemM sym arch ()
@@ -373,7 +375,7 @@ doWrites (A.WriteData i v : ls) = do
 -- TODO: add support for 'arrayIte' and 'arrayFromMap'?
 instantiateMemOps :: forall arch sym t st fs.
                        (sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
-                       , A.Architecture arch
+                       , A.Architecture arch, ?memOpts :: LLVM.MemOptions
                        )
                     => S.SymExpr sym (A.MemType arch)
                     -> MemM sym arch ()
