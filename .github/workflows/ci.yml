@@ -35,7 +35,6 @@ jobs:
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
-          enable-stack: true
       - uses: actions/cache@v2
         name: Cache cabal store
         with:
