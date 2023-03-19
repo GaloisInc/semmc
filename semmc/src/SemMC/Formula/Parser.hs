@@ -20,8 +20,7 @@
 N.B., this Parser is intended to parse the SemMC specific
 content surrounding serialized Formula and
 ParameterizedFormula and then parameterized and call a
-generic What4 s-expression parser (from the
-`what4-serialize` package) to parse the definition bodies.
+generic What4 s-expression parser to parse the definition bodies.
 
 This parser must be compatible with the output from both
 SemMC.Formula.Printer AND SemMC.DSL.
