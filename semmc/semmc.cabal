@@ -90,7 +90,6 @@ library
                        unliftio,
                        what4 >= 0.4,
                        crucible-llvm,
-                       what4-serialize,
                        ordered-containers,
                        ansi-wl-pprint,
                        bv-sized >= 1.0.0 && < 1.1
@@ -111,7 +110,7 @@ executable cmpsem
   build-depends:   base
                  , optparse-applicative
                  , semmc
-                 , what4-serialize
+                 , what4
                  , text
 
 
@@ -163,5 +162,4 @@ test-suite semmc-semstore-tests
                , tasty-hedgehog >= 1.2
                , text
                , transformers
-               , what4-serialize
                , what4

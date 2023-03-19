@@ -20,10 +20,10 @@ parsed by the code in SemMC.Formula.Parser.
 
 The bodies of the Formula and ParameterizedFormula are
 serialized using a _generic interface_ for serializing What4
-expressions (the what4-serialize package) and are then
-wrapped in an s-expression containing enough metadata to
-rebuild the respective SemMC Formula or ParameterizedFormula
-when parsed back in (by the code in SemMC.Formula.Parser).
+expressions and are then wrapped in an s-expression containing
+enough metadata to rebuild the respective SemMC Formula or
+ParameterizedFormula when parsed back in (by the code in
+SemMC.Formula.Parser).
 
 E.g., a ParameterizedFormula is roughly serialized out as follows:
 
@@ -41,11 +41,10 @@ The top-level forms/info comes directly from the contents of
 a ParameterizedFormula. Each `SERIALIZED_BODY_EXPRESSION`
 within the right-hand side of the bindings pairs in the
 `defs` section is serialized using the _generic_ What4
-expression printer from the `what4-serialize` package. To be
-sane/sound, that What4 serialization uses _fresh_ names for
-encountered What4 BoundVars and SymFns (since their
-human-readable names are not guaranteed to be unique). We
-record those fresh names along with their corresponding
+expression printer. To be sane/sound, that What4 serialization
+uses _fresh_ names for encountered What4 BoundVars and SymFns
+(since their human-readable names are not guaranteed to be unique).
+We record those fresh names along with their corresponding
 BoundVar/SymFn in the surrounding `with` binding clauses;
 this way when we parse back in the
 `SERIALIZED_BODY_EXPRESSION` we can parameterize the What4

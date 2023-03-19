@@ -56,6 +56,7 @@ import           Data.Parameterized.HasRepr
 
 -- from asl translator
 import           Data.Parameterized.CtxFuns
+import           Data.Parameterized.SomeSome ( SomeSome(..) )
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
@@ -79,7 +80,6 @@ import qualified Language.ASL.Formulas as ASL
 
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as WB
-import           What4.Utils.Util ( SomeSome(..) )
 
 data OperandTypeWrapper (arch :: Type) :: TL.TyFun Symbol WI.BaseType -> Type
 type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
@@ -298,7 +298,7 @@ symFnToParamFormula sym (UFBundle {..}) opcode symFn = do
 
   let WI.BaseStructRepr structRepr = WI.exprType expr
   structExprs <- ASL.toGlobalsStruct <$> Ctx.traverseWithIndex (\idx _ -> WI.structField sym expr idx) structRepr
- 
+
   -- Expand out the register updates as individual global update expressions
   glbParams <- ASL.flattenGlobalsStruct structExprs resolveSimpleRef (resolveGPRRef allGPRVars) (resolveSIMDRef allSIMDVars) resolveMemRef
 
@@ -373,7 +373,7 @@ symFnToParamFormula sym (UFBundle {..}) opcode symFn = do
               WI.applySymFn sym updateUnpredB (Ctx.singleton expr')
         _ -> return expr'
       return $ GlobalParameter (SF.LiteralParameter (ARM.Location (ASL.SimpleGlobalRef ref))) expr''
-      
+
     resolveGPRRef :: forall n
                    . Ctx.Assignment (WI.SymExpr sym) ASL.GPRCtx
                   -> ASL.GPRRef n
@@ -395,7 +395,7 @@ symFnToParamFormula sym (UFBundle {..}) opcode symFn = do
     resolveMemRef :: WB.Expr t (ASL.GlobalsType "__Memory")
                   -> IO (GlobalParameter sym sh "__Memory")
     resolveMemRef expr' = do
-      expr'' <- WI.applySymFn sym updateMemory (Ctx.singleton expr') 
+      expr'' <- WI.applySymFn sym updateMemory (Ctx.singleton expr')
       return $ GlobalParameter (SF.LiteralParameter (ARM.Location ASL.MemoryRef)) expr''
 
     -- | Here we rewrite the each initial register state bound variable
@@ -585,7 +585,7 @@ mkUFBundle sym (SF.FormulaEnv env _) = do
       _ -> fail $ "mkUFBundle: missing uninterpreted function: " ++ nm
 
 data ASLSemanticsOpts =
-  ASLSemanticsOpts { aslOptTrimRegs :: Bool 
+  ASLSemanticsOpts { aslOptTrimRegs :: Bool
                    -- ^ only emit a single register 'Location' update
                    }
 
