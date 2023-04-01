@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 module SemMC.Architecture.PPC ( AnyPPC, Variant, V32, V64
                               , VariantRepr(..), KnownVariant(..)

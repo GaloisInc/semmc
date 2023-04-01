@@ -43,7 +43,7 @@ library
                        mtl,
                        containers,
                        stm,
-                       text >= 1 && < 2,
+                       text >= 1 && < 2.1,
                        time,
                        filepath,
                        bytestring >=0.10 && < 0.12,

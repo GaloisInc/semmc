@@ -1,5 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 module SemMC.Architecture.Concrete (
   RegisterizedInstruction(..),
   LiteralRef(..),

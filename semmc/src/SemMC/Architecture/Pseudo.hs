@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 -- | Support for "pseudo" archtiectures that wrap other architectures to provide
 -- extra operands beyond the native architecture
 --
