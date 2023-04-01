@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, InstanceSigs, TypeApplications, ScopedTypeVariables,
   KindSignatures, ViewPatterns, GADTs, FlexibleContexts, UndecidableInstances,
-  GeneralizedNewtypeDeriving #-}
+  GeneralizedNewtypeDeriving, TypeOperators #-}
 
 module SemMC.Synthesis.Cegis.Types
   ( -- * Cegis types
@@ -83,7 +83,7 @@ class HasMemExpr m where
 
 -- | Construct parameters for Cegis
 mkCegisParams :: (S.IsSymExprBuilder sym, B.IsSymBackend sym bak, A.Architecture arch)
-              => bak 
+              => bak
               -> T.TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics
               -> Formula sym arch
@@ -243,7 +243,7 @@ instance (A.Architecture arch, P.ShowF (S.SymExpr sym))
   where
     show test = "⟨\t" ++ show (testInput test)
                 ++ "\n|||\t" ++ show (testOutput test)
-                ++ "\n|||\t" ++ show (memInput test) 
+                ++ "\n|||\t" ++ show (memInput test)
                 ++ "\n|||\t" ++ show (memOutput test) ++ "\n⟩"
 
 -- | Take the conjunction of (f a) for each a in some foldable data structure

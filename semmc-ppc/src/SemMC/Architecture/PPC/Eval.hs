@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 -- | Evaluators for location functions in formula definitions (e.g., memri_reg)
 module SemMC.Architecture.PPC.Eval (
   interpMemriReg,

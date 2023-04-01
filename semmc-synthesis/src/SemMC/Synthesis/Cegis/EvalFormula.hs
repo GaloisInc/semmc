@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, TypeApplications, ScopedTypeVariables, TypeFamilies,
-  DataKinds, AllowAmbiguousTypes, ImplicitParams #-}
+  DataKinds, AllowAmbiguousTypes, ImplicitParams, TypeOperators #-}
 
 module SemMC.Synthesis.Cegis.EvalFormula
   ( LocEval
