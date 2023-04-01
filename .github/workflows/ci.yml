@@ -11,7 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["8.8.4", "8.10.7", "9.0.2", "9.2.2"]
+        ghc: ["8.10.7", "9.2.7", "9.4.4"]
+        cabal: ['3.8.1.0']
         package:
           - semmc
           - semmc-aarch32
@@ -35,6 +36,7 @@ jobs:
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
       - uses: actions/cache@v2
         name: Cache cabal store
         with:
