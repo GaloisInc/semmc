@@ -25,7 +25,7 @@ library
                      , containers >= 0.5.8
                      , filepath
                      , located-base
-                     , text >= 1 && < 2
+                     , text >= 1 && < 2.1
                      , crucible >= 0.4
                      , crucible-llvm
                      , dismantle-tablegen
