@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE TypeOperators #-}
 module SemMC.Synthesis
   ( setupEnvironment
   , SynthesisEnvironment

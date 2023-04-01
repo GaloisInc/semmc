@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Main ( main ) where
 
@@ -194,7 +195,7 @@ checkFunction arch sym sem name =
   U.withLogging "semmc-ppc-genbase"
       (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
       catch (Right <$> loadFunction arch sym (name, sem)) $
-                 \(e :: SomeException) -> return $ Left $ show e   
+                 \(e :: SomeException) -> return $ Left $ show e
 
 loadFunction :: ( sym ~ WEB.ExprBuilder t st fs
                 , CRUB.IsSymInterface sym
