@@ -186,7 +186,7 @@ data UninterpFn arch where
                   , uninterpFnArgs :: Ctx.Assignment BaseTypeRepr args
                   , uninterpFnRes  :: BaseTypeRepr ty
                   , uninterpFnLive :: forall sym.
-                                      Ctx.Assignment (S.SymExpr sym) args 
+                                      Ctx.Assignment (S.SymExpr sym) args
                                    -> [AccessData sym arch]
                   -- ^ Given some arguments, identify the arguments that might touch memory.
                   } -> UninterpFn arch
@@ -197,11 +197,11 @@ instance Show (UninterpFn arch) where
 mkUninterpFn :: forall (args :: Ctx.Ctx BaseType) (ty :: BaseType) arch.
               ( KnownRepr (Ctx.Assignment BaseTypeRepr) args
               , KnownRepr BaseTypeRepr ty)
-             => String 
-             -> (forall sym. Ctx.Assignment (S.SymExpr sym) args 
+             => String
+             -> (forall sym. Ctx.Assignment (S.SymExpr sym) args
                           -> [AccessData sym arch])
              -> UninterpFn arch
-mkUninterpFn name liveness = MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args) 
+mkUninterpFn name liveness = MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args)
                                                       (knownRepr :: BaseTypeRepr ty)
                                                       liveness
 
@@ -228,7 +228,7 @@ data AccessData sym arch where
 
 instance S.TestEquality (S.SymExpr sym) => Eq (AccessData sym arch) where
   ReadData e == ReadData e'        | Just _ <- S.testEquality e e' = True
-  WriteData i v == WriteData i' v' | Just _ <- S.testEquality i i' 
+  WriteData i v == WriteData i' v' | Just _ <- S.testEquality i i'
                                    , Just _ <- S.testEquality v v' = True
   _ == _ = False
 
