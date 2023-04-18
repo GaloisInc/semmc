@@ -404,8 +404,8 @@ testRoundTripPrintParse =
           sexprTxt @?= (T.strip $ T.pack $ unlines
                         [ ";; " <> show opcode <> " (no arguments)"
                         , "((operands ())"
-                        , " (in ())"
-                        , " (defs ()))"
+                        , "  (in ())"
+                        , "  (defs ()))"
                         ])
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
