@@ -194,7 +194,7 @@ mkGlobalUF gb =
   let
     name = "INIT_GLOBAL_" ++ (T.unpack $ G.gbName gb)
   in case G.gbType gb of
-    BaseBVRepr (nr :: NatRepr n) -> withKnownNat nr $ Just $ A.mkUninterpFn @(EmptyCtx) @(BaseBVType n) name (\_ -> [])
+    BaseBVRepr (nr :: NatRepr n) -> NR.withKnownNat nr $ Just $ A.mkUninterpFn @(EmptyCtx) @(BaseBVType n) name (\_ -> [])
     BaseIntegerRepr -> Just $ A.mkUninterpFn @EmptyCtx @BaseIntegerType name (\_ -> [])
     BaseBoolRepr -> Just $ A.mkUninterpFn @EmptyCtx @BaseBoolType name (\_ -> [])
     BaseArrayRepr (Empty :> BaseIntegerRepr) (BaseBVRepr nr) |
