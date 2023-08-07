@@ -159,15 +159,15 @@ uninterpretedFunctions _ =
   ++ bvBinOp "fpRecipStepFused" empty [16,32,64]
   ++ bvBinOp "fpMulX" fpcrArg [16,32,64]
   ++ bvUnOp "fpRoundInt" (empty :> BaseBVRepr (NR.knownNat @32) :> BaseBVRepr (NR.knownNat @3) :> BaseBoolRepr) [16,32,64]
-  
-  
+
+
 -- Standard signatures for "UNDEFINED" functions
 type UFArgs = EmptyCtx
 type UFRet t = t
 
 fpcrArg :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)
 fpcrArg = knownRepr
-            
+
 mkUndefBVUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
             => Integer
             -> A.UninterpFn arm
@@ -259,7 +259,7 @@ mkBV2UF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
        => String
        -> (forall n m. 1 <= n => 1 <= m => NR.NatRepr n -> NR.NatRepr m -> (Some (Assignment BaseTypeRepr), Some BaseTypeRepr))
        -> Integer
-       -> Integer 
+       -> Integer
        -> A.UninterpFn arm
 mkBV2UF name mksig bvsz1 bvsz2
   | Just (Some bvszRep1) <- NR.someNat bvsz1
