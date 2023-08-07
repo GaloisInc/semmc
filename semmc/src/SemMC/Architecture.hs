@@ -261,10 +261,11 @@ taggedExprImmediate :: forall sym arch s proxy.
                     => proxy sym
                     -> TaggedExpr arch sym s
                     -> Maybe (Some (S.SymExpr sym))
-taggedExprImmediate _   (taggedOperand -> ValueOperand imm)      = Just (Some imm)
-taggedExprImmediate _   (taggedOperand -> LocationOperand _ _)   = Nothing
-taggedExprImmediate sym (taggedOperand -> CompoundOperand oComp) = operandComponentsImmediate @arch sym oComp
-taggedExprImmediate _ _ = error "Other tagged operand"
+taggedExprImmediate sym te =
+  case taggedOperand te of
+    ValueOperand imm      -> Just (Some imm)
+    LocationOperand _ _   -> Nothing
+    CompoundOperand oComp -> operandComponentsImmediate @arch sym oComp
 
 -- | This type encapsulates an evaluator for operations represented as
 -- uninterpreted functions in semantics.  It may seem strange to interpret
