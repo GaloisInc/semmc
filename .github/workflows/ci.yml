@@ -11,8 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["8.10.7", "9.2.7", "9.4.4"]
-        cabal: ['3.8.1.0']
+        ghc: ["9.2.8", "9.4.5", "9.6.2"]
+        cabal: ['3.10.1.0']
         package:
           - semmc
           - semmc-aarch32
