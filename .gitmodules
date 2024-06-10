@@ -1,6 +1,6 @@
 [submodule "submodules/dismantle"]
 	path = submodules/dismantle
-	url = git@github.com:travitch/dismantle.git
+	url = git@github.com:GaloisInc/dismantle.git
 [submodule "submodules/crucible"]
 	path = submodules/crucible
 	url = https://github.com/GaloisInc/crucible.git
@@ -9,10 +9,10 @@
 	url = git@github.com:GaloisInc/elf-edit.git
 [submodule "dependencies/llvm-pretty"]
 	path = submodules/llvm-pretty
-	url = https://github.com/elliottt/llvm-pretty.git
+	url = https://github.com/GaloisInc/llvm-pretty.git
 [submodule "submodules/llvm-pretty"]
 	path = submodules/llvm-pretty
-	url = https://github.com/elliottt/llvm-pretty
+	url = https://github.com/GaloisInc/llvm-pretty
 [submodule "submodules/asl-translator"]
 	path = submodules/asl-translator
 	url = git@github.com:GaloisInc/asl-translator.git
