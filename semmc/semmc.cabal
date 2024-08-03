@@ -70,7 +70,7 @@ library
                        stm,
                        BoundedChan,
                        located-base,
-                       text >= 1 && < 2.1,
+                       text >= 1 && < 2.2,
                        exceptions >= 0.8 && < 0.11,
                        s-cargot >= 0.1.6.0 && < 0.2,
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
