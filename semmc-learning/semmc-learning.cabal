@@ -36,6 +36,7 @@ library
                        SemMC.Stochastic.Classify
                        SemMC.Stochastic.Generalize
                        SemMC.Stochastic.Initialize
+                       SemMC.Stochastic.Panic
                        SemMC.Stochastic.Statistics
                        SemMC.Stochastic.Instantiate
   -- other-modules:
@@ -59,7 +60,8 @@ library
                        parameterized-utils,
                        what4,
                        dismantle-tablegen,
-                       semmc
+                       semmc,
+                       panic
   hs-source-dirs:      src
   default-language:    Haskell2010
 

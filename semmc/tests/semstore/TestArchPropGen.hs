@@ -22,6 +22,8 @@ import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
 import           Data.Kind ( Type )
 import qualified Data.List as L
+import           Data.List.NonEmpty ( NonEmpty(..) )
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import           Data.Maybe ( catMaybes )
 import           Data.Parameterized.Classes
@@ -135,9 +137,9 @@ genSolverSymbol forPrinting =
                   HG.frequency [ (90, HG.alphaNum)
                                , (10, return '_')
                                ]
-        genSSym s = let sp = zip3 (L.inits s) (repeat "!") (L.tails s)
+        genSSym s = let sp = zip3NE (NE.inits s) (NE.repeat "!") (NE.tails s)
                         join3 (a,b,c) = a <> b <> c
-                        s' = map join3 $ tail sp
+                        s' = map join3 $ NE.tail sp
                     in HG.element s'
         genUserSymbol = (WI.userSymbol . (<>) userSymPrefix <$> genUSym) >>= \case
           -- alphaNum and _, but must not match a known Yices/smtlib keyword
@@ -153,6 +155,10 @@ genSolverSymbol forPrinting =
                              case WI.userSymbol s of
                                Left _ -> genSystemSymbol -- could repeat forever...
                                Right _ -> systemSymbol . (<>) systemSymPrefix <$> genSSym s
+
+        -- Like zip3, but for NonEmpty lists.
+        zip3NE :: forall a b c. NonEmpty a -> NonEmpty b -> NonEmpty c -> NonEmpty (a, b, c)
+        zip3NE ~(x :| xs) ~(y :| ys) ~(z :| zs) = (x, y, z) :| L.zip3 xs ys zs
 
 ----------------------------------------------------------------------
 

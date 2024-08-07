@@ -29,13 +29,13 @@ import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param, ite, u
                            , bvadd, bvmul, bvshl, bvnot
                            , runSem, printDefinition
                            , ExprTypeRepr(..), Literal(..), Expr(..)
-                           , Location(..), Package(..) )
+                           , Location(..), Package(..), Definition )
 import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Formula.Parser as FI
 import qualified SemMC.Formula.Printer as FO
 import qualified SemMC.Log as Log
 import           Test.Tasty
-import           Test.Tasty.HUnit ( assertEqual, testCase, (@?=) )
+import           Test.Tasty.HUnit ( assertEqual, assertFailure, testCase, (@?=) )
 import           TestArch
 import           TestArchPropGen
 import           TestUtils
@@ -396,8 +396,7 @@ testRoundTripPrintParse =
               pkg = runSem opdef
           -- Verify the S-expression stored form of the Formula is as expected
           length (pkgFunctions pkg) @?= 0
-          length (pkgFormulas pkg) @?= 1
-          let (pkgN, pkgD) = head $ pkgFormulas pkg
+          (pkgN, pkgD) <- assertOneFormula pkg
           pkgN @?= show opcode
           let sexprTxt = printDefinition pkgD
           debugOut $ "printDefinition pkgD: " <> (T.unpack sexprTxt)
@@ -437,8 +436,7 @@ testRoundTripPrintParse =
               pkg = runSem opdef
           -- Verify the S-expression stored form of the Formula is as expected
           length (pkgFunctions pkg) @?= 0
-          length (pkgFormulas pkg) @?= 1
-          let (pkgN, pkgD) = head $ pkgFormulas pkg
+          (pkgN, pkgD) <- assertOneFormula pkg
           pkgN @?= show opcode
           let sexprTxt = printDefinition pkgD
           debugOut $ "printDefinition pkgD: " <> (T.unpack sexprTxt)
@@ -508,8 +506,7 @@ testRoundTripPrintParse =
               pkg = runSem opdef
           -- Verify the S-expression stored form of the Formula is as expected
           length (pkgFunctions pkg) @?= 0
-          length (pkgFormulas pkg) @?= 1
-          let (pkgN, pkgD) = head $ pkgFormulas pkg
+          (pkgN, pkgD) <- assertOneFormula pkg
           pkgN @?= show opcode
           let sexprTxt = printDefinition pkgD
           debugOut $ "printDefinition pkgD: " <> (T.unpack sexprTxt)
@@ -572,3 +569,13 @@ testRoundTripPrintParse =
 
 enable_mcsat :: ConfigOption BaseBoolType
 enable_mcsat = configOption knownRepr "yices_enable-mcsat"
+
+-- | Assert that a 'Package' has a single formula in its 'pkgFormulas'. If so,
+-- return the underlying formula. If not, throw an assertion failure.
+assertOneFormula :: Package -> IO (String, Definition)
+assertOneFormula pkg =
+  case pkgFormulas pkg of
+    [formula] -> pure formula
+    formulas -> assertFailure $
+      "expected Package to have 1 formula, but it actually had " ++
+      show (length formulas)

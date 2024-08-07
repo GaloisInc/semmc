@@ -24,13 +24,13 @@ module SemMC.Architecture.ARM.Combined where
 
 import           Data.Data
 import           Data.EnumF ( congruentF, EnumF, enumF, enumCompareF )
-import qualified Data.Foldable as F
 import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.Lift
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.TraversableFC
+import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
 import qualified Dismantle.ARM as ARMDis
 import qualified Dismantle.Thumb as ThumbDis
@@ -90,8 +90,24 @@ instance EnumF (ARMOpcode ARMOperand) where
     enumF (A32Opcode x) = 1000000 + enumF x
     enumF (T32Opcode x) = enumF x
 
-    congruentF (A32Opcode x) = let ll = fmap A32Opcode $ F.toList (congruentF x) in NES.fromList (head ll) (tail ll)
-    congruentF (T32Opcode x) = let ll = fmap T32Opcode $ F.toList (congruentF x) in NES.fromList (head ll) (tail ll)
+    congruentF opcode =
+      case opcode of
+        A32Opcode x -> congruentOpcodes A32Opcode x
+        T32Opcode x -> congruentOpcodes T32Opcode x
+      where
+        -- Data.Set.NonEmpty doesn't provide a `map` function, so we have to
+        -- map over a NonEmpty Set in a somewhat laborious fashion.
+        congruentOpcodes ::
+          forall opcode opcode' (sh :: [Symbol]).
+          (EnumF opcode, Ord (opcode' sh)) =>
+          (opcode sh -> opcode' sh) ->
+          opcode sh ->
+          NES.Set (opcode' sh)
+        congruentOpcodes mkOpcode x =
+          let (l, ll) = NES.view (congruentF x) in
+          let l'  = mkOpcode l in
+          let ll' = map mkOpcode (Set.toList ll) in
+          NES.fromList l' ll'
 
 -- ----------------------------------------------------------------------
 

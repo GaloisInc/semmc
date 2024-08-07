@@ -11,6 +11,7 @@ import           Text.Printf
 
 import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.Architecture.View as V
+import           SemMC.Stochastic.Panic as Panic
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Util as U
 
@@ -32,7 +33,12 @@ fixRvwps outMasks = case outMasks of
     case mask of
       V.SemanticView{..} -> do
         let dst = semvView
-        let src = head semvCongruentViews
+        let src = case semvCongruentViews of
+                    (view:_) -> view
+                    [] -> Panic.panic
+                            Panic.SemMCLearning
+                            "fixRvwps"
+                            ["SemanticView with no congruent views"]
         AP.rvwpMov dst src
   -- Only implementing the simpler case of a single rv in the wp to
   -- start. The general case is more complicated to implement, and
