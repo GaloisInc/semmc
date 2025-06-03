@@ -31,3 +31,5 @@ constraints:
   regex == 1.0.1.3
 allow-newer:
   regex:template-haskell
+-- See https://github.com/Happstack/boomerang/issues/12
+allow-newer: boomerang:template-haskell
