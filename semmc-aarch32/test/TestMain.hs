@@ -2,8 +2,6 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
-import           Data.Bits
-import           Data.Word
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO

@@ -13,7 +13,9 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+
 {-# OPTIONS_GHC -Wno-orphans #-}
+
 module SemMC.Architecture.A32
     ( A32
     , Instruction
@@ -39,7 +41,6 @@ import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
-import           Data.Semigroup ((<>))
 import qualified Data.Set as Set
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.ARM as ARMDis
@@ -373,7 +374,8 @@ operandValue sym locLookup op = TaggedExpr <$> opVa op
                                    }
           return (A.CompoundOperand srr)
         opVa (ARMDis.Unpredictable v) = A.ValueOperand <$> S.bvLit sym knownNat (asBV v)
-        -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
+        -- TODO(#96): Implement the remaining patterns?
+        opVa unhandled = error $ "operandValue not implemented for " <> show unhandled
 
 asBV :: (KnownNat n, Integral i) => i -> BVS.BV n
 asBV i = BVS.mkBV knownNat (toInteger i)
@@ -402,15 +404,15 @@ instance A.IsLocation (Location A32) where
   locationType LocMem1 = knownRepr
   locationType LocMem2 = knownRepr
 
-  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat (asBV 0)
-  defaultLocationExpr sym (LocFPR _) = S.bvLit sym knownNat (asBV 0)
-  defaultLocationExpr sym (LocGPRMask _) = S.bvLit sym knownNat (asBV 0)
-  defaultLocationExpr sym LocPC = S.bvLit sym knownNat (asBV 0)
-  defaultLocationExpr sym LocCPSR = S.bvLit sym knownNat (asBV 0)
+  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat (asBV @_ @Int 0)
+  defaultLocationExpr sym (LocFPR _) = S.bvLit sym knownNat (asBV @_ @Int 0)
+  defaultLocationExpr sym (LocGPRMask _) = S.bvLit sym knownNat (asBV @_ @Int 0)
+  defaultLocationExpr sym LocPC = S.bvLit sym knownNat (asBV @_ @Int 0)
+  defaultLocationExpr sym LocCPSR = S.bvLit sym knownNat (asBV @_ @Int 0)
   defaultLocationExpr sym LocMem1 =
-      S.constantArray sym knownRepr =<< S.bvLit sym knownNat (asBV 0)
+      S.constantArray sym knownRepr =<< S.bvLit sym knownNat (asBV @_ @Int 0)
   defaultLocationExpr sym LocMem2 =
-      S.constantArray sym knownRepr =<< S.bvLit sym knownNat (asBV 0)
+      S.constantArray sym knownRepr =<< S.bvLit sym knownNat (asBV @_ @Int 0)
 
   nonMemLocations = concat
     [ map (Some . LocGPR) [0..numGPR-1]
@@ -888,6 +890,7 @@ a32template a32sr =
       --                             return $ ARMDis.So_reg_reg $ ARMOperands.SoRegReg gprN gprN offsetVal
       --                       return (expr, T.RecoverOperandFn recover)
       ARMDis.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
+      _ -> error "a32template: unimplemented"  -- TODO(#93)
 
 concreteTemplatedOperand :: forall arch s a.
                             (A.Architecture arch)

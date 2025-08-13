@@ -264,6 +264,7 @@ concreteToGVW = GE.GVW . concreteToGroundVal
 -- | Convert concrete values to ground values
 concreteToGroundVal :: W.ConcreteVal tp -> GE.GroundValue tp
 concreteToGroundVal (W.ConcreteBool b) = b
+concreteToGroundVal (W.ConcreteFloat _ f) = f
 concreteToGroundVal (W.ConcreteInteger n) = n
 concreteToGroundVal (W.ConcreteReal r) = r
 concreteToGroundVal (W.ConcreteString s) = s

@@ -9,6 +9,10 @@
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeOperators #-}
+
+-- TODO(#92): Don't import deprecated `Text.PrettyPrint.ANSI.Leijen`
+{-# OPTIONS_GHC -Wno-deprecations #-}
+
 module SemMC.Synthesis.Core
   ( synthesizeFormula
   , SynthesisEnvironment(..)
@@ -18,10 +22,10 @@ module SemMC.Synthesis.Core
 import           Control.Arrow ( (&&&) )
 import           Control.Monad.Reader
 import           Control.Monad.State
+import qualified Data.Foldable as F
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import           Data.Parameterized.Classes (ShowF(..) )
 import qualified Data.Sequence as Seq
-import           Data.Foldable
 import qualified Data.Set as Set
 import           Data.Typeable
 
@@ -74,7 +78,7 @@ askMaxLength = reader synthMaxLength
 calcFootprint :: (Architecture arch)
               => [Some (TemplatedInstruction sym arch)]
               -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
-calcFootprint = foldl' addPrint (Set.empty, Set.empty)
+calcFootprint = F.foldl' addPrint (Set.empty, Set.empty)
   where addPrint (curInputs, curOutputs) insn =
           let (newInputs, newOutputs) = viewSome (templatedInputs &&& templatedOutputs) insn
               upInputs  = curInputs `Set.union` (newInputs Set.\\ curOutputs)
