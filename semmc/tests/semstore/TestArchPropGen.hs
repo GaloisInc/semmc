@@ -483,6 +483,7 @@ paramExprBV32 sym opvars litvars (Some param) =
           case param of
             F.OperandParameter _ idx -> WI.varExpr sym $ BV.unBoundVar $ opvars PL.!! idx
             F.LiteralParameter loc -> WI.varExpr sym $ fromJust' "paramExprBV32.BVRepr32.lookup" $ MapF.lookup loc litvars
+            _ -> error "paramExprBV32"
         Nothing -> error $ "paramExprBV32 unsupported BVRepr size: " <> show w
     BaseIntegerRepr ->
       case param of
@@ -492,6 +493,8 @@ paramExprBV32 sym opvars litvars (Some param) =
         F.LiteralParameter loc -> liftIO $ do
           let i = WI.varExpr sym (fromJust' "paramExprBV32.IntegerRerp.lookup" (MapF.lookup loc litvars))
           WI.integerToBV sym i (knownNat @32)
+        _ -> error "paramExprBV32"
+    _ -> error "paramExprBV32"
 
 
 

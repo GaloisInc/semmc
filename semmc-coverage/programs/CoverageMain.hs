@@ -6,7 +6,6 @@ module Main where
 import           Control.Monad (forM_, when)
 import qualified Data.ByteString.UTF8 as BS8
 import           Data.List (intercalate)
-import           Data.Monoid ((<>))
 import           Data.Proxy (Proxy(Proxy))
 import qualified System.Exit as IO
 import qualified System.Environment as IO

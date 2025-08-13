@@ -51,7 +51,6 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
-import           Data.Semigroup ((<>))
 import qualified Data.Set as Set
 import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8, Word32 )
@@ -303,11 +302,11 @@ instance (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
   locationType LocCPSR = knownRepr
   locationType LocMem = knownRepr
 
-  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat (asBV 0)
-  defaultLocationExpr sym LocPC = S.bvLit sym knownNat (asBV 0)
-  defaultLocationExpr sym LocCPSR = S.bvLit sym knownNat (asBV 0)
+  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat (asBV @_ @Int 0)
+  defaultLocationExpr sym LocPC = S.bvLit sym knownNat (asBV @_ @Int 0)
+  defaultLocationExpr sym LocCPSR = S.bvLit sym knownNat (asBV @_ @Int 0)
   defaultLocationExpr sym LocMem =
-      S.constantArray sym knownRepr =<< S.bvLit sym knownNat (asBV 0)
+      S.constantArray sym knownRepr =<< S.bvLit sym knownNat (asBV @_ @Int 0)
 
   nonMemLocations = concat
     [ map (Some . LocGPR) [0..numGPR-1],
@@ -380,151 +379,187 @@ locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
                        , A.exprInterpName = 'interpIsR15
+                       , A.exprInterp = error "semmc: TODO(#95)"
                        })
 
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
                                   , A.exprInterpName = 'interpAm2offsetimmImmExtractor
+                                  , A.exprInterp = error "semmc: TODO(#95)"
                                   })
     , ("a32.am2offset_imm_add", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
                                   , A.exprInterpName = 'interpAm2offsetimmAddExtractor
+                                  , A.exprInterp = error "semmc: TODO(#95)"
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp interpImm12Reg
                           , A.exprInterpName = 'interpImm12RegExtractor
+                          , A.exprInterp = error "semmc: TODO(#95)"
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
                           , A.exprInterpName = 'interpImm12OffsetExtractor
+                          , A.exprInterp = error "semmc: TODO(#95)"
                           })
     , ("a32.imm12_add", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
                           , A.exprInterpName = 'interpImm12AddFlgExtractor
+                          , A.exprInterp = error "semmc: TODO(#95)"
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
                                           { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
+                                          , A.exprInterp = error "semmc: TODO(#95)"
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
                                             { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
+                                            , A.exprInterp = error "semmc: TODO(#95)"
                                             })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
                                 { A.locationInterp = F.LocationFuncInterp noLocation
                                 , A.exprInterpName = 'interpLdstsoregAddExtractor
+                                , A.exprInterp = error "semmc: TODO(#95)"
                                 })
     , ("a32.ldst_so_reg_immediate", A.FunctionInterpretation
                                       { A.locationInterp = F.LocationFuncInterp noLocation
                                       , A.exprInterpName = 'interpLdstsoregImmExtractor
+                                      , A.exprInterp = error "semmc: TODO(#95)"
                                       })
     , ("a32.ldst_so_reg_shift_type", A.FunctionInterpretation
                                        { A.locationInterp = F.LocationFuncInterp noLocation
                                        , A.exprInterpName = 'interpLdstsoregTypeExtractor
+                                       , A.exprInterp = error "semmc: TODO(#95)"
                                        })
 
     , ("a32.modimm_imm", A.FunctionInterpretation
                            { A.locationInterp = F.LocationFuncInterp noLocation
                            , A.exprInterpName = 'interpModimmImmExtractor
+                           , A.exprInterp = error "semmc: TODO(#95)"
                            })
     , ("a32.modimm_rot", A.FunctionInterpretation
                            { A.locationInterp = F.LocationFuncInterp noLocation
                            , A.exprInterpName = 'interpModimmRotExtractor
+                           , A.exprInterp = error "semmc: TODO(#95)"
                            })
 
     , ("a32.soregimm_type", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp noLocation
                               , A.exprInterpName = 'interpSoregimmTypeExtractor
+                              , A.exprInterp = error "semmc: TODO(#95)"
                               })
     , ("a32.soregimm_imm", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp noLocation
                              , A.exprInterpName = 'interpSoregimmImmExtractor
+                             , A.exprInterp = error "semmc: TODO(#95)"
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
-                             , A.exprInterpName = 'interpSoregimmRegExtractor })
+                             , A.exprInterpName = 'interpSoregimmRegExtractor
+                             , A.exprInterp = error "semmc: TODO(#95)" })
 
     , ("a32.soregreg_type", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp noLocation
                               , A.exprInterpName = 'interpSoregregTypeExtractor
+                              , A.exprInterp = error "semmc: TODO(#95)"
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
-                              , A.exprInterpName = 'interpSoregregReg1Extractor })
+                              , A.exprInterpName = 'interpSoregregReg1Extractor
+                              , A.exprInterp = error "semmc: TODO(#95)" })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
-                              , A.exprInterpName = 'interpSoregregReg2Extractor })
+                              , A.exprInterpName = 'interpSoregregReg2Extractor
+                              , A.exprInterp = error "semmc: TODO(#95)" })
 
     , ("t32.blxtarget_S", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation
                             , A.exprInterpName = 'interpBlxTarget_S
+                            , A.exprInterp = error "semmc: TODO(#95)"
                             })
     , ("t32.blxtarget_imm10H", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp noLocation
                                  , A.exprInterpName = 'interpBlxTarget_imm10H
+                                 , A.exprInterp = error "semmc: TODO(#95)"
                                  })
     , ("t32.blxtarget_imm10L", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp noLocation
                                  , A.exprInterpName = 'interpBlxTarget_imm10L
+                                 , A.exprInterp = error "semmc: TODO(#95)"
                                  })
     , ("t32.blxtarget_J1", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp noLocation
                              , A.exprInterpName = 'interpBlxTarget_J1
+                             , A.exprInterp = error "semmc: TODO(#95)"
                              })
     , ("t32.blxtarget_J2", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp noLocation
                              , A.exprInterpName = 'interpBlxTarget_J2
+                             , A.exprInterp = error "semmc: TODO(#95)"
                              })
 
     , ("t32.imm0_1020S4_imm", A.FunctionInterpretation
                                 { A.locationInterp = F.LocationFuncInterp noLocation
                                 , A.exprInterpName = 'interpImm01020s4ImmExtractor
+                                , A.exprInterp = error "semmc: TODO(#95)"
                                 })
     , ("t32.imm0_508S4_imm", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp noLocation
                              , A.exprInterpName = 'interpImm0508s4ImmExtractor
+                             , A.exprInterp = error "semmc: TODO(#95)"
                              })
     , ("t32.reglist", A.FunctionInterpretation
                         { A.locationInterp = F.LocationFuncInterp noLocation
                         , A.exprInterpName = 'interpTReglistExtractor
+                        , A.exprInterp = error "semmc: TODO(#95)"
                         })
     , ("t32.addrmode_is2_imm", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp noLocation
                                  , A.exprInterpName = 'interpTaddrmodeis2ImmExtractor
+                                 , A.exprInterp = error "semmc: TODO(#95)"
                                  })
     , ("t32.addrmode_is2_reg", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp interpTaddrmodeis2Reg
                                  , A.exprInterpName = 'interpTaddrmodeis2RegExtractor
+                                 , A.exprInterp = error "semmc: TODO(#95)"
                                  })
     , ("t32.addrmode_is4_imm", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp noLocation
                                  , A.exprInterpName = 'interpTaddrmodeis4ImmExtractor
+                                 , A.exprInterp = error "semmc: TODO(#95)"
                                  })
     , ("t32.addrmode_is4_reg", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp interpTaddrmodeis4Reg
                                  , A.exprInterpName = 'interpTaddrmodeis4RegExtractor
+                                 , A.exprInterp = error "semmc: TODO(#95)"
                                  })
     , ("t32.addrmode_pc", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation
                             , A.exprInterpName = 'interpTaddrmodepcExtractor
+                            , A.exprInterp = error "semmc: TODO(#95)"
                             })
     , ("t32.t2soimm_imm", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation
                             , A.exprInterpName = 'interpT2soimmImmExtractor
+                            , A.exprInterp = error "semmc: TODO(#95)"
                             })
     , ("t32.t2soreg_reg", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp interpT2soregReg
                             , A.exprInterpName = 'interpT2soregRegExtractor
+                            , A.exprInterp = error "semmc: TODO(#95)"
                             })
     , ("t32.t2soreg_imm", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation
                             , A.exprInterpName = 'interpT2soregImmExtractor
+                            , A.exprInterp = error "semmc: TODO(#95)"
                             })
     , ("t32.t2soreg_type", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation
                             , A.exprInterpName = 'interpT2soregTypeExtractor
+                            , A.exprInterp = error "semmc: TODO(#95)"
                             })
     ]
 
@@ -673,6 +708,7 @@ a32template a32sr =
       --                             return $ ARMDis.So_reg_reg $ ARMOperands.SoRegReg gprN gprN offsetVal
       --                       return (expr, T.RecoverOperandFn recover)
       ARMDis.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
+      _ -> error "a32template: unimplemented"  -- TODO(#93)
 
 t32template :: ThumbDis.OperandRepr s -> [T.TemplatedOperand AArch32 s]
 t32template t32sr =

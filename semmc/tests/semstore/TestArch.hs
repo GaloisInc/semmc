@@ -89,6 +89,8 @@ instance SA.Architecture TestGenArch where
 
   unTagged te = case unTaggedExpr te of
     SA.LocationOperand _ se -> Just se
+    SA.ValueOperand se -> Just se
+    SA.CompoundOperand _ -> Nothing
 
   taggedOperand = unTaggedExpr
 
@@ -122,6 +124,10 @@ instance SA.Architecture TestGenArch where
 
   locationFuncInterpretation _ = []
 
+  operandComponentsImmediate = error "TODO: TestGenArch"
+  readMemUF = error "TODO: TestGenArch"
+  writeMemUF = error "TODO: TestGenArch"
+  archEndianForm = error "TODO: TestGenArch"
 
 ----------------------------------------------------------------------
 -- Location
@@ -163,6 +169,8 @@ instance L.IsLocation TestLocation where
   defaultLocationExpr = error "TestLocation defaultLocationExpr TBD"
 
   registerizationLocations = error "TestLocation registerizationLocations TBD"
+
+  isIP = error "TestLocation isIP TBD"
 
 
 type instance L.Location TestGenArch = TestLocation

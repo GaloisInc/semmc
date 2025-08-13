@@ -80,6 +80,52 @@ instance (WI.IsExpr (WI.SymExpr sym), ShowF (A.Location arch)) => Show (OperandC
                                             , show (WI.printSymExpr oe)
                                             , show (WI.printSymExpr ae)
                                             ]
+      OCT2SoReg r re ie ste -> unwords [ "OCT2SoReg"
+                                       , showF r
+                                       , show (WI.printSymExpr re)
+                                       , show (WI.printSymExpr ie)
+                                       , show (WI.printSymExpr ste)
+                                       ]
+      OCTAddrModeIs4 r re ie -> unwords [ "OCTAddrModeIs4"
+                                        , showF r
+                                        , show (WI.printSymExpr re)
+                                        , show (WI.printSymExpr ie)
+                                        ]
+      OCTAddrModeIs2 r re ie -> unwords [ "OCTAddrModeIs2"
+                                        , showF r
+                                        , show (WI.printSymExpr re)
+                                        , show (WI.printSymExpr ie)
+                                        ]
+      OCSoRegReg r1 r1e r2 r2e ste -> unwords [ "OCSoRegReg"
+                                              , showF r1
+                                              , show (WI.printSymExpr r1e)
+                                              , showF r2
+                                              , show (WI.printSymExpr r2e)
+                                              , show (WI.printSymExpr ste)
+                                              ]
+      OCSoRegImm r re ste ie -> unwords [ "OCSoRegImm"
+                                        , showF r
+                                        , show (WI.printSymExpr re)
+                                        , show (WI.printSymExpr ste)
+                                        , show (WI.printSymExpr ie)
+                                        ]
+      OCLdstSoReg b be o oe ae ie te -> unwords [ "OCLdstSoReg"
+                                                , showF b
+                                                , show (WI.printSymExpr be)
+                                                , showF o
+                                                , show (WI.printSymExpr oe)
+                                                , show (WI.printSymExpr ae)
+                                                , show (WI.printSymExpr ie)
+                                                , show (WI.printSymExpr te)
+                                                ]
+      OCModImm ie re -> unwords [ "OCModImm"
+                                , show (WI.printSymExpr ie)
+                                , show (WI.printSymExpr re)
+                                ]
+      OCAm2OffsetImm ie ae -> unwords [ "OCAm2OffsetImm"
+                                      , show (WI.printSymExpr ie)
+                                      , show (WI.printSymExpr ae)
+                                      ]
 
 instance (WI.IsExpr (WI.SymExpr sym), ShowF (A.Location arch)) => ShowF (OperandComponents arch sym)
 
