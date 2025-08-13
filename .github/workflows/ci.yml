@@ -1,84 +1,50 @@
 name: semmc
 
 on:
-  push:
-    branches: [master]
   pull_request:
+  push:
     branches: [master]
 
 jobs:
-  build-linux:
+  build:
+    name: ${{ matrix.package }} - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
-        ghc: ["9.6.7", "9.8.4", "9.10.1"]
         cabal: ['3.14.2.0']
+        ghc: ["9.6.7", "9.8.4", "9.10.1"]
+        os: [ubuntu-24.04]
         package:
           - semmc
           - semmc-aarch32
           - semmc-arm
           - semmc-ppc
-          - semmc-x86_64
+          - semmc-x8664
           - semmc-coverage
           - semmc-fuzzer
           - semmc-toy
           - semmc-synthesis
           - semmc-learning
-    runs-on: ubuntu-latest
-    name: ${{ matrix.package }} - GHC v${{ matrix.ghc }} - ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          git config --global url.https://github.com/.insteadOf git@github.com:
-          git submodule update --init
-
-      - uses: haskell-actions/setup@v2
-        id: setup-haskell
-        with:
-          ghc-version: ${{ matrix.ghc }}
-          cabal-version: ${{ matrix.cabal }}
-
-      - uses: actions/cache/restore@v4
-        name: Restore cabal store cache
-        with:
-          path: |
-            ${{ steps.setup-haskell.outputs.cabal-store }}
-            dist-newstyle
-          key: cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
-          restore-keys: |
-            cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}
-
-      - name: Configure
-        run: |
-          ln -sv cabal.project.newbuild cabal.project
-          ln -sv cabal.GHC-${{ matrix.ghc }}.config cabal.project.freeze
-          cabal v2-update
-          cabal v2-configure -j2 --minimize-conflict-set --enable-tests --ghc-options='-Werror=compat -Werror=default'
-
-      - name: Build
-        run: cabal v2-build ${{ matrix.package }}
-
-      # Solvers
-      - name: Install yices
-        run: |
+    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v1
+    with:
+      build-targets: ${{ matrix.package }}
+      check: false
+      # See Note [Parallelism] in `haskell-ci.yml` for why `--ghc-options='-j'`
+      # and `--semaphore`.
+      configure-flags: --enable-tests --ghc-options='-Werror=compat -Werror=default -j' --semaphore
+      ghc: ${{ matrix.ghc }}
+      os: ${{ matrix.os }}
+      pre-hook: |
+        ln -sv cabal.project.newbuild cabal.project
+        ln -sv cabal.GHC-${{ matrix.ghc }}.config cabal.project.freeze
+      pre-test-hook: |
           curl -L https://yices.csl.sri.com/releases/2.6.2/yices-2.6.2-x86_64-pc-linux-gnu-static-gmp.tar.gz | tar xz
           sudo cp yices*/bin/yices-smt2 /usr/local/bin
           sudo cp yices*/bin/yices /usr/local/bin
-      - name: Install z3
-        run: |
+
           curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip --output z3.zip
           unzip z3.zip
           sudo mv z3-*/bin/z3 /usr/local/bin
-
-      - name: Tests
-        working-directory: ${{ matrix.package }}
-        run: cabal v2-test
-
-      - uses: actions/cache/save@v4
-        name: Save cabal store cache
-        if: always()
-        with:
-          path: |
-            ${{ steps.setup-haskell.outputs.cabal-store }}
-            dist-newstyle
-          key: cabal-${{ matrix.package }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+      sdist-targets: ${{ matrix.package }}
+      submodules: "true"
+      test-targets: ${{ matrix.package }}
+      test: ${{ startsWith(matrix.os, 'ubuntu') }}
