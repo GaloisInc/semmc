@@ -11,26 +11,20 @@ jobs:
     strategy:
       matrix:
         cabal: ['3.14.2.0']
-        ghc: ["9.6.7", "9.8.4", "9.10.1"]
+        ghc: ["9.10.1"]
         os: [ubuntu-24.04]
         package:
           - semmc
           - semmc-aarch32
           - semmc-arm
-          - semmc-ppc
-          - semmc-x8664
-          - semmc-coverage
-          - semmc-fuzzer
-          - semmc-toy
-          - semmc-synthesis
-          - semmc-learning
-    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v1
+    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@4092844e62f145fc0321ff6a9a0275d3e0c32d92
     with:
       build-targets: ${{ matrix.package }}
+      cache-key-prefix: TODO
       check: false
       # See Note [Parallelism] in `haskell-ci.yml` for why `--ghc-options='-j'`
       # and `--semaphore`.
-      configure-flags: --enable-tests --ghc-options='-Werror=compat -Werror=default -j' --semaphore
+      configure-flags: --enable-coverage --enable-tests --ghc-options='-Werror=compat -Werror=default -j' --semaphore
       ghc: ${{ matrix.ghc }}
       os: ${{ matrix.os }}
       pre-hook: |
