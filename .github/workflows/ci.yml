@@ -3,7 +3,6 @@ name: semmc
 on:
   pull_request:
   push:
-    branches: [master]
 
 jobs:
   build:
@@ -17,7 +16,7 @@ jobs:
           - semmc
           - semmc-aarch32
           - semmc-arm
-    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@4092844e62f145fc0321ff6a9a0275d3e0c32d92
+    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@a3dcac4d396fc9c57216b03143174e627c607cca
     with:
       build-targets: ${{ matrix.package }}
       cache-key-prefix: TODO
