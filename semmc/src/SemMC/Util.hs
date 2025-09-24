@@ -15,7 +15,6 @@
 module SemMC.Util
   ( -- * Misc
     groundValToExpr
-  , exprToGroundVal
   , showGroundValue
   , showGroundValues
   , concreteToGVW
@@ -239,24 +238,6 @@ allGroundAssign (idx :> BaseBVRepr w) indices = do
 allGroundAssign _ _ = error "allGroundAssign is only defined for bit vectors"
 
 
-
--- | Support for converting symbolic expressions to ground values.
-exprToGroundVal :: forall sym tp.
-                   S.IsSymExprBuilder sym
-                => BaseTypeRepr tp
-                -> S.SymExpr sym tp
-                -> Maybe (GE.GroundValue tp)
-exprToGroundVal BaseBoolRepr                 e = S.asConstantPred e
-exprToGroundVal (BaseBVRepr _w)              e = S.asBV e
-exprToGroundVal BaseIntegerRepr              e = S.asInteger e
-exprToGroundVal BaseRealRepr                _e = Nothing
-exprToGroundVal (BaseFloatRepr _fpp)        _e = Nothing
-exprToGroundVal BaseComplexRepr              e = S.asComplex e
-exprToGroundVal (BaseArrayRepr _iTp _elmTp) _e = Nothing
-exprToGroundVal (BaseStructRepr _r)          e = do
-    v <- S.asStruct e
-    traverseFC (\e' -> GE.GVW <$> exprToGroundVal @sym (S.exprType e') e') v
-exprToGroundVal (BaseStringRepr _)           e = S.asString e
 
 concreteToGVW :: W.ConcreteVal tp -> GE.GroundValueWrapper tp
 concreteToGVW = GE.GVW . concreteToGroundVal
