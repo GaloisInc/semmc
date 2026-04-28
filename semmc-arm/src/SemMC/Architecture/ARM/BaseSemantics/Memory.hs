@@ -11,8 +11,8 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
 import           Data.Parameterized.Context
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup
-import qualified Dismantle.ARM as A
-import qualified Dismantle.Thumb as T
+import qualified Dismantle.ARM.Opcodes as A
+import qualified Dismantle.Thumb.Opcodes as T
 import           Prelude hiding ( concat, pred )
 import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers

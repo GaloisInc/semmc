@@ -7,7 +7,7 @@ module SemMC.Architecture.PPC.Base.Vector (
 
 import Prelude hiding ( concat )
 
-import qualified Dismantle.PPC as P
+import qualified Dismantle.PPC.Opcodes as P
 
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core

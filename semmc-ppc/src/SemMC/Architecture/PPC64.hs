@@ -35,7 +35,9 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.Instruction as D
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Assembler as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 import           Dismantle.PPC.Random ()
 import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A

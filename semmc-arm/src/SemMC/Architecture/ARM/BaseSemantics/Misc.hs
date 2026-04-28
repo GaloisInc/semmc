@@ -9,7 +9,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Misc
     where
 
 import           Data.Parameterized.Context
-import qualified Dismantle.Thumb as T
+import qualified Dismantle.Thumb.Opcodes as T
 import           Prelude hiding ( concat, pred )
 import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers

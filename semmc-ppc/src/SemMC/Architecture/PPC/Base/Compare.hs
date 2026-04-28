@@ -7,7 +7,7 @@ module SemMC.Architecture.PPC.Base.Compare (
 import Prelude hiding ( concat )
 import Control.Monad ( when )
 
-import qualified Dismantle.PPC as P
+import qualified Dismantle.PPC.Opcodes as P
 
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core

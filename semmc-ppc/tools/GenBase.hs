@@ -19,7 +19,7 @@ import           Data.Parameterized.Some
 import           Data.Proxy
 import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
 import qualified Options.Applicative as O

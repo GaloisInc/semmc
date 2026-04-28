@@ -10,7 +10,7 @@ module SemMC.Architecture.PPC64.Opcodes.Internal (
   ) where
 
 import           Data.Parameterized.Some ( Some(..), mapSome )
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 import qualified Dismantle.Tablegen.TH.Capture as DT
 
 allOpcodeInfo :: [Some (DT.CaptureInfo (PPC.Opcode PPC.Operand))]

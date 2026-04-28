@@ -10,8 +10,8 @@ module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     where
 
 import           Data.Parameterized.Context
-import qualified Dismantle.ARM as A
-import qualified Dismantle.Thumb as T
+import qualified Dismantle.ARM.Opcodes as A
+import qualified Dismantle.Thumb.Opcodes as T
 import           GHC.Stack ( HasCallStack )
 import           Prelude hiding ( concat, pred )
 import           SemMC.Architecture.ARM.BaseSemantics.Base

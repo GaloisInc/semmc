@@ -16,7 +16,8 @@ import Lang.Crucible.Solver.SimpleBackend
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 
 import SemMC.Architecture
 import SemMC.Architecture.PPC ( PPC )

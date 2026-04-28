@@ -32,8 +32,8 @@ import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.TraversableFC
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
-import qualified Dismantle.ARM as ARMDis
-import qualified Dismantle.Thumb as ThumbDis
+import qualified Dismantle.ARM.Opcodes as ARMDis
+import qualified Dismantle.Thumb.Opcodes as ThumbDis
 import           GHC.TypeLits
 
 

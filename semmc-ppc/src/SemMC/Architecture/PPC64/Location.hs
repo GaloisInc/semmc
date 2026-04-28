@@ -20,7 +20,7 @@ import           Text.PrettyPrint.HughesPJClass ( pPrint )
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 
 -- import qualified SemMC.Architecture as A
 

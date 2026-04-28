@@ -16,7 +16,7 @@ import           Text.Printf ( printf )
 import           Prelude
 
 import qualified Dismantle.Arbitrary as A
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Assembler as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Stochastic.IORelation as IOR

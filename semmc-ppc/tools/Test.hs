@@ -14,7 +14,8 @@ import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Word.Indexed as W
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 import qualified SemMC.Architecture.Concrete as AC
 import           SemMC.Architecture.PPC32
 import qualified SemMC.Architecture.Value as V

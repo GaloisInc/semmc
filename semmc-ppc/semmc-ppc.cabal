@@ -1,15 +1,16 @@
+cabal-version:       3.0
 name:                semmc-ppc
 version:             0.1.0.0
 synopsis:            Relevant semantics definitions for PPC
 -- description:
-license:             BSD3
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Galois Inc.
 maintainer:          jgrosen@galois.com
 copyright:           (c) Galois Inc. 2017
 category:            Compiler
 build-type:          Simple
-extra-source-files:  ChangeLog.md,
+extra-source-files:  ChangeLog.md
                      data/32/base/*.sem
                      data/32/base/*.fun
                      data/32/manual/*.sem
@@ -22,7 +23,6 @@ extra-source-files:  ChangeLog.md,
                      data/64/manual/*.fun
                      data/64/pseudo/*.sem
                      data/64/pseudo/*.fun
-cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.Architecture.PPC
@@ -63,7 +63,9 @@ library
                      , crucible >= 0.4
                      , semmc
                      , dismantle-tablegen
-                     , dismantle-ppc
+                     , dismantle-ppc:assembler
+                     , dismantle-ppc:opcodes
+                     , dismantle-ppc:testing
                      , pretty
                      , text
                      , bytestring
@@ -89,7 +91,7 @@ library
                  time,
                  parameterized-utils,
                  dismantle-tablegen,
-                 dismantle-ppc,
+                 dismantle-ppc:opcodes,
                  semmc
 
 executable semmc-ppc-test
@@ -105,7 +107,7 @@ executable semmc-ppc-test
                  semmc-ppc,
                  parameterized-utils,
                  dismantle-tablegen,
-                 dismantle-ppc,
+                 dismantle-ppc:opcodes,
                  what4,
                  text
 
@@ -122,7 +124,9 @@ executable semmc-ppc-iorels
                  semmc-ppc,
                  parameterized-utils,
                  dismantle-tablegen,
-                 dismantle-ppc,
+                 dismantle-ppc:assembler,
+                 dismantle-ppc:opcodes,
+                 dismantle-ppc:testing,
                  optparse-applicative
 
 executable semmc-ppc-stratify
@@ -140,7 +144,9 @@ executable semmc-ppc-stratify
                  semmc-learning,
                  semmc-ppc,
                  dismantle-tablegen,
-                 dismantle-ppc,
+                 dismantle-ppc:assembler,
+                 dismantle-ppc:opcodes,
+                 dismantle-ppc:testing,
                  what4
 
 executable semmc-ppc-synthdemo
@@ -156,7 +162,10 @@ executable semmc-ppc-synthdemo
                  , utf8-string
                  , parameterized-utils
                  , dismantle-tablegen
-                 , dismantle-ppc
+                 , dismantle-ppc:assembler
+                 , dismantle-ppc:disassembler
+                 , dismantle-ppc:opcodes
+                 , dismantle-ppc:prettyprinter
                  , crucible
                  , crucible-llvm
                  , base16-bytestring
@@ -174,7 +183,7 @@ executable semmc-ppc-genbase
   build-depends: base,
                  bytestring,
                  crucible,
-                 dismantle-ppc,
+                 dismantle-ppc:opcodes,
                  dismantle-tablegen,
                  optparse-applicative,
                  text,
@@ -195,7 +204,7 @@ test-suite semmc-ppc-tests
                  semmc,
                  semmc-synthesis,
                  dismantle-tablegen,
-                 dismantle-ppc,
+                 dismantle-ppc:opcodes,
                  base,
                  containers,
                  bytestring,

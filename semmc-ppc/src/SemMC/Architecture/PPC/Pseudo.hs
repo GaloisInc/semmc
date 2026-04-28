@@ -23,7 +23,8 @@ import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.TH.GADT as TH
 
 import qualified Dismantle.Instruction.Random as D
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 import qualified Dismantle.Instruction as D
 import           Dismantle.PPC.Random ()
 

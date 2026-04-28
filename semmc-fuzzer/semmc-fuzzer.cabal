@@ -1,14 +1,14 @@
+cabal-version:       3.0
 name:                semmc-fuzzer
 version:             0.1
 synopsis:            Fuzzer for SemMC architectures
-license:             BSD3
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Jonathan Daugherty
 maintainer:          jtd@galois.com
 category:            Testing
 build-type:          Simple
 extra-source-files:  ChangeLog.md
-cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
@@ -24,8 +24,7 @@ library
                        semmc-synthesis,
                        semmc-arm,
                        semmc-ppc,
-                       dismantle-ppc,
-                       dismantle-arm,
+                       dismantle-arm:opcodes,
                        text,
                        parameterized-utils,
                        pretty,
@@ -47,8 +46,13 @@ executable semmc-fuzzer
                        semmc-ppc,
                        semmc-arm,
                        dismantle-tablegen,
-                       dismantle-ppc,
-                       dismantle-arm,
+                       dismantle-ppc:assembler,
+                       dismantle-ppc:opcodes,
+                       dismantle-ppc:prettyprinter,
+                       dismantle-arm:assembler,
+                       dismantle-arm:opcodes,
+                       dismantle-arm:prettyprinter,
+                       dismantle-arm:testing,
                        parameterized-utils,
                        crucible,
                        utf8-string,

@@ -54,8 +54,12 @@ import qualified What4.Expr.Builder as WEB
 import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
-import qualified Dismantle.PPC as PPC
-import qualified Dismantle.ARM as ARMDis
+import qualified Dismantle.PPC.Assembler as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.PrettyPrint as PPC
+import qualified Dismantle.ARM.Assembler as ARMDis
+import qualified Dismantle.ARM.Opcodes as ARMDis
+import qualified Dismantle.ARM.PrettyPrint as ARMDis
 import           Dismantle.ARM.Random ()
 
 import           SemMC.Fuzzer.Types

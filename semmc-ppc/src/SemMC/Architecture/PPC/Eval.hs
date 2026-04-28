@@ -28,7 +28,8 @@ import qualified Data.Parameterized.List as SL
 import           What4.BaseTypes
 import qualified What4.Expr as S
 
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L

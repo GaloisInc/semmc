@@ -14,7 +14,8 @@ import           Text.Printf ( printf )
 
 import           Data.Parameterized.Some ( Some(..) )
 
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Assembler as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Concrete.Execution as CE

@@ -23,7 +23,8 @@ import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Data.Int.Indexed as I
-import qualified Dismantle.PPC as D
+import qualified Dismantle.PPC.Opcodes as D
+import qualified Dismantle.PPC.Operands as D
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
