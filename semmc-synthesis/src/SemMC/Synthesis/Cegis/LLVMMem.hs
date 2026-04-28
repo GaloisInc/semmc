@@ -1,4 +1,5 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeOperators, DataKinds, TypeFamilies, GeneralizedNewtypeDeriving,
   PatternSynonyms, TypeApplications, ScopedTypeVariables, RankNTypes,
   AllowAmbiguousTypes, FlexibleContexts, ViewPatterns #-}
@@ -80,6 +81,12 @@ putImpl m = MemM $ do
   memData <- get
   put $ memData{memImpl = m}
 
+toEndianForm :: A.EndianForm -> LLVM.EndianForm
+toEndianForm =
+  \case
+    A.BigEndian -> LLVM.BigEndian
+    A.LittleEndian -> LLVM.LittleEndian
+
 -- | Start an LLVM memory model instance consisting of a single block of memory
 -- of size 2^w where w is the width of registers in the architecture. All values
 -- in memory are initialized to the values of an uninterpreted symbolic array.
@@ -95,7 +102,7 @@ withMem bak memExp op = do
     let ?recordLLVMAnnotation = \_ _ _ -> pure ()
 
     -- 1) Construct an LLVM memory implelementation with no blocks
-    initMem <- LLVM.emptyMem (A.archEndianForm (Proxy @arch))
+    initMem <- LLVM.emptyMem (toEndianForm (A.archEndianForm (Proxy @arch)))
 
     -- 2) Allocate a block of uninitialized memory
     (base,mem) <- LLVM.doMallocUnbounded bak LLVM.GlobalAlloc LLVM.Mutable "Mem"

@@ -43,7 +43,7 @@ module SemMC.Architecture (
   mkUninterpFn,
   getUninterpFn,
   AccessData(..),
-  LLVM.EndianForm(..),
+  EndianForm(..),
   MemType,
   memTypeRepr,
   accessAddr,
@@ -71,12 +71,14 @@ import qualified What4.Interface as S
 import qualified What4.Expr as S
 
 import qualified Lang.Crucible.Backend as B
-import qualified Lang.Crucible.LLVM.DataLayout as LLVM
 
 import           SemMC.Architecture.AllocatedOperand
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula ( LocationFuncInterp, ParameterizedFormula )
+
+data EndianForm = BigEndian | LittleEndian
+  deriving (Eq, Ord, Show)
 
 type Sym t st fs = S.ExprBuilder t st fs
 
@@ -162,7 +164,7 @@ class (IsOperand (Operand arch),
 
 
   -- | Whether the architecture writes data in big-endian or little-endian form, by default
-  archEndianForm :: proxy arch -> LLVM.EndianForm
+  archEndianForm :: proxy arch -> EndianForm
 
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
 
