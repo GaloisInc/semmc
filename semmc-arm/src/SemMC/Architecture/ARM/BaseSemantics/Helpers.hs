@@ -55,8 +55,8 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
 import           Data.Semigroup hiding ( Arg )
 import qualified Data.Type.List as TL
-import qualified Dismantle.ARM as A
-import qualified Dismantle.Thumb as T
+import qualified Dismantle.ARM.Opcodes as A
+import qualified Dismantle.Thumb.Opcodes as T
 import           GHC.Stack ( HasCallStack )
 import           Prelude hiding ( concat, pred )
 import           SemMC.Architecture.ARM.BaseSemantics.Base

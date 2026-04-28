@@ -55,9 +55,9 @@ import qualified Data.Set as Set
 import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8, Word32 )
 import qualified Data.Word.Indexed as W
-import qualified Dismantle.ARM as ARMDis
+import qualified Dismantle.ARM.Opcodes as ARMDis
 import qualified Dismantle.ARM.Operands as ARMOperands
-import qualified Dismantle.Thumb as ThumbDis
+import qualified Dismantle.Thumb.Opcodes as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
 import           Language.Haskell.TH hiding ( recover )
@@ -689,7 +689,7 @@ a32template a32sr =
       ARMDis.GPRRepr -> concreteTemplatedOperand (A32Operand . ARMDis.GPR . ARMOperands.gpr . fromIntegral) LocGPR <$> [0..numGPR-1]
       ARMDis.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
       ARMDis.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred"
-                          (A32Operand . ARMDis.Pred . ARMDis.mkPred . fromInteger)]
+                          (A32Operand . ARMDis.Pred . ARMOperands.mkPred . fromInteger)]
       ARMDis.Shift_so_reg_immRepr -> error "opTemplate Shift_so_reg_immRepr TBD"
       ARMDis.So_reg_immRepr -> error "opTemplate So_reg_immRepr TBD"
       -- ARMDis.So_reg_regRepr ->

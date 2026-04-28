@@ -17,7 +17,7 @@ module SemMC.Architecture.PPC ( AnyPPC, Variant, V32, V64
 import           Data.Type.Equality ( (:~:)(Refl), TestEquality(testEquality) )
 import           Data.Typeable ( Typeable )
 
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 
 import           Data.Parameterized.Classes ( ShowF )
 import           Data.Parameterized.NatRepr ( type (<=), NatRepr, knownNat )

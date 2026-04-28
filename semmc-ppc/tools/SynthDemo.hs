@@ -37,7 +37,10 @@ import qualified What4.Expr.Builder as WEB
 import qualified What4.ProblemFeatures as WPF
 import qualified What4.Protocol.Online as WPO
 
-import qualified Dismantle.PPC as DPPC
+import qualified Dismantle.PPC.Assembler as DPPC
+import qualified Dismantle.PPC.Disassembler as DPPC
+import qualified Dismantle.PPC.Opcodes as DPPC
+import qualified Dismantle.PPC.PrettyPrint as DPPC
 
 import           SemMC.Architecture ( Architecture
                                     , Instruction

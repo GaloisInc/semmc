@@ -15,7 +15,7 @@ import qualified Data.ByteString as BS
 import           System.FilePath ( (<.>) )
 
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 import qualified Dismantle.Tablegen.TH.Capture as DT
 import qualified SemMC.Architecture.Pseudo as AP
 import qualified SemMC.TH as STH

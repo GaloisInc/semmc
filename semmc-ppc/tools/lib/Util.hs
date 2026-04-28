@@ -8,7 +8,7 @@ import Text.Printf ( printf )
 import qualified Dismantle.Testing.Regex as RE
 
 import qualified Data.Parameterized.Classes as P
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
 
 toIORelFP :: PPC.Opcode PPC.Operand sh -> FilePath
 toIORelFP op = printf "%s.iorel" (P.showF op)

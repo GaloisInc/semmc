@@ -24,7 +24,7 @@ import qualified SemMC.Architecture.A32.Location as A32Loc
 import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Architecture.PPC64 as PPC64
 
-import qualified Dismantle.ARM as ARMDis
+import qualified Dismantle.ARM.Opcodes as ARMDis
 import qualified Dismantle.ARM.Operands as ARMDisOprs
 import qualified Data.Parameterized.List as L
 import qualified Dismantle.Arbitrary as DA

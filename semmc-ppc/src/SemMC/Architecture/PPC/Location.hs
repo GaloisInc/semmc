@@ -21,7 +21,8 @@ import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 import           What4.BaseTypes
 
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 import qualified SemMC.Architecture as A
 
 class ArchRepr arch where

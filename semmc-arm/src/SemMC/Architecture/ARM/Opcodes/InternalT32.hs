@@ -10,7 +10,7 @@ module SemMC.Architecture.ARM.Opcodes.InternalT32
     where
 
 import           Data.Parameterized.Some ( Some(..), mapSome )
-import qualified Dismantle.Thumb as T32
+import qualified Dismantle.Thumb.Opcodes as T32
 import qualified Dismantle.Tablegen.TH.Capture as DT
 
 

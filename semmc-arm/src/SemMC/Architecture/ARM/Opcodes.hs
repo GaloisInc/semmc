@@ -18,9 +18,9 @@ module SemMC.Architecture.ARM.Opcodes
 
 import qualified Data.ByteString as BS
 import           Data.Parameterized.Some
-import qualified Dismantle.ARM as A32
+import qualified Dismantle.ARM.Opcodes as A32
 import qualified Dismantle.Tablegen.TH.Capture as DT
-import qualified Dismantle.Thumb as T32
+import qualified Dismantle.Thumb.Opcodes as T32
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes.InternalA32 ( a32Opcodes, a32OpcodeInfo )
 import           SemMC.Architecture.ARM.Opcodes.InternalT32 ( t32Opcodes, t32OpcodeInfo )

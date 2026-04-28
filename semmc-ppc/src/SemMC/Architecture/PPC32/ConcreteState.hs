@@ -32,7 +32,8 @@ import qualified Data.Word.Indexed as W
 import           What4.BaseTypes
 
 import qualified Dismantle.Arbitrary as DA
-import qualified Dismantle.PPC as PPC
+import qualified Dismantle.PPC.Opcodes as PPC
+import qualified Dismantle.PPC.Operands as PPC
 
 import qualified SemMC.Architecture.Value as V
 

@@ -43,7 +43,8 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Word.Indexed as W
-import qualified Dismantle.ARM as ARMDis
+import qualified Dismantle.ARM.Assembler as ARMDis
+import qualified Dismantle.ARM.Opcodes as ARMDis
 import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
@@ -871,7 +872,7 @@ a32template a32sr =
       ARMDis.GPRRepr -> concreteTemplatedOperand (ARMDis.GPR . ARMOperands.gpr . fromIntegral) LocGPR <$> [0..numGPR-1]
       ARMDis.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
       ARMDis.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred"
-                          (ARMDis.Pred . ARMDis.mkPred . fromInteger)]
+                          (ARMDis.Pred . ARMOperands.mkPred . fromInteger)]
       ARMDis.Shift_so_reg_immRepr -> error "opTemplate Shift_so_reg_immRepr TBD"
       ARMDis.So_reg_immRepr -> error "opTemplate So_reg_immRepr TBD"
       -- ARMDis.So_reg_regRepr ->
