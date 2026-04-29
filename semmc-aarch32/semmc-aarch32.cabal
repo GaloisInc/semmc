@@ -45,7 +45,6 @@ library
                        template-haskell,
                        text,
                        semmc,
-                       semmc-synthesis,
                        what4
 
   hs-source-dirs:      src
