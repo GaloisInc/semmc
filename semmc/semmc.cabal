@@ -89,7 +89,6 @@ library
                        unliftio-core >= 0.2 && < 0.3,
                        unliftio,
                        what4 >= 0.4,
-                       crucible-llvm,
                        ordered-containers,
                        ansi-wl-pprint,
                        bv-sized >= 1.0.0 && < 1.1
