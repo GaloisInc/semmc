@@ -29,7 +29,7 @@ library
                      , crucible >= 0.4
                      , crucible-llvm
                      , dismantle-tablegen
-                     , parameterized-utils >= 2.1.0 && < 2.2
+                     , parameterized-utils >= 2.1.0 && < 2.4
                      , semmc
                      , semmc-learning
                      , semmc-synthesis
