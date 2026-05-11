@@ -24,6 +24,7 @@ library
                      , bv-sized
                      , containers >= 0.5.8
                      , filepath
+                     , temporary
                      , located-base
                      , text >= 1 && < 2.2
                      , crucible >= 0.4
