@@ -25,6 +25,8 @@ import qualified Data.Sequence as S
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import           System.FilePath
+import           System.IO ( hClose )
+import           System.IO.Temp ( withSystemTempFile )
 
 import qualified GHC.Err.Located as L
 
@@ -292,7 +294,9 @@ runSynToy :: (U.HasLogCfg)
                Syn solver t fs Toy a)
           -> IO a
 runSynToy rstCfg dataRoot action = do
-  stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")
+  withSystemTempFile "semmc-toy-stats.sqlite" $ \statsFile statsHandle -> do
+  hClose statsHandle
+  stThread <- newStatisticsThread statsFile
   let cfg :: Config Toy
       cfg = Config
         { baseSetDir = dataRoot </> "base"
