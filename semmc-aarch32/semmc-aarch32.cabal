@@ -46,7 +46,6 @@ library
                        text,
                        semmc,
                        semmc-synthesis,
-                       vector-sized,
                        what4
 
   hs-source-dirs:      src
@@ -60,10 +59,9 @@ executable semmc-asl-test
   main-is: TestMain.hs
   build-depends: base,
                  bytestring,
-                 time,
-                 vector-sized,
                  semmc,
-                 semmc-aarch32
+                 semmc-aarch32,
+                 time
 
 test-suite semmc-asl-test-formulas
   default-language: Haskell2010

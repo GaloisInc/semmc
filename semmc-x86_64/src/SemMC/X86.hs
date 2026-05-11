@@ -12,7 +12,8 @@ import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
-import qualified Data.Vector.Sized as V
+import           Data.Parameterized.NatRepr ( knownNat )
+import qualified Data.Parameterized.Vector as V
 import Data.Word ( Word8, Word64 )
 
 import qualified SemMC.Concrete.Execution as CE
@@ -70,15 +71,15 @@ ymmBytes (YMM w1 w2 w3 w4) =
 
 getMachineState :: G.Get MachineState
 getMachineState = do
-  Just grs <- V.fromList <$> replicateM 16 G.getWord64le
+  Just grs <- V.fromList knownNat <$> replicateM 16 G.getWord64le
   -- Note that we have to parse out the mask, even though it isn't populated
   -- here.
-  Just grs_mask <- V.fromList <$> replicateM 16 G.getWord64le
+  Just grs_mask <- V.fromList knownNat <$> replicateM 16 G.getWord64le
   flags <- G.getWord64le
-  Just frs <- V.fromList <$> replicateM 8 G.getWord64le
-  Just vs <- V.fromList <$> replicateM 16 getYMM
-  Just m1 <- V.fromList <$> replicateM 32 G.getWord8
-  Just m2 <- V.fromList <$> replicateM 32 G.getWord8
+  Just frs <- V.fromList knownNat <$> replicateM 8 G.getWord64le
+  Just vs <- V.fromList knownNat <$> replicateM 16 getYMM
+  Just m1 <- V.fromList knownNat <$> replicateM 32 G.getWord8
+  Just m2 <- V.fromList knownNat <$> replicateM 32 G.getWord8
   return MachineState { gprs = grs
                       , gprs_mask = grs_mask
                       , eflags = flags
