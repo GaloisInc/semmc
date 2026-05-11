@@ -1,13 +1,15 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Data.ByteString.Lazy as LB
-import           Data.Proxy ( Proxy(..) )
-import qualified Data.Vector.Sized as V
-import           GHC.TypeNats ( KnownNat, natVal )
+import           Data.Parameterized.NatRepr ( NatRepr, knownNat, natValue, type (<=) )
+import qualified Data.Parameterized.Vector as V
+import           GHC.TypeNats ( KnownNat )
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO
@@ -90,13 +92,11 @@ testVector2 =
                            , 0, 0, 0, 0, 0
                            ]
 
--- | Convert a list to a 'V.Vector' of length @n@. If the length of the list is
--- not equal to @n@, throw an exception.
-sizedVecFromList :: forall n a. KnownNat n => [a] -> V.Vector n a
+sizedVecFromList :: forall n a. (KnownNat n, 1 <= n) => [a] -> V.Vector n a
 sizedVecFromList l =
-  case V.fromList l of
+  case V.fromList (knownNat :: NatRepr n) l of
     Just v -> v
     Nothing -> error $ "sizedVecFromList: Expected list of length "
-                    ++ show (natVal (Proxy @n))
+                    ++ show (natValue (knownNat :: NatRepr n))
                     ++ ", received list of length "
                     ++ show (length l)

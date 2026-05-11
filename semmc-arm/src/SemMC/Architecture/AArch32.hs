@@ -50,9 +50,9 @@ import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.Vector as V
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
-import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8, Word32 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.ARM.Opcodes as ARMDis
@@ -135,15 +135,15 @@ machineStateFromBS bs =
 
 getMachineState :: G.Get MachineState
 getMachineState = do
-  Just grs <- V.fromList <$> replicateM 16 G.getWord32le
+  Just grs <- V.fromList knownNat <$> replicateM 16 G.getWord32le
   pcv <- G.getWord32le
   -- Note that we have to parse out the mask, even though it isn't populated
   -- here.
-  Just grs_mask <- V.fromList <$> replicateM 16 G.getWord32le
-  Just frs <- V.fromList <$> replicateM 32 G.getWord32le
+  Just grs_mask <- V.fromList knownNat <$> replicateM 16 G.getWord32le
+  Just frs <- V.fromList knownNat <$> replicateM 32 G.getWord32le
   cpsr_reg <- G.getWord32le
-  Just m1 <- V.fromList <$> replicateM 32 G.getWord8
-  Just m2 <- V.fromList <$> replicateM 32 G.getWord8
+  Just m1 <- V.fromList knownNat <$> replicateM 32 G.getWord8
+  Just m2 <- V.fromList knownNat <$> replicateM 32 G.getWord8
   return MachineState { gprs = grs
                       , pctr = pcv
                       , gprs_mask = grs_mask
