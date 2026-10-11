@@ -44,6 +44,7 @@ module SemMC.Architecture.PPC.Base.Core (
   crField,
   updateCRField,
   -- * Uninterpreted Functions
+  gprIndex,
   isR0,
   memriReg,
   memriOffset,
@@ -517,6 +518,14 @@ storeMem mem ea nBytes val
 -- | An uninterpreted function that tests if the argument is register zero
 isR0 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
 isR0 = uf EBool "ppc.is_r0" . ((:[]) . Some)
+
+-- | Return the five-bit architectural index of a GPR operand.
+--
+-- This is evaluated while a parameterized formula is instantiated, so it
+-- exposes register identity rather than the value currently stored in the
+-- register.
+gprIndex :: HasCallStack => Expr 'TBV -> Expr 'TBV
+gprIndex = uf (EBV 5) "ppc.gpr_index" . ((:[]) . Some)
 
 -- Vector UFs
 

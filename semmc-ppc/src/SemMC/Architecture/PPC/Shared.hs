@@ -53,7 +53,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy
 import qualified Data.Serialize.Get as G
 import qualified Data.Set as S
-import           Data.Word ( Word16 )
+import           Data.Word ( Word8, Word16 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC.Opcodes as PPC
 import qualified Dismantle.PPC.Operands as PPC
@@ -240,6 +240,56 @@ isR0 bak pf ops actuals _locToExpr repr = do
     r0 :: Location arch (BaseBVType (A.RegWidth arch))
     r0 = LocGPR (PPC.GPR 0x0)
 
+gprIndex :: forall t st fs sh u tp arch sym bak
+          . ( A.Location arch ~ Location arch
+            , A.Operand arch ~ PPC.Operand
+            , sym ~ S.ExprBuilder t st fs
+            , CB.IsSymBackend sym bak
+            )
+         => bak
+         -> F.ParameterizedFormula sym arch sh
+         -> PL.List (A.AllocatedOperand arch sym) sh
+         -> Ctx.Assignment (S.Expr t) u
+         -> (forall tp' . Location arch tp' -> IO (S.SymExpr sym tp'))
+         -> BaseTypeRepr tp
+         -> IO (S.Expr t tp)
+gprIndex bak pf ops actuals _locToExpr repr = do
+  let typedReturn :: forall tp' . S.Expr t tp' -> IO (S.Expr t tp)
+      typedReturn e =
+        case testEquality (S.exprType e) repr of
+          Nothing ->
+            error ("The caller of gprIndex expected type " ++ show repr
+                   ++ " but it returned a value of type "
+                   ++ show (S.exprType e))
+          Just Refl -> return e
+      indexValue :: Word8 -> IO (S.Expr t tp)
+      indexValue rnum =
+        typedReturn =<< S.bvLit sym (knownNat @5)
+          (BV.mkBV (knownNat @5) (toInteger rnum))
+  case actuals of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `E.lookupVarInFormulaOperandList` pf of
+        Just (Some idx) ->
+          case ops PL.!! idx of
+            A.LocationOperand (LocGPR (PPC.GPR rnum)) _ ->
+              indexValue rnum
+            _ -> error "gprIndex argument is not a GPR operand"
+        Nothing ->
+          case [ rnum
+               | rnum <- ([0..31] :: [Word8])
+               , Just gprVar <-
+                   [MapF.lookup
+                      (LocGPR (PPC.GPR rnum) ::
+                        Location arch (BaseBVType (A.RegWidth arch)))
+                      (F.pfLiteralVars pf)]
+               , Just Refl <- [testEquality gprVar ufArg]
+               ] of
+            [rnum] -> indexValue rnum
+            _ -> error "gprIndex argument is not a known GPR location"
+    _ -> error "Unexpected argument list to gprIndex"
+  where
+    sym = CB.backendGetSym bak
+
 locationFuncInterpretation
   :: ( A.IsLocation (Location ppc)
      , A.Location ppc ~ Location ppc
@@ -297,6 +347,10 @@ locationFuncInterpretation =
                                            , A.exprInterp = A.Evaluator isR0
                                            , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
                                            })
+  , ("ppc.gpr_index", A.FunctionInterpretation { A.exprInterpName = 'E.interpGPRIndex
+                                               , A.exprInterp = A.Evaluator gprIndex
+                                               , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
+                                               })
   ]
 
 -- | Helper function to convert from Dismantle 'Maybe GPR' values to total

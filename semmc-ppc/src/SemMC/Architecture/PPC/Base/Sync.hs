@@ -19,6 +19,17 @@ import SemMC.Architecture.PPC.Base.Core.Memory
 
 baseSync :: (?bitSize :: BitSize) => SemM 'Top ()
 baseSync = do
+  defineOpcodeWithIP "SYNC" $ do
+    comment "Synchronize (X-form)"
+    comment "Synchronization ordering is not represented in the current machine model"
+    _l <- param "L" "I32imm" (EBV 2)
+    return ()
+
+  defineOpcodeWithIP "ISYNC" $ do
+    comment "Instruction Synchronize (XL-form)"
+    comment "Instruction-stream synchronization is not represented in the current machine model"
+    return ()
+
   defineOpcodeWithIP "LBARX" $ do
     comment "Load Byte and Reserve Indexed (X-form)"
     comment "This is basically LBZX with additional memory synchronization semantics"

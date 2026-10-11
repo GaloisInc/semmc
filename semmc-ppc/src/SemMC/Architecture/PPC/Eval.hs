@@ -18,6 +18,7 @@ module SemMC.Architecture.PPC.Eval (
   interpMemrrOffset,
   interpMemrrBaseExtractor,
   interpMemrrOffsetExtractor,
+  interpGPRIndex,
   interpIsR0,
   ) where
 
@@ -25,6 +26,7 @@ import           Data.Int ( Int16 )
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as SL
+import qualified Data.Word.Indexed as W
 import           What4.BaseTypes
 import qualified What4.Expr as S
 
@@ -151,3 +153,9 @@ instance InterpIsR0 (Maybe PPC.GPR) where
     case mr of
       Nothing -> True
       Just r -> interpIsR0 r
+
+class InterpGPRIndex a where
+  interpGPRIndex :: a -> W.W 5
+
+instance InterpGPRIndex PPC.GPR where
+  interpGPRIndex (PPC.GPR rnum) = W.w (fromIntegral rnum)

@@ -1,0 +1,11 @@
+;; Synchronize (X-form)
+;; Synchronization ordering is not represented in the current machine model
+((operands
+ ((L I32imm)))
+ (in
+  (loc.IP))
+ (defs
+  ((loc.IP
+   (with
+    ()
+    (bvadd loc.IP #x00000004))))))

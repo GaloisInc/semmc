@@ -6,7 +6,7 @@ module SemMC.Architecture.PPC.Base.Memory (
   ) where
 
 import Prelude hiding ( concat )
-import Control.Monad ( when )
+import Control.Monad ( forM_, when )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 import SemMC.Architecture.PPC.Base.Core.Memory
@@ -18,6 +18,34 @@ manualMemory = do
 
 defineStores :: (?bitSize :: BitSize) => SemM 'Top ()
 defineStores = do
+  when (?bitSize == Size32) $
+    defineOpcodeWithIP "STMW" $ do
+      comment "Store Multiple Word (D-form)"
+      dst <- param "dst" memri EMemRef
+      rS <- param "rS" gprc naturalBV
+      input dst
+      input memory
+      let start = "stmw_start" =: gprIndex (Loc rS)
+      let rA = memriReg dst
+      let disp = memriOffset 16 (Loc dst)
+      let b = ite (isR0 (Loc rA)) (naturalLitBV 0) (Loc rA)
+      let ea = "stmw_ea" =: bvadd b (sext disp)
+      forM_ [0..31] (input . gprLoc)
+      let storeSuffix first =
+            foldl
+              (\mem n ->
+                let address =
+                      bvadd ea (naturalLitBV (toInteger ((n - first) * 4)))
+                in storeMem mem address 4 (Loc (gprLoc n)))
+              (Loc memory)
+              [first..31]
+      let selectSuffix first fallback =
+            ite
+              (bveq start (LitBV 5 (toInteger first)))
+              (storeSuffix first)
+              fallback
+      defLoc memory (foldr selectSuffix (Loc memory) [0..31])
+
   defineOpcodeWithIP "STB" $ do
     comment "Store Byte (D-form)"
     store 1
@@ -82,6 +110,31 @@ defineStores = do
 
 defineLoads :: (?bitSize :: BitSize) => SemM 'Top ()
 defineLoads = do
+  when (?bitSize == Size32) $
+    defineOpcodeWithIP "LMW" $ do
+      comment "Load Multiple Word (D-form)"
+      rD <- param "rD" gprc naturalBV
+      src <- param "src" memri EMemRef
+      input src
+      input memory
+      let start = "lmw_start" =: gprIndex (Loc rD)
+      let rA = memriReg src
+      let disp = memriOffset 16 (Loc src)
+      let b = ite (isR0 (Loc rA)) (naturalLitBV 0) (Loc rA)
+      let ea = "lmw_ea" =: bvadd b (sext disp)
+      forM_ [0..31] $ \n -> do
+        let reg = gprLoc n
+        input reg
+        let active = bvule start (LitBV 5 (toInteger n))
+        let wordOffset =
+              bvmul
+                (zext (bvsub (LitBV 5 (toInteger n)) start))
+                (naturalLitBV 4)
+        defLoc reg
+          (ite active
+            (readMem (Loc memory) (bvadd ea wordOffset) 4)
+            (Loc reg))
+
   defineOpcodeWithIP "LBZ" $ do
     comment "Load Byte and Zero (D-form)"
     loadAndExtend 1 zext
@@ -167,4 +220,11 @@ defineLoads = do
     defineOpcodeWithIP "LDBRX" $ do
       comment "Load Doubleword Byte-Reverse Indexed (X-form)"
       loadIndexed 8 reverseBytes zext
+
+gprLoc :: (?bitSize :: BitSize) => Int -> Location 'TBV
+gprLoc n =
+  LiteralLoc Literal
+    { lName = "r" ++ show n
+    , lExprType = naturalBV
+    }
 

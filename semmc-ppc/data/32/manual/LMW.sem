@@ -1,0 +1,907 @@
+;; Load Multiple Word (D-form)
+((operands
+  ((rD Gprc)
+    (src Memri)))
+  (in
+    (loc.r31 loc.r30 loc.r29 loc.r28 loc.r27 loc.r26 loc.r25 loc.r24 loc.r23 loc.r22 loc.r21 loc.r20 loc.r19 loc.r18 loc.r17 loc.r16 loc.r15 loc.r14 loc.r13 loc.r12 loc.r11 loc.r10 loc.r9 loc.r8 loc.r7 loc.r6 loc.r5 loc.r4 loc.r3 loc.r2 loc.r1 loc.r0 loc.Mem op.src loc.IP))
+  (defs
+    ((loc.r31
+      (with
+        ()
+        (let
+          ((lmw_start
+            (call uf.ppc.gpr_index op.rD))
+            (lmw_ea
+              (bvadd
+                (ite
+                  (call
+                    uf.ppc.is_r0
+                    (call uf.ppc.memri_reg op.src))
+                  #x00000000
+                  (call uf.ppc.memri_reg op.src))
+                ((_ sign_extend 16)
+                  (call uf.ppc.memri_offset op.src)))))
+          (ite
+            (bvule lmw_start #b11111)
+            (call
+              uf.read_mem.32
+              loc.Mem
+              (bvadd
+                lmw_ea
+                (bvmul
+                  ((_ zero_extend 27)
+                    (bvsub #b11111 lmw_start))
+                  #x00000004)))
+            loc.r31))))
+      (loc.r30
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11110)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11110 lmw_start))
+                    #x00000004)))
+              loc.r30))))
+      (loc.r29
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11101)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11101 lmw_start))
+                    #x00000004)))
+              loc.r29))))
+      (loc.r28
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11100)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11100 lmw_start))
+                    #x00000004)))
+              loc.r28))))
+      (loc.r27
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11011)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11011 lmw_start))
+                    #x00000004)))
+              loc.r27))))
+      (loc.r26
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11010)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11010 lmw_start))
+                    #x00000004)))
+              loc.r26))))
+      (loc.r25
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11001)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11001 lmw_start))
+                    #x00000004)))
+              loc.r25))))
+      (loc.r24
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b11000)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b11000 lmw_start))
+                    #x00000004)))
+              loc.r24))))
+      (loc.r23
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10111)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10111 lmw_start))
+                    #x00000004)))
+              loc.r23))))
+      (loc.r22
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10110)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10110 lmw_start))
+                    #x00000004)))
+              loc.r22))))
+      (loc.r21
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10101)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10101 lmw_start))
+                    #x00000004)))
+              loc.r21))))
+      (loc.r20
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10100)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10100 lmw_start))
+                    #x00000004)))
+              loc.r20))))
+      (loc.r19
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10011)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10011 lmw_start))
+                    #x00000004)))
+              loc.r19))))
+      (loc.r18
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10010)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10010 lmw_start))
+                    #x00000004)))
+              loc.r18))))
+      (loc.r17
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10001)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10001 lmw_start))
+                    #x00000004)))
+              loc.r17))))
+      (loc.r16
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b10000)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b10000 lmw_start))
+                    #x00000004)))
+              loc.r16))))
+      (loc.r15
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01111)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01111 lmw_start))
+                    #x00000004)))
+              loc.r15))))
+      (loc.r14
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01110)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01110 lmw_start))
+                    #x00000004)))
+              loc.r14))))
+      (loc.r13
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01101)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01101 lmw_start))
+                    #x00000004)))
+              loc.r13))))
+      (loc.r12
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01100)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01100 lmw_start))
+                    #x00000004)))
+              loc.r12))))
+      (loc.r11
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01011)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01011 lmw_start))
+                    #x00000004)))
+              loc.r11))))
+      (loc.r10
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01010)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01010 lmw_start))
+                    #x00000004)))
+              loc.r10))))
+      (loc.r9
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01001)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01001 lmw_start))
+                    #x00000004)))
+              loc.r9))))
+      (loc.r8
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b01000)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b01000 lmw_start))
+                    #x00000004)))
+              loc.r8))))
+      (loc.r7
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00111)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00111 lmw_start))
+                    #x00000004)))
+              loc.r7))))
+      (loc.r6
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00110)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00110 lmw_start))
+                    #x00000004)))
+              loc.r6))))
+      (loc.r5
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00101)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00101 lmw_start))
+                    #x00000004)))
+              loc.r5))))
+      (loc.r4
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00100)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00100 lmw_start))
+                    #x00000004)))
+              loc.r4))))
+      (loc.r3
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00011)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00011 lmw_start))
+                    #x00000004)))
+              loc.r3))))
+      (loc.r2
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00010)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00010 lmw_start))
+                    #x00000004)))
+              loc.r2))))
+      (loc.r1
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00001)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00001 lmw_start))
+                    #x00000004)))
+              loc.r1))))
+      (loc.r0
+        (with
+          ()
+          (let
+            ((lmw_start
+              (call uf.ppc.gpr_index op.rD))
+              (lmw_ea
+                (bvadd
+                  (ite
+                    (call
+                      uf.ppc.is_r0
+                      (call uf.ppc.memri_reg op.src))
+                    #x00000000
+                    (call uf.ppc.memri_reg op.src))
+                  ((_ sign_extend 16)
+                    (call uf.ppc.memri_offset op.src)))))
+            (ite
+              (bvule lmw_start #b00000)
+              (call
+                uf.read_mem.32
+                loc.Mem
+                (bvadd
+                  lmw_ea
+                  (bvmul
+                    ((_ zero_extend 27)
+                      (bvsub #b00000 lmw_start))
+                    #x00000004)))
+              loc.r0))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))

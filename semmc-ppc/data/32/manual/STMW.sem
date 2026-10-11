@@ -1,0 +1,2236 @@
+;; Store Multiple Word (D-form)
+((operands
+  ((dst Memri)
+    (rS Gprc)))
+  (in
+    (loc.r31 loc.r30 loc.r29 loc.r28 loc.r27 loc.r26 loc.r25 loc.r24 loc.r23 loc.r22 loc.r21 loc.r20 loc.r19 loc.r18 loc.r17 loc.r16 loc.r15 loc.r14 loc.r13 loc.r12 loc.r11 loc.r10 loc.r9 loc.r8 loc.r7 loc.r6 loc.r5 loc.r4 loc.r3 loc.r2 loc.r1 loc.r0 loc.Mem op.dst loc.IP))
+  (defs
+    ((loc.Mem
+      (with
+        ()
+        (let
+          ((stmw_start
+            (call uf.ppc.gpr_index op.rS))
+            (stmw_ea
+              (bvadd
+                (ite
+                  (call
+                    uf.ppc.is_r0
+                    (call uf.ppc.memri_reg op.dst))
+                  #x00000000
+                  (call uf.ppc.memri_reg op.dst))
+                ((_ sign_extend 16)
+                  (call uf.ppc.memri_offset op.dst)))))
+          (ite
+            (bveq stmw_start #b00000)
+            (call
+              uf.write_mem.32
+              (call
+                uf.write_mem.32
+                (call
+                  uf.write_mem.32
+                  (call
+                    uf.write_mem.32
+                    (call
+                      uf.write_mem.32
+                      (call
+                        uf.write_mem.32
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r0)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r1)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r2)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r3)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r4)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r5)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r6)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r7)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r8)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r9)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r10)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r11)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r12)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r13)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r14)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r15)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r16)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r17)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r18)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r19)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r20)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r21)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r22)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r23)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r24)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r25)
+                        (bvadd stmw_ea #x00000068)
+                        loc.r26)
+                      (bvadd stmw_ea #x0000006c)
+                      loc.r27)
+                    (bvadd stmw_ea #x00000070)
+                    loc.r28)
+                  (bvadd stmw_ea #x00000074)
+                  loc.r29)
+                (bvadd stmw_ea #x00000078)
+                loc.r30)
+              (bvadd stmw_ea #x0000007c)
+              loc.r31)
+            (ite
+              (bveq stmw_start #b00001)
+              (call
+                uf.write_mem.32
+                (call
+                  uf.write_mem.32
+                  (call
+                    uf.write_mem.32
+                    (call
+                      uf.write_mem.32
+                      (call
+                        uf.write_mem.32
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r1)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r2)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r3)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r4)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r5)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r6)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r7)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r8)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r9)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r10)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r11)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r12)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r13)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r14)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r15)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r16)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r17)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r18)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r19)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r20)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r21)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r22)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r23)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r24)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r25)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r26)
+                        (bvadd stmw_ea #x00000068)
+                        loc.r27)
+                      (bvadd stmw_ea #x0000006c)
+                      loc.r28)
+                    (bvadd stmw_ea #x00000070)
+                    loc.r29)
+                  (bvadd stmw_ea #x00000074)
+                  loc.r30)
+                (bvadd stmw_ea #x00000078)
+                loc.r31)
+              (ite
+                (bveq stmw_start #b00010)
+                (call
+                  uf.write_mem.32
+                  (call
+                    uf.write_mem.32
+                    (call
+                      uf.write_mem.32
+                      (call
+                        uf.write_mem.32
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r2)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r3)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r4)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r5)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r6)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r7)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r8)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r9)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r10)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r11)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r12)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r13)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r14)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r15)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r16)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r17)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r18)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r19)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r20)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r21)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r22)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r23)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r24)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r25)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r26)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r27)
+                        (bvadd stmw_ea #x00000068)
+                        loc.r28)
+                      (bvadd stmw_ea #x0000006c)
+                      loc.r29)
+                    (bvadd stmw_ea #x00000070)
+                    loc.r30)
+                  (bvadd stmw_ea #x00000074)
+                  loc.r31)
+                (ite
+                  (bveq stmw_start #b00011)
+                  (call
+                    uf.write_mem.32
+                    (call
+                      uf.write_mem.32
+                      (call
+                        uf.write_mem.32
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r3)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r4)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r5)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r6)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r7)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r8)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r9)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r10)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r11)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r12)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r13)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r14)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r15)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r16)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r17)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r18)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r19)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r20)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r21)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r22)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r23)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r24)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r25)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r26)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r27)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r28)
+                        (bvadd stmw_ea #x00000068)
+                        loc.r29)
+                      (bvadd stmw_ea #x0000006c)
+                      loc.r30)
+                    (bvadd stmw_ea #x00000070)
+                    loc.r31)
+                  (ite
+                    (bveq stmw_start #b00100)
+                    (call
+                      uf.write_mem.32
+                      (call
+                        uf.write_mem.32
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r4)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r5)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r6)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r7)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r8)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r9)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r10)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r11)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r12)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r13)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r14)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r15)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r16)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r17)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r18)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r19)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r20)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r21)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r22)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r23)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r24)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r25)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r26)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r27)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r28)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r29)
+                        (bvadd stmw_ea #x00000068)
+                        loc.r30)
+                      (bvadd stmw_ea #x0000006c)
+                      loc.r31)
+                    (ite
+                      (bveq stmw_start #b00101)
+                      (call
+                        uf.write_mem.32
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r5)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r6)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r7)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r8)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r9)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r10)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r11)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r12)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r13)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r14)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r15)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r16)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r17)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r18)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r19)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r20)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r21)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r22)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r23)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r24)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r25)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r26)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r27)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r28)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r29)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r30)
+                        (bvadd stmw_ea #x00000068)
+                        loc.r31)
+                      (ite
+                        (bveq stmw_start #b00110)
+                        (call
+                          uf.write_mem.32
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r6)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r7)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r8)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r9)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r10)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r11)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r12)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r13)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r14)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r15)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r16)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r17)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r18)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r19)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r20)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r21)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r22)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r23)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r24)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r25)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r26)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r27)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r28)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r29)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r30)
+                          (bvadd stmw_ea #x00000064)
+                          loc.r31)
+                        (ite
+                          (bveq stmw_start #b00111)
+                          (call
+                            uf.write_mem.32
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r7)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r8)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r9)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r10)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r11)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r12)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r13)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r14)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r15)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r16)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r17)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r18)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r19)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r20)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r21)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r22)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r23)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r24)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r25)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r26)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r27)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r28)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r29)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r30)
+                            (bvadd stmw_ea #x00000060)
+                            loc.r31)
+                          (ite
+                            (bveq stmw_start #b01000)
+                            (call
+                              uf.write_mem.32
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r8)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r9)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r10)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r11)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r12)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r13)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r14)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r15)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r16)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r17)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r18)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r19)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r20)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r21)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r22)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r23)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r24)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r25)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r26)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r27)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r28)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r29)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r30)
+                              (bvadd stmw_ea #x0000005c)
+                              loc.r31)
+                            (ite
+                              (bveq stmw_start #b01001)
+                              (call
+                                uf.write_mem.32
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r9)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r10)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r11)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r12)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r13)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r14)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r15)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r16)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r17)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r18)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r19)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r20)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r21)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r22)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r23)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r24)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r25)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r26)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r27)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r28)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r29)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r30)
+                                (bvadd stmw_ea #x00000058)
+                                loc.r31)
+                              (ite
+                                (bveq stmw_start #b01010)
+                                (call
+                                  uf.write_mem.32
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r10)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r11)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r12)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r13)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r14)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r15)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r16)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r17)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r18)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r19)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r20)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r21)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r22)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r23)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r24)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r25)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r26)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r27)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r28)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r29)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r30)
+                                  (bvadd stmw_ea #x00000054)
+                                  loc.r31)
+                                (ite
+                                  (bveq stmw_start #b01011)
+                                  (call
+                                    uf.write_mem.32
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r11)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r12)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r13)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r14)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r15)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r16)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r17)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r18)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r19)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r20)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r21)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r22)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r23)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r24)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r25)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r26)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r27)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r28)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r29)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r30)
+                                    (bvadd stmw_ea #x00000050)
+                                    loc.r31)
+                                  (ite
+                                    (bveq stmw_start #b01100)
+                                    (call
+                                      uf.write_mem.32
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r12)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r13)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r14)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r15)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r16)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r17)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r18)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r19)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r20)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r21)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r22)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r23)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r24)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r25)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r26)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r27)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r28)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r29)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r30)
+                                      (bvadd stmw_ea #x0000004c)
+                                      loc.r31)
+                                    (ite
+                                      (bveq stmw_start #b01101)
+                                      (call
+                                        uf.write_mem.32
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r13)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r14)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r15)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r16)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r17)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r18)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r19)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r20)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r21)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r22)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r23)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r24)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r25)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r26)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r27)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r28)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r29)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r30)
+                                        (bvadd stmw_ea #x00000048)
+                                        loc.r31)
+                                      (ite
+                                        (bveq stmw_start #b01110)
+                                        (call
+                                          uf.write_mem.32
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r14)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r15)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r16)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r17)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r18)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r19)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r20)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r21)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r22)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r23)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r24)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r25)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r26)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r27)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r28)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r29)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r30)
+                                          (bvadd stmw_ea #x00000044)
+                                          loc.r31)
+                                        (ite
+                                          (bveq stmw_start #b01111)
+                                          (call
+                                            uf.write_mem.32
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r15)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r16)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r17)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r18)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r19)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r20)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r21)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r22)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r23)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r24)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r25)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r26)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r27)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r28)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r29)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r30)
+                                            (bvadd stmw_ea #x00000040)
+                                            loc.r31)
+                                          (ite
+                                            (bveq stmw_start #b10000)
+                                            (call
+                                              uf.write_mem.32
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r16)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r17)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r18)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r19)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r20)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r21)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r22)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r23)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r24)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r25)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r26)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r27)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r28)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r29)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r30)
+                                              (bvadd stmw_ea #x0000003c)
+                                              loc.r31)
+                                            (ite
+                                              (bveq stmw_start #b10001)
+                                              (call
+                                                uf.write_mem.32
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r17)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r18)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r19)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r20)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r21)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r22)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r23)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r24)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r25)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r26)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r27)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r28)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r29)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r30)
+                                                (bvadd stmw_ea #x00000038)
+                                                loc.r31)
+                                              (ite
+                                                (bveq stmw_start #b10010)
+                                                (call
+                                                  uf.write_mem.32
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r18)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r19)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r20)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r21)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r22)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r23)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r24)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r25)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r26)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r27)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r28)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r29)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r30)
+                                                  (bvadd stmw_ea #x00000034)
+                                                  loc.r31)
+                                                (ite
+                                                  (bveq stmw_start #b10011)
+                                                  (call
+                                                    uf.write_mem.32
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r19)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r20)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r21)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r22)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r23)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r24)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r25)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r26)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r27)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r28)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r29)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r30)
+                                                    (bvadd stmw_ea #x00000030)
+                                                    loc.r31)
+                                                  (ite
+                                                    (bveq stmw_start #b10100)
+                                                    (call
+                                                      uf.write_mem.32
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r20)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r21)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r22)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r23)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r24)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r25)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r26)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r27)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r28)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r29)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r30)
+                                                      (bvadd stmw_ea #x0000002c)
+                                                      loc.r31)
+                                                    (ite
+                                                      (bveq stmw_start #b10101)
+                                                      (call
+                                                        uf.write_mem.32
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r21)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r22)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r23)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r24)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r25)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r26)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r27)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r28)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r29)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r30)
+                                                        (bvadd stmw_ea #x00000028)
+                                                        loc.r31)
+                                                      (ite
+                                                        (bveq stmw_start #b10110)
+                                                        (call
+                                                          uf.write_mem.32
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r22)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r23)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r24)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r25)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r26)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r27)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r28)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r29)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r30)
+                                                          (bvadd stmw_ea #x00000024)
+                                                          loc.r31)
+                                                        (ite
+                                                          (bveq stmw_start #b10111)
+                                                          (call
+                                                            uf.write_mem.32
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r23)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r24)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r25)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r26)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r27)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r28)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r29)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r30)
+                                                            (bvadd stmw_ea #x00000020)
+                                                            loc.r31)
+                                                          (ite
+                                                            (bveq stmw_start #b11000)
+                                                            (call
+                                                              uf.write_mem.32
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r24)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r25)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r26)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r27)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r28)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r29)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r30)
+                                                              (bvadd stmw_ea #x0000001c)
+                                                              loc.r31)
+                                                            (ite
+                                                              (bveq stmw_start #b11001)
+                                                              (call
+                                                                uf.write_mem.32
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r25)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r26)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r27)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r28)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r29)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r30)
+                                                                (bvadd stmw_ea #x00000018)
+                                                                loc.r31)
+                                                              (ite
+                                                                (bveq stmw_start #b11010)
+                                                                (call
+                                                                  uf.write_mem.32
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r26)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r27)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r28)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r29)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r30)
+                                                                  (bvadd stmw_ea #x00000014)
+                                                                  loc.r31)
+                                                                (ite
+                                                                  (bveq stmw_start #b11011)
+                                                                  (call
+                                                                    uf.write_mem.32
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r27)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r28)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r29)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r30)
+                                                                    (bvadd stmw_ea #x00000010)
+                                                                    loc.r31)
+                                                                  (ite
+                                                                    (bveq stmw_start #b11100)
+                                                                    (call
+                                                                      uf.write_mem.32
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r28)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r29)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r30)
+                                                                      (bvadd stmw_ea #x0000000c)
+                                                                      loc.r31)
+                                                                    (ite
+                                                                      (bveq stmw_start #b11101)
+                                                                      (call
+                                                                        uf.write_mem.32
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r29)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r30)
+                                                                        (bvadd stmw_ea #x00000008)
+                                                                        loc.r31)
+                                                                      (ite
+                                                                        (bveq stmw_start #b11110)
+                                                                        (call
+                                                                          uf.write_mem.32
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r30)
+                                                                          (bvadd stmw_ea #x00000004)
+                                                                          loc.r31)
+                                                                        (ite
+                                                                          (bveq stmw_start #b11111)
+                                                                          (call
+                                                                            uf.write_mem.32
+                                                                            loc.Mem
+                                                                            (bvadd stmw_ea #x00000000)
+                                                                            loc.r31)
+                                                                          loc.Mem)))))))))))))))))))))))))))))))))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))

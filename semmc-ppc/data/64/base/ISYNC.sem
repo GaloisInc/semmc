@@ -1,0 +1,11 @@
+;; Instruction Synchronize (XL-form)
+;; Instruction-stream synchronization is not represented in the current machine model
+((operands
+ ())
+ (in
+  (loc.IP))
+ (defs
+  ((loc.IP
+   (with
+    ()
+    (bvadd loc.IP #x0000000000000004))))))
