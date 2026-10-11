@@ -339,6 +339,22 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     definePPCOpcodeRC P.ADDMEo res $ do
       comment "Add to Minus One Extended (XO-form, RC=1)"
+  definePPCOpcode P.ADDMEOE xoform2c $ \rT rA -> do
+    comment "Add to Minus One Extended with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let carryIn = xerBit CA (Loc xer)
+    let minusOne = bvnot (naturalLitBV 0x0)
+    let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) minusOne)
+    let eres1 = bvadd eres0 (zext' (len + 1) carryIn)
+    let res = lowBits' len eres1
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres1)
+    let modifiedXer =
+          updateXEROVSOForAddWithCarry xerWithCarry (Loc rA) minusOne carryIn
+    defLoc rT res
+    defineOERCVariant P.ADDMEOEo res modifiedXer $ do
+      comment "Add to Minus One Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.SUBFE xoform3c $ \rT rB rA -> do
     comment "Subtract From Extended (XO-form, RC=0)"
     input xer
@@ -360,6 +376,21 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     definePPCOpcodeRC P.ADDZEo res $ do
       comment "Add to Zero Extended (XO-form, RC=1)"
+  definePPCOpcode P.ADDZEOE xoform2c $ \rT rA -> do
+    comment "Add to Zero Extended with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let carryIn = xerBit CA (Loc xer)
+    let zero = naturalLitBV 0x0
+    let eres = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) carryIn)
+    let res = lowBits' len eres
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres)
+    let modifiedXer =
+          updateXEROVSOForAddWithCarry xerWithCarry (Loc rA) zero carryIn
+    defLoc rT res
+    defineOERCVariant P.ADDZEOEo res modifiedXer $ do
+      comment "Add to Zero Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.SUBFZE xoform2c $ \rT rA -> do
     comment "Subtract From Zero Extended (XO-form, RC=0)"
     input xer
