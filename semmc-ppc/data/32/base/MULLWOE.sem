@@ -1,0 +1,69 @@
+;; Multiply Low Word with Overflow Enabled (XO-form, OE=1, RC=0)
+((operands
+  ((rT Gprc)
+    (rB Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER op.rA op.rB loc.IP))
+  (defs
+    ((loc.XER
+      (with
+        ()
+        (concat
+          (bvor
+            ((_ extract 31 31)
+              loc.XER)
+            (ite
+              (notp
+                (bveq
+                  (bvmul
+                    ((_ sign_extend 32)
+                      op.rA)
+                    ((_ sign_extend 32)
+                      op.rB))
+                  ((_ sign_extend 32)
+                    ((_ extract 31 0)
+                      (bvmul
+                        ((_ sign_extend 32)
+                          op.rA)
+                        ((_ sign_extend 32)
+                          op.rB))))))
+              #b1
+              #b0))
+          ((_ extract 30 0)
+            (concat
+              ((_ extract 31 31)
+                loc.XER)
+              (concat
+                (ite
+                  (notp
+                    (bveq
+                      (bvmul
+                        ((_ sign_extend 32)
+                          op.rA)
+                        ((_ sign_extend 32)
+                          op.rB))
+                      ((_ sign_extend 32)
+                        ((_ extract 31 0)
+                          (bvmul
+                            ((_ sign_extend 32)
+                              op.rA)
+                            ((_ sign_extend 32)
+                              op.rB))))))
+                  #b1
+                  #b0)
+                ((_ extract 29 0)
+                  loc.XER)))))))
+      (op.rT
+        (with
+          ()
+          ((_ extract 31 0)
+            (bvmul
+              ((_ sign_extend 32)
+                op.rA)
+              ((_ sign_extend 32)
+                op.rB)))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))

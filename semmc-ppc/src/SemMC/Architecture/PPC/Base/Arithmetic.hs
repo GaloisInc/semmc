@@ -67,12 +67,34 @@ baseArithmetic = do
     let modifiedXer = updateXEROVSOForAdd (Loc xer) (Loc rA) (Loc rB)
     defineOERCVariant P.ADD4Oo val modifiedXer $ do
       comment "ADDO. (XO-form, OE=1, RC=1)"
+  definePPCOpcode P.ADD4OE xoform3c $ \rT rB rA -> do
+    comment "ADDO (XO-form, OE=1, RC=0)"
+    let val = bvadd (Loc rA) (Loc rB)
+    let modifiedXer = updateXEROVSOForAdd (Loc xer) (Loc rA) (Loc rB)
+    input xer
+    defLoc rT val
+    defLoc xer modifiedXer
   definePPCOpcode P.SUBF xoform3c $ \rT rB rA -> do
     comment "SUBF (XO-form, RC=0)"
     let val = bvsub (Loc rB) (Loc rA)
     defLoc rT val
     definePPCOpcodeRC P.SUBFo val $ do
       comment "SUBF. (XO-form, RC=1)"
+  definePPCOpcode P.SUBFOE xoform3c $ \rT rB rA -> do
+    comment "SUBFO (XO-form, OE=1, RC=0)"
+    let val = bvsub (Loc rB) (Loc rA)
+    let zero = naturalLitBV 0
+    let overflow =
+          (bvslt (Loc rA) zero `andp` bvsge (Loc rB) zero `andp`
+           bvslt val zero) `orp`
+          (bvsge (Loc rA) zero `andp` bvslt (Loc rB) zero `andp`
+           bvsge val zero)
+    let modifiedXer = updateXEROVSO (Loc xer) overflow
+    defLoc rT val
+    defineOERCVariant P.SUBFOEo val modifiedXer $ do
+      comment "SUBFO. (XO-form, OE=1, RC=1)"
+    input xer
+    defLoc xer modifiedXer
   defineOpcodeWithIP "NEG" $ do
     comment "Negate (XO-form, RC=0)"
     rT <- param "rT" gprc naturalBV
@@ -82,6 +104,17 @@ baseArithmetic = do
     defLoc rT res
     defineRCVariant "NEGo" res $ do
       comment "Negate (XO-form, RC=1)"
+  definePPCOpcode P.NEGOE xoform2c $ \rT rA -> do
+    comment "Negate with Overflow Enabled (XO-form, OE=1, RC=0)"
+    let res = bvadd (bvnot (Loc rA)) (naturalLitBV 0x1)
+    let zero = naturalLitBV 0
+    let overflow = bvslt (Loc rA) zero `andp` bveq res (Loc rA)
+    let modifiedXer = updateXEROVSO (Loc xer) overflow
+    defLoc rT res
+    defineOERCVariant P.NEGOEo res modifiedXer $ do
+      comment "Negate with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    input xer
+    defLoc xer modifiedXer
   definePPCOpcode P.MULLI dformr0c $ \rT si rA -> do
     comment "Multiply Low Immediate (D-form)"
     let prod = bvmul (Loc rA) (sext (Loc si))
@@ -95,6 +128,20 @@ baseArithmetic = do
     defLoc rT res
     definePPCOpcodeRC P.MULLWo res $ do
       comment "Multiply Low Word (XO-form, RC=1)"
+  definePPCOpcode P.MULLWOE xoform3c $ \rT rB rA -> do
+    comment "Multiply Low Word with Overflow Enabled (XO-form, OE=1, RC=0)"
+    let lhs = sext' 64 (lowBits 32 (Loc rA))
+    let rhs = sext' 64 (lowBits 32 (Loc rB))
+    let prod = bvmul lhs rhs
+    let lowProd = lowBits64 32 prod
+    let res = sext lowProd
+    let overflow = notp (bveq prod (sext' 64 lowProd))
+    let modifiedXer = updateXEROVSO (Loc xer) overflow
+    defLoc rT res
+    defineOERCVariant P.MULLWOEo res modifiedXer $ do
+      comment "Multiply Low Word with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    input xer
+    defLoc xer modifiedXer
   definePPCOpcode P.MULHW xoform3c $ \rT rB rA -> do
     comment "Multiply High Word (XO-form, RC=0)"
     comment "Multiply the low 32 bits of two registers, producing a 64 bit result."

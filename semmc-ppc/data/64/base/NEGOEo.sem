@@ -1,0 +1,135 @@
+;; Negate with Overflow Enabled and Record (XO-form, OE=1, RC=1)
+((operands
+  ((rT Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER loc.CR op.rA loc.IP))
+  (defs
+    ((loc.CR
+      (with
+        ()
+        (call
+          df.cmpImm
+          (bvslt
+            (bvadd
+              (bvnot op.rA)
+              #x0000000000000001)
+            #x0000000000000000)
+          (bvsgt
+            (bvadd
+              (bvnot op.rA)
+              #x0000000000000001)
+            #x0000000000000000)
+          #b000
+          (concat
+            ((_ extract 63 32)
+              (concat
+                ((_ extract 63 31)
+                  loc.XER)
+                (concat
+                  (ite
+                    (andp
+                      (bvslt op.rA #x0000000000000000)
+                      (bveq
+                        (bvadd
+                          (bvnot op.rA)
+                          #x0000000000000001)
+                        op.rA))
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    loc.XER))))
+            (concat
+              (bvor
+                ((_ extract 31 31)
+                  loc.XER)
+                (ite
+                  (andp
+                    (bvslt op.rA #x0000000000000000)
+                    (bveq
+                      (bvadd
+                        (bvnot op.rA)
+                        #x0000000000000001)
+                      op.rA))
+                  #b1
+                  #b0))
+              ((_ extract 30 0)
+                (concat
+                  ((_ extract 63 31)
+                    loc.XER)
+                  (concat
+                    (ite
+                      (andp
+                        (bvslt op.rA #x0000000000000000)
+                        (bveq
+                          (bvadd
+                            (bvnot op.rA)
+                            #x0000000000000001)
+                          op.rA))
+                      #b1
+                      #b0)
+                    ((_ extract 29 0)
+                      loc.XER))))))
+          loc.CR)))
+      (loc.XER
+        (with
+          ()
+          (concat
+            ((_ extract 63 32)
+              (concat
+                ((_ extract 63 31)
+                  loc.XER)
+                (concat
+                  (ite
+                    (andp
+                      (bvslt op.rA #x0000000000000000)
+                      (bveq
+                        (bvadd
+                          (bvnot op.rA)
+                          #x0000000000000001)
+                        op.rA))
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    loc.XER))))
+            (concat
+              (bvor
+                ((_ extract 31 31)
+                  loc.XER)
+                (ite
+                  (andp
+                    (bvslt op.rA #x0000000000000000)
+                    (bveq
+                      (bvadd
+                        (bvnot op.rA)
+                        #x0000000000000001)
+                      op.rA))
+                  #b1
+                  #b0))
+              ((_ extract 30 0)
+                (concat
+                  ((_ extract 63 31)
+                    loc.XER)
+                  (concat
+                    (ite
+                      (andp
+                        (bvslt op.rA #x0000000000000000)
+                        (bveq
+                          (bvadd
+                            (bvnot op.rA)
+                            #x0000000000000001)
+                          op.rA))
+                      #b1
+                      #b0)
+                    ((_ extract 29 0)
+                      loc.XER))))))))
+      (op.rT
+        (with
+          ()
+          (bvadd
+            (bvnot op.rA)
+            #x0000000000000001)))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x0000000000000004))))))
