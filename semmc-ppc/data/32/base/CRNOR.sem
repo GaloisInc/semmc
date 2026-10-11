@@ -1,8 +1,8 @@
 ;; Condition Register NOR (XL-form)
 ((operands
  ((BT Crbitrc)
-  (BA Crbitrc)
-  (BB Crbitrc)))
+  (BB Crbitrc)
+  (BA Crbitrc)))
  (in
   (loc.CR op.BB op.BA loc.IP))
  (defs
@@ -33,8 +33,10 @@
            loc.CR
            ((_ zero_extend 27)
             op.BB))))))
-      ((_ zero_extend 27)
-       op.BT)))))
+      (bvsub
+       #x0000001f
+       ((_ zero_extend 27)
+        op.BT))))))
    (loc.IP
     (with
      ()

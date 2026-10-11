@@ -48,8 +48,8 @@ vectorBV = EBV 128
 xlformcr :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xlformcr = do
   bt <- param "BT" crbitrc (EBV 5)
-  ba <- param "BA" crbitrc (EBV 5)
   bb <- param "BB" crbitrc (EBV 5)
+  ba <- param "BA" crbitrc (EBV 5)
   input ba
   input bb
   input cr

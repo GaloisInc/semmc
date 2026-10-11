@@ -210,8 +210,9 @@ crbitOperation op = do
   let extractBit n = highBits' 1 (bvshl (Loc cr) (zext' 32 n))
   let abit = extractBit (Loc ba)
   let bbit = extractBit (Loc bb)
-  let clearedCR = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0x1) (bvsub (LitBV 32 31) (zext' 32 (Loc bt)))))
-  let res = bvor clearedCR (bvshl (zext' 32 (op abit bbit)) (zext' 32 (Loc bt)))
+  let targetShift = bvsub (LitBV 32 31) (zext' 32 (Loc bt))
+  let clearedCR = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0x1) targetShift))
+  let res = bvor clearedCR (bvshl (zext' 32 (op abit bbit)) targetShift)
   defLoc cr res
 
 -- | Bitwise operations over CR bits
