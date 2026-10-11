@@ -72,10 +72,10 @@ mform5i = do
 mform5r :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
 mform5r = do
   rA <- param "rA" gprc naturalBV
-  mb <- param "mb" u5imm (EBV 5)
   me <- param "me" u5imm (EBV 5)
-  rS <- param "rS" gprc naturalBV
+  mb <- param "mb" u5imm (EBV 5)
   rB <- param "rB" gprc naturalBV
+  rS <- param "rS" gprc naturalBV
   input rB
   input mb
   input me

@@ -1,10 +1,10 @@
 ;; Rotate Left Word then AND with Mask (M-form, RC=0)
 ((operands
  ((rA Gprc)
-  (mb U5imm)
   (me U5imm)
-  (rS Gprc)
-  (rB Gprc)))
+  (mb U5imm)
+  (rB Gprc)
+  (rS Gprc)))
  (in
   (op.rS op.me op.mb op.rB loc.IP))
  (defs
