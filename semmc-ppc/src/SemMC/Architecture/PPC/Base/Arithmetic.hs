@@ -421,6 +421,25 @@ baseArithmetic = do
     defineOERCVariant P.SUBFEOEo res modifiedXer $ do
       comment "Subtract From Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
     defLoc xer modifiedXer
+  definePPCOpcode P.SUBFMEOE xoform2c $ \rT rA -> do
+    comment "Subtract From Minus One Extended with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let carryIn = xerBit CA (Loc xer)
+    let minusOne = bvnot (naturalLitBV 0x0)
+    let eres0 =
+          bvadd (zext' (len + 1) minusOne)
+                (zext' (len + 1) (bvnot (Loc rA)))
+    let eres1 = bvadd eres0 (zext' (len + 1) carryIn)
+    let res = lowBits' len eres1
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres1)
+    let modifiedXer =
+          updateXEROVSOForSubtractWithCarry
+            xerWithCarry minusOne (Loc rA) carryIn
+    defLoc rT res
+    defineOERCVariant P.SUBFMEOEo res modifiedXer $ do
+      comment "Subtract From Minus One Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.ADDZE xoform2c $ \rT rA -> do
     comment "Add to Zero Extended (XO-form, RC=0)"
     input xer
@@ -456,6 +475,24 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     defineRCVariant "SUBFZEo" res $ do
       comment "Subtract From Zero Extended (XO-form, RC=1)"
+  definePPCOpcode P.SUBFZEOE xoform2c $ \rT rA -> do
+    comment "Subtract From Zero Extended with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let carryIn = xerBit CA (Loc xer)
+    let zero = naturalLitBV 0x0
+    let eres =
+          bvadd (zext' (len + 1) (bvnot (Loc rA)))
+                (zext' (len + 1) carryIn)
+    let res = lowBits' len eres
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres)
+    let modifiedXer =
+          updateXEROVSOForSubtractWithCarry
+            xerWithCarry zero (Loc rA) carryIn
+    defLoc rT res
+    defineOERCVariant P.SUBFZEOEo res modifiedXer $ do
+      comment "Subtract From Zero Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
 
   when (?bitSize == Size64) $ do
     -- Not valid in 32 bit mode
