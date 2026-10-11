@@ -61,6 +61,26 @@ updateXEROVSOForAddWithCarry xer0 in1 in2 carry =
       overflow = notp (bveq wide (sext' (len + 2) result))
   in updateXEROVSO xer0 overflow
 
+-- | Update @XER[SO]@ and @XER[OV]@ for subtraction with carry-in.
+--
+-- PPC extended subtraction computes @minuend - subtrahend + carry - 1@.
+updateXEROVSOForSubtractWithCarry :: (?bitSize :: BitSize)
+                                 => Expr 'TBV
+                                 -> Expr 'TBV
+                                 -> Expr 'TBV
+                                 -> Expr 'TBV
+                                 -> Expr 'TBV
+updateXEROVSOForSubtractWithCarry xer0 minuend subtrahend carry =
+  let len = bitSizeValue ?bitSize
+      wide0 = bvsub
+        (sext' (len + 2) minuend)
+        (sext' (len + 2) subtrahend)
+      wide1 = bvadd wide0 (zext' (len + 2) carry)
+      wide = bvsub wide1 (LitBV (len + 2) 1)
+      result = lowBits' len wide
+      overflow = notp (bveq wide (sext' (len + 2) result))
+  in updateXEROVSO xer0 overflow
+
 -- | Set @XER[OV]@ for a division overflow and make @XER[SO]@ sticky.
 updateXEROVSO :: (?bitSize :: BitSize)
               => Expr 'TBV
@@ -302,6 +322,23 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     definePPCOpcodeRC P.SUBFCo res $ do
       comment "Subtract From Carrying (XO-form, RC=1)"
+  definePPCOpcode P.SUBFCOE xoform3c $ \rT rB rA -> do
+    comment "Subtract From Carrying with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres0 =
+          bvadd (zext' (len + 1) (bvnot (Loc rA)))
+                (zext' (len + 1) (Loc rB))
+    let eres1 = bvadd eres0 (LitBV (len + 1) 0x1)
+    let res = lowBits' len eres1
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres1)
+    let modifiedXer =
+          updateXEROVSOForSubtractWithCarry
+            xerWithCarry (Loc rB) (Loc rA) (LitBV 1 1)
+    defLoc rT res
+    defineOERCVariant P.SUBFCOEo res modifiedXer $ do
+      comment "Subtract From Carrying with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.ADDE xoform3c $ \rT rB rA -> do
     comment "Add Extended (XO-form, RC=0)"
     input xer
@@ -366,6 +403,24 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     definePPCOpcodeRC P.SUBFEo res $ do
       comment "Subtract From Extended (XO-form, RC=1)"
+  definePPCOpcode P.SUBFEOE xoform3c $ \rT rB rA -> do
+    comment "Subtract From Extended with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let carryIn = xerBit CA (Loc xer)
+    let eres0 =
+          bvadd (zext' (len + 1) (bvnot (Loc rA)))
+                (zext' (len + 1) (Loc rB))
+    let eres1 = bvadd eres0 (zext' (len + 1) carryIn)
+    let res = lowBits' len eres1
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres1)
+    let modifiedXer =
+          updateXEROVSOForSubtractWithCarry
+            xerWithCarry (Loc rB) (Loc rA) carryIn
+    defLoc rT res
+    defineOERCVariant P.SUBFEOEo res modifiedXer $ do
+      comment "Subtract From Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.ADDZE xoform2c $ \rT rA -> do
     comment "Add to Zero Extended (XO-form, RC=0)"
     input xer

@@ -1,0 +1,142 @@
+;; Subtract From Extended with Overflow Enabled (XO-form, OE=1, RC=0)
+((operands
+  ((rT Gprc)
+    (rB Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER op.rA op.rB loc.IP))
+  (defs
+    ((loc.XER
+      (with
+        ()
+        (concat
+          (bvor
+            ((_ extract 31 31)
+              (concat
+                ((_ extract 31 30)
+                  loc.XER)
+                (concat
+                  ((_ extract 32 32)
+                    (bvadd
+                      (bvadd
+                        ((_ zero_extend 1)
+                          (bvnot op.rA))
+                        ((_ zero_extend 1)
+                          op.rB))
+                      ((_ zero_extend 32)
+                        ((_ extract 29 29)
+                          loc.XER))))
+                  ((_ extract 28 0)
+                    loc.XER))))
+            (ite
+              (notp
+                (bveq
+                  (bvsub
+                    (bvadd
+                      (bvsub
+                        ((_ sign_extend 2)
+                          op.rB)
+                        ((_ sign_extend 2)
+                          op.rA))
+                      ((_ zero_extend 33)
+                        ((_ extract 29 29)
+                          loc.XER)))
+                    #b0000000000000000000000000000000001)
+                  ((_ sign_extend 2)
+                    ((_ extract 31 0)
+                      (bvsub
+                        (bvadd
+                          (bvsub
+                            ((_ sign_extend 2)
+                              op.rB)
+                            ((_ sign_extend 2)
+                              op.rA))
+                          ((_ zero_extend 33)
+                            ((_ extract 29 29)
+                              loc.XER)))
+                        #b0000000000000000000000000000000001)))))
+              #b1
+              #b0))
+          ((_ extract 30 0)
+            (concat
+              ((_ extract 31 31)
+                (concat
+                  ((_ extract 31 30)
+                    loc.XER)
+                  (concat
+                    ((_ extract 32 32)
+                      (bvadd
+                        (bvadd
+                          ((_ zero_extend 1)
+                            (bvnot op.rA))
+                          ((_ zero_extend 1)
+                            op.rB))
+                        ((_ zero_extend 32)
+                          ((_ extract 29 29)
+                            loc.XER))))
+                    ((_ extract 28 0)
+                      loc.XER))))
+              (concat
+                (ite
+                  (notp
+                    (bveq
+                      (bvsub
+                        (bvadd
+                          (bvsub
+                            ((_ sign_extend 2)
+                              op.rB)
+                            ((_ sign_extend 2)
+                              op.rA))
+                          ((_ zero_extend 33)
+                            ((_ extract 29 29)
+                              loc.XER)))
+                        #b0000000000000000000000000000000001)
+                      ((_ sign_extend 2)
+                        ((_ extract 31 0)
+                          (bvsub
+                            (bvadd
+                              (bvsub
+                                ((_ sign_extend 2)
+                                  op.rB)
+                                ((_ sign_extend 2)
+                                  op.rA))
+                              ((_ zero_extend 33)
+                                ((_ extract 29 29)
+                                  loc.XER)))
+                            #b0000000000000000000000000000000001)))))
+                  #b1
+                  #b0)
+                ((_ extract 29 0)
+                  (concat
+                    ((_ extract 31 30)
+                      loc.XER)
+                    (concat
+                      ((_ extract 32 32)
+                        (bvadd
+                          (bvadd
+                            ((_ zero_extend 1)
+                              (bvnot op.rA))
+                            ((_ zero_extend 1)
+                              op.rB))
+                          ((_ zero_extend 32)
+                            ((_ extract 29 29)
+                              loc.XER))))
+                      ((_ extract 28 0)
+                        loc.XER))))))))))
+      (op.rT
+        (with
+          ()
+          ((_ extract 31 0)
+            (bvadd
+              (bvadd
+                ((_ zero_extend 1)
+                  (bvnot op.rA))
+                ((_ zero_extend 1)
+                  op.rB))
+              ((_ zero_extend 32)
+                ((_ extract 29 29)
+                  loc.XER))))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))
