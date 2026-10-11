@@ -18,7 +18,7 @@ manualMemory = do
 
 defineStores :: (?bitSize :: BitSize) => SemM 'Top ()
 defineStores = do
-  when (?bitSize == Size32) $
+  when (?bitSize == Size32) $ do
     defineOpcodeWithIP "STMW" $ do
       comment "Store Multiple Word (D-form)"
       dst <- param "dst" memri EMemRef
@@ -45,6 +45,38 @@ defineStores = do
               (storeSuffix first)
               fallback
       defLoc memory (foldr selectSuffix (Loc memory) [0..31])
+
+    defineOpcodeWithIP "STSWI" $ do
+      comment "Store String Word Immediate (X-form)"
+      nB <- param "NB" u5imm (EBV 5)
+      rA <- param "rA" gprc naturalBV
+      rS <- param "rS" gprc naturalBV
+      input rA
+      input memory
+      let ea = ite (isR0 (Loc rA)) (naturalLitBV 0) (Loc rA)
+      let sourceRegs = [gprOffset word rS | word <- [0..7]]
+      forM_ sourceRegs input
+      let storeByte mem byte =
+            let source = sourceRegs !! (byte `div` 4)
+                byteInRegister = byte `mod` 4
+                value =
+                  extract
+                    (byteInRegister * 8 + 7)
+                    (byteInRegister * 8)
+                    (Loc source)
+            in storeMem
+                 mem
+                 (bvadd ea (naturalLitBV (toInteger byte)))
+                 1
+                 value
+      let storeBytes count =
+            foldl storeByte (Loc memory) [0..count - 1]
+      let selectByteCount count fallback =
+            ite
+              (bveq (Loc nB) (LitBV 5 (toInteger count)))
+              (storeBytes count)
+              fallback
+      defLoc memory (foldr selectByteCount (storeBytes 32) [1..31])
 
   defineOpcodeWithIP "STB" $ do
     comment "Store Byte (D-form)"
@@ -110,7 +142,7 @@ defineStores = do
 
 defineLoads :: (?bitSize :: BitSize) => SemM 'Top ()
 defineLoads = do
-  when (?bitSize == Size32) $
+  when (?bitSize == Size32) $ do
     defineOpcodeWithIP "LMW" $ do
       comment "Load Multiple Word (D-form)"
       rD <- param "rD" gprc naturalBV
@@ -134,6 +166,39 @@ defineLoads = do
           (ite active
             (readMem (Loc memory) (bvadd ea wordOffset) 4)
             (Loc reg))
+
+    defineOpcodeWithIP "LSWI" $ do
+      comment "Load String Word Immediate (X-form)"
+      rT <- param "rT" gprc naturalBV
+      nB <- param "NB" u5imm (EBV 5)
+      rA <- param "rA" gprc naturalBV
+      input rA
+      input memory
+      let ea = ite (isR0 (Loc rA)) (naturalLitBV 0) (Loc rA)
+      let byteCount =
+            "lswi_byte_count" =:
+              ite
+                (bveq (Loc nB) (LitBV 5 0))
+                (naturalLitBV 32)
+                (zext (Loc nB))
+      forM_ [0..7] $ \word -> do
+        let target = gprOffset word rT
+        input target
+        let loadByte byte =
+              let offset = word * 4 + byte
+                  active =
+                    bvult (naturalLitBV (toInteger offset)) byteCount
+              in ite
+                   active
+                   (readMem
+                     (Loc memory)
+                     (bvadd ea (naturalLitBV (toInteger offset)))
+                     1)
+                   (LitBV 8 0)
+        let value = foldl1 concat [loadByte byte | byte <- [0..3]]
+        let active =
+              bvult (naturalLitBV (toInteger (word * 4))) byteCount
+        defLoc target (ite active value (Loc target))
 
   defineOpcodeWithIP "LBZ" $ do
     comment "Load Byte and Zero (D-form)"

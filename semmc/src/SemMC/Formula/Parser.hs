@@ -108,6 +108,12 @@ data ParsedParameter arch (tps :: [BaseType]) (tp :: BaseType) where
   ParsedLiteralParameter ::
     L.Location arch tp
     -> ParsedParameter arch tps tp
+  ParsedFunctionParameter ::
+    String
+    -> BaseTypeRepr operandTp
+    -> SL.Index tps operandTp
+    -> BaseTypeRepr tp
+    -> ParsedParameter arch tps tp
 
 -- Translating from 'SL.Index' on 'BaseType' to 'SL.Index' on 'Symbol' is
 -- tricky.  Need this view to show that when we translate some @SL.Index tps tp@
@@ -136,6 +142,10 @@ toParameter shapeRepr (ParsedOperandParameter tpRepr ix) =
     IndexByArchType ix' -> OperandParameter tpRepr ix'
 toParameter _ (ParsedLiteralParameter loc) =
   LiteralParameter loc
+toParameter shapeRepr (ParsedFunctionParameter fnName operandRepr ix resultRepr) =
+  case indexByArchType (Proxy @arch) shapeRepr ix of
+    IndexByArchType ix' ->
+      FunctionParameter fnName (WrappedOperand operandRepr ix') resultRepr
 
 -- * First pass of parsing turns the raw text into s-expressions.
 --   This pass is handled by the code in SemMC.Formula.SELang
@@ -238,16 +248,38 @@ readParameter _ oplist (WFSAtom (AId fullName)) =
 readParameter _ _ sexpr = (E.throwError $ printf "Unrecognized parameter: %s" (printSExpr mempty sexpr))
 
 -- | Parses the input list, e.g., @(ra rb 'ca)@
-readInputs :: forall m (arch :: Type) (tps :: [BaseType])
+readInputs :: forall m sym (arch :: Type) (tps :: [BaseType])
             . (E.MonadError String m,
                A.Architecture arch)
-           => SL.List OpData tps
+           => FormulaEnv sym arch
+           -> SL.List OpData tps
            -> [SExpr]
            -> m [Some (ParsedParameter arch tps)]
-readInputs _ [] = return []
-readInputs oplist (p:rest) = do
-  p' <- readParameter Proxy oplist p
-  rest' <- readInputs oplist rest
+readInputs _ _ [] = return []
+readInputs env oplist (p:rest) = do
+  p' <-
+    case p of
+      WFSList [WFSAtom (AId "call"), WFSAtom (AId fnName), operand] -> do
+        Some operandParam <- readParameter (Proxy @arch) oplist operand
+        case operandParam of
+          ParsedOperandParameter operandRepr ix ->
+            case Map.lookup (T.unpack fnName) (envFunctions env) of
+              Just (_, Some resultRepr) ->
+                return $
+                  Some $
+                    ParsedFunctionParameter
+                      (T.unpack fnName)
+                      operandRepr
+                      ix
+                      resultRepr
+              Nothing ->
+                E.throwError ("Missing type repr for uninterpreted function " ++ show fnName)
+          ParsedLiteralParameter {} ->
+            E.throwError "Literals are not allowed as arguments to parameter functions"
+          ParsedFunctionParameter {} ->
+            E.throwError "Nested parameter functions are not allowed"
+      _ -> readParameter (Proxy @arch) oplist p
+  rest' <- readInputs env oplist rest
   return $ p' : rest'
 
 -- ** Parsing definitions
@@ -400,7 +432,7 @@ readFormula' sym env repr text = do
        buildOperandList' (Proxy @arch) repr rawOpList
 
   inputs :: [Some (ParsedParameter arch (OperandTypes arch sh))]
-    <- readInputs @m @arch @(OperandTypes arch sh) operands rawInputList
+    <- readInputs @m env operands rawInputList
 
   let mkOperandVar :: forall tp. OpData tp -> m (S.BoundVar sym tp)
       mkOperandVar (OpData name tpRepr) =
@@ -425,6 +457,7 @@ readFormula' sym env repr text = do
                      -> m (MapF.MapF (A.Location arch) (S.BoundVar sym))
       buildLitVarMap (Some (ParsedLiteralParameter loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (A.locationType loc) loc
       buildLitVarMap (Some (ParsedOperandParameter _ _))        m = return m
+      buildLitVarMap (Some (ParsedFunctionParameter {}))        m = return m
 
   litVars :: MapF.MapF (A.Location arch) (S.BoundVar sym)
     <- foldrM buildLitVarMap MapF.empty inputs

@@ -1,0 +1,534 @@
+;; Load String Word Immediate (X-form)
+((operands
+  ((rT Gprc)
+    (NB U5imm)
+    (rA Gprc)))
+  (in
+    ((call uf.ppc.gpr_offset_7 op.rT)
+      (call uf.ppc.gpr_offset_6 op.rT)
+      (call uf.ppc.gpr_offset_5 op.rT)
+      (call uf.ppc.gpr_offset_4 op.rT)
+      (call uf.ppc.gpr_offset_3 op.rT)
+      (call uf.ppc.gpr_offset_2 op.rT)
+      (call uf.ppc.gpr_offset_1 op.rT)
+      (call uf.ppc.gpr_offset_0 op.rT)
+      loc.Mem
+      op.rA
+      loc.IP))
+  (defs
+    (((call uf.ppc.gpr_offset_7 op.rT)
+      (with
+        ()
+        (let
+          ((lswi_byte_count
+            (ite
+              (bveq op.NB #b00000)
+              #x00000020
+              ((_ zero_extend 27)
+                op.NB))))
+          (ite
+            (bvult #x0000001c lswi_byte_count)
+            (concat
+              (concat
+                (concat
+                  (ite
+                    (bvult #x0000001c lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x0000001c))
+                    #x00)
+                  (ite
+                    (bvult #x0000001d lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x0000001d))
+                    #x00))
+                (ite
+                  (bvult #x0000001e lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x0000001e))
+                  #x00))
+              (ite
+                (bvult #x0000001f lswi_byte_count)
+                (call
+                  uf.read_mem.8
+                  loc.Mem
+                  (bvadd
+                    (ite
+                      (call uf.ppc.is_r0 op.rA)
+                      #x00000000
+                      op.rA)
+                    #x0000001f))
+                #x00))
+            (call uf.ppc.gpr_offset_7 op.rT)))))
+      ((call uf.ppc.gpr_offset_6 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x00000018 lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x00000018 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000018))
+                      #x00)
+                    (ite
+                      (bvult #x00000019 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000019))
+                      #x00))
+                  (ite
+                    (bvult #x0000001a lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x0000001a))
+                    #x00))
+                (ite
+                  (bvult #x0000001b lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x0000001b))
+                  #x00))
+              (call uf.ppc.gpr_offset_6 op.rT)))))
+      ((call uf.ppc.gpr_offset_5 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x00000014 lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x00000014 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000014))
+                      #x00)
+                    (ite
+                      (bvult #x00000015 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000015))
+                      #x00))
+                  (ite
+                    (bvult #x00000016 lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x00000016))
+                    #x00))
+                (ite
+                  (bvult #x00000017 lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x00000017))
+                  #x00))
+              (call uf.ppc.gpr_offset_5 op.rT)))))
+      ((call uf.ppc.gpr_offset_4 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x00000010 lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x00000010 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000010))
+                      #x00)
+                    (ite
+                      (bvult #x00000011 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000011))
+                      #x00))
+                  (ite
+                    (bvult #x00000012 lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x00000012))
+                    #x00))
+                (ite
+                  (bvult #x00000013 lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x00000013))
+                  #x00))
+              (call uf.ppc.gpr_offset_4 op.rT)))))
+      ((call uf.ppc.gpr_offset_3 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x0000000c lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x0000000c lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x0000000c))
+                      #x00)
+                    (ite
+                      (bvult #x0000000d lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x0000000d))
+                      #x00))
+                  (ite
+                    (bvult #x0000000e lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x0000000e))
+                    #x00))
+                (ite
+                  (bvult #x0000000f lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x0000000f))
+                  #x00))
+              (call uf.ppc.gpr_offset_3 op.rT)))))
+      ((call uf.ppc.gpr_offset_2 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x00000008 lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x00000008 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000008))
+                      #x00)
+                    (ite
+                      (bvult #x00000009 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000009))
+                      #x00))
+                  (ite
+                    (bvult #x0000000a lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x0000000a))
+                    #x00))
+                (ite
+                  (bvult #x0000000b lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x0000000b))
+                  #x00))
+              (call uf.ppc.gpr_offset_2 op.rT)))))
+      ((call uf.ppc.gpr_offset_1 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x00000004 lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x00000004 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000004))
+                      #x00)
+                    (ite
+                      (bvult #x00000005 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000005))
+                      #x00))
+                  (ite
+                    (bvult #x00000006 lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x00000006))
+                    #x00))
+                (ite
+                  (bvult #x00000007 lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x00000007))
+                  #x00))
+              (call uf.ppc.gpr_offset_1 op.rT)))))
+      ((call uf.ppc.gpr_offset_0 op.rT)
+        (with
+          ()
+          (let
+            ((lswi_byte_count
+              (ite
+                (bveq op.NB #b00000)
+                #x00000020
+                ((_ zero_extend 27)
+                  op.NB))))
+            (ite
+              (bvult #x00000000 lswi_byte_count)
+              (concat
+                (concat
+                  (concat
+                    (ite
+                      (bvult #x00000000 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000000))
+                      #x00)
+                    (ite
+                      (bvult #x00000001 lswi_byte_count)
+                      (call
+                        uf.read_mem.8
+                        loc.Mem
+                        (bvadd
+                          (ite
+                            (call uf.ppc.is_r0 op.rA)
+                            #x00000000
+                            op.rA)
+                          #x00000001))
+                      #x00))
+                  (ite
+                    (bvult #x00000002 lswi_byte_count)
+                    (call
+                      uf.read_mem.8
+                      loc.Mem
+                      (bvadd
+                        (ite
+                          (call uf.ppc.is_r0 op.rA)
+                          #x00000000
+                          op.rA)
+                        #x00000002))
+                    #x00))
+                (ite
+                  (bvult #x00000003 lswi_byte_count)
+                  (call
+                    uf.read_mem.8
+                    loc.Mem
+                    (bvadd
+                      (ite
+                        (call uf.ppc.is_r0 op.rA)
+                        #x00000000
+                        op.rA)
+                      #x00000003))
+                  #x00))
+              (call uf.ppc.gpr_offset_0 op.rT)))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))

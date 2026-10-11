@@ -352,6 +352,37 @@ locationFuncInterpretation =
                                                , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
                                                })
   ]
+  ++ [ ( functionName
+       , A.FunctionInterpretation
+           { A.exprInterpName = extractorName
+           , A.exprInterp =
+               E.evalRegExtractor functionName $ \ao ->
+                 case ao of
+                   A.LocationOperand (LocGPR (PPC.GPR rnum)) _ ->
+                     Just
+                       (Some
+                         (LocGPR
+                           (PPC.GPR
+                             ((rnum + fromIntegral offset) `mod` 32))))
+                   _ -> Nothing
+           , A.locationInterp =
+               F.LocationFuncInterp (E.interpGPROffset offset)
+           }
+       )
+     | (offset, extractorName) <-
+         zip
+           [0 :: Int .. 7]
+           [ 'E.interpGPROffset0
+           , 'E.interpGPROffset1
+           , 'E.interpGPROffset2
+           , 'E.interpGPROffset3
+           , 'E.interpGPROffset4
+           , 'E.interpGPROffset5
+           , 'E.interpGPROffset6
+           , 'E.interpGPROffset7
+           ]
+     , let functionName = "ppc.gpr_offset_" ++ show offset
+     ]
 
 -- | Helper function to convert from Dismantle 'Maybe GPR' values to total
 -- locations, as needed by 'OperandComponents'

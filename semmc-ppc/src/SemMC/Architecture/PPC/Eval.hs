@@ -18,6 +18,15 @@ module SemMC.Architecture.PPC.Eval (
   interpMemrrOffset,
   interpMemrrBaseExtractor,
   interpMemrrOffsetExtractor,
+  interpGPROffset,
+  interpGPROffset0,
+  interpGPROffset1,
+  interpGPROffset2,
+  interpGPROffset3,
+  interpGPROffset4,
+  interpGPROffset5,
+  interpGPROffset6,
+  interpGPROffset7,
   interpGPRIndex,
   interpIsR0,
   ) where
@@ -141,6 +150,44 @@ interpMemrrBaseExtractor (PPC.MemRR mgpr _) = mgpr
 
 interpMemrrOffsetExtractor :: PPC.MemRR -> PPC.GPR
 interpMemrrOffsetExtractor (PPC.MemRR _ gpr) = gpr
+
+interpGPROffset :: forall sh s ppc tp sym
+                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
+                => Int
+                -> SL.List (A.AllocatedOperand ppc sym) sh
+                -> F.WrappedOperand ppc sh s
+                -> BaseTypeRepr tp
+                -> Maybe (L.Location ppc tp)
+interpGPROffset offset operands (F.WrappedOperand _orep ix) rep =
+  case operands SL.!! ix of
+    A.LocationOperand (LocGPR (PPC.GPR rnum)) _
+      | Just Refl <- testEquality rep (L.locationType target) -> Just target
+      | otherwise ->
+          error
+            ("Invalid return type for GPR offset at index " ++ show ix)
+      where
+        target :: Location ppc (BaseBVType (A.RegWidth ppc))
+        target =
+          LocGPR
+            (PPC.GPR ((rnum + fromIntegral offset) `mod` 32))
+    _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpGPROffsetBy :: Int -> PPC.GPR -> PPC.GPR
+interpGPROffsetBy offset (PPC.GPR rnum) =
+  PPC.GPR ((rnum + fromIntegral offset) `mod` 32)
+
+interpGPROffset0, interpGPROffset1, interpGPROffset2, interpGPROffset3 ::
+  PPC.GPR -> Maybe PPC.GPR
+interpGPROffset4, interpGPROffset5, interpGPROffset6, interpGPROffset7 ::
+  PPC.GPR -> Maybe PPC.GPR
+interpGPROffset0 = Just . interpGPROffsetBy 0
+interpGPROffset1 = Just . interpGPROffsetBy 1
+interpGPROffset2 = Just . interpGPROffsetBy 2
+interpGPROffset3 = Just . interpGPROffsetBy 3
+interpGPROffset4 = Just . interpGPROffsetBy 4
+interpGPROffset5 = Just . interpGPROffsetBy 5
+interpGPROffset6 = Just . interpGPROffsetBy 6
+interpGPROffset7 = Just . interpGPROffsetBy 7
 
 class InterpIsR0 a where
   interpIsR0 :: a -> Bool

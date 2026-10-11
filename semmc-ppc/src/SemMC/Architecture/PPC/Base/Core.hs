@@ -44,6 +44,7 @@ module SemMC.Architecture.PPC.Base.Core (
   crField,
   updateCRField,
   -- * Uninterpreted Functions
+  gprOffset,
   gprIndex,
   isR0,
   memriReg,
@@ -526,6 +527,14 @@ isR0 = uf EBool "ppc.is_r0" . ((:[]) . Some)
 -- register.
 gprIndex :: HasCallStack => Expr 'TBV -> Expr 'TBV
 gprIndex = uf (EBV 5) "ppc.gpr_index" . ((:[]) . Some)
+
+-- | Name the GPR a fixed number of positions after an encoded GPR operand,
+-- wrapping after r31.
+gprOffset :: (?bitSize :: BitSize) => Int -> Location 'TBV -> Location 'TBV
+gprOffset offset
+  | offset >= 0 && offset < 8 =
+      locUF naturalBV ("ppc.gpr_offset_" ++ show offset)
+  | otherwise = error ("Invalid GPR offset: " ++ show offset)
 
 -- Vector UFs
 

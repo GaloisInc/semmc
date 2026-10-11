@@ -86,7 +86,15 @@ ppcUninterpFns = [
                  @(BaseBVType 5)
                  "ppc.gpr_index"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
+  ]
+  ++ [ mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
+                    @(BaseBVType (A.RegWidth ppc))
+                    ("ppc.gpr_offset_" ++ show offset)
+                    (\_ -> [])
+     | offset <- [0 :: Int .. 7]
+     ]
+  ++ [
+    mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
                  @(BaseBVType (A.RegWidth ppc))
                  "ppc.memri_reg"
                  (\_ -> [])

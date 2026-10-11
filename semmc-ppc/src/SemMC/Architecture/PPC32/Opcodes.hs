@@ -38,7 +38,8 @@ allDefinedFunctions = $(STH.attachDefinedFunctions [ "data/32/base"
 
 -- | Every opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined). Keep this splice sensitive to additions
--- to the manual semantics set, including multi-register memory instructions.
+-- to the manual semantics set, including multi-register and string memory
+-- instructions.
 allSemantics :: [(Some (PPC.Opcode PPC.Operand), BS.ByteString)]
 allSemantics = $(STH.attachSemantics (\(Some x) -> show x <.> "sem") allOpcodes [ "data/32/base"
                                                                          , "data/32/manual"
