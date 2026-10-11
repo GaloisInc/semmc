@@ -13,28 +13,28 @@
       loc.XER)
      (concat
       ((_ extract 32 32)
-       (bvsub
+       (bvadd
         (bvadd
          ((_ zero_extend 1)
           op.rA)
          ((_ zero_extend 32)
           ((_ extract 29 29)
            loc.XER)))
-        #b000000000000000000000000000000001))
+        ((_ zero_extend 1) (bvnot #x00000000))))
       ((_ extract 28 0)
        loc.XER)))))
    (op.rT
     (with
      ()
      ((_ extract 31 0)
-      (bvsub
+      (bvadd
        (bvadd
         ((_ zero_extend 1)
          op.rA)
         ((_ zero_extend 32)
          ((_ extract 29 29)
           loc.XER)))
-       #b000000000000000000000000000000001))))
+       ((_ zero_extend 1) (bvnot #x00000000))))))
    (loc.IP
     (with
      ()

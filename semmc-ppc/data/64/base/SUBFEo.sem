@@ -15,9 +15,7 @@
       ((_ extract 63 0)
        (bvadd
         (bvadd
-         (bvnot
-          ((_ zero_extend 1)
-           op.rA))
+         ((_ zero_extend 1) (bvnot op.rA))
          ((_ zero_extend 1)
           op.rB))
         ((_ zero_extend 64)
@@ -28,9 +26,7 @@
       ((_ extract 63 0)
        (bvadd
         (bvadd
-         (bvnot
-          ((_ zero_extend 1)
-           op.rA))
+         ((_ zero_extend 1) (bvnot op.rA))
          ((_ zero_extend 1)
           op.rB))
         ((_ zero_extend 64)
@@ -50,9 +46,7 @@
        ((_ extract 64 64)
         (bvadd
          (bvadd
-          (bvnot
-           ((_ zero_extend 1)
-            op.rA))
+          ((_ zero_extend 1) (bvnot op.rA))
           ((_ zero_extend 1)
            op.rB))
          ((_ zero_extend 64)
@@ -66,9 +60,7 @@
      ((_ extract 63 0)
       (bvadd
        (bvadd
-        (bvnot
-         ((_ zero_extend 1)
-          op.rA))
+        ((_ zero_extend 1) (bvnot op.rA))
         ((_ zero_extend 1)
          op.rB))
        ((_ zero_extend 64)

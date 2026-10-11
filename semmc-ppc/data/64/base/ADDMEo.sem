@@ -12,25 +12,25 @@
      df.cmpImm
      (bvslt
       ((_ extract 63 0)
-       (bvsub
+       (bvadd
         (bvadd
          ((_ zero_extend 1)
           op.rA)
          ((_ zero_extend 64)
           ((_ extract 29 29)
            loc.XER)))
-        #b00000000000000000000000000000000000000000000000000000000000000001))
+        ((_ zero_extend 1) (bvnot #x0000000000000000))))
       #x0000000000000000)
      (bvsgt
       ((_ extract 63 0)
-       (bvsub
+       (bvadd
         (bvadd
          ((_ zero_extend 1)
           op.rA)
          ((_ zero_extend 64)
           ((_ extract 29 29)
            loc.XER)))
-        #b00000000000000000000000000000000000000000000000000000000000000001))
+        ((_ zero_extend 1) (bvnot #x0000000000000000))))
       #x0000000000000000)
      #b000
      loc.XER
@@ -43,28 +43,28 @@
        loc.XER)
       (concat
        ((_ extract 64 64)
-        (bvsub
+        (bvadd
          (bvadd
           ((_ zero_extend 1)
            op.rA)
           ((_ zero_extend 64)
            ((_ extract 29 29)
             loc.XER)))
-         #b00000000000000000000000000000000000000000000000000000000000000001))
+         ((_ zero_extend 1) (bvnot #x0000000000000000))))
        ((_ extract 28 0)
         loc.XER)))))
    (op.rT
     (with
      ()
      ((_ extract 63 0)
-      (bvsub
+      (bvadd
        (bvadd
         ((_ zero_extend 1)
          op.rA)
         ((_ zero_extend 64)
          ((_ extract 29 29)
           loc.XER)))
-       #b00000000000000000000000000000000000000000000000000000000000000001))))
+       ((_ zero_extend 1) (bvnot #x0000000000000000))))))
    (loc.IP
     (with
      ()

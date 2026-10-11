@@ -11,30 +11,52 @@
     (call
      df.cmpImm
      (bvslt
-      (bvadd
-       (bvnot op.rA)
-       ((_ zero_extend 63)
-        ((_ extract 29 29)
-         loc.XER)))
+      ((_ extract 63 0)
+       (bvadd
+        ((_ zero_extend 1)
+         (bvnot op.rA))
+        ((_ zero_extend 64)
+         ((_ extract 29 29)
+          loc.XER))))
       #x0000000000000000)
      (bvsgt
-      (bvadd
-       (bvnot op.rA)
-       ((_ zero_extend 63)
-        ((_ extract 29 29)
-         loc.XER)))
+      ((_ extract 63 0)
+       (bvadd
+        ((_ zero_extend 1)
+         (bvnot op.rA))
+        ((_ zero_extend 64)
+         ((_ extract 29 29)
+          loc.XER))))
       #x0000000000000000)
      #b000
      loc.XER
      loc.CR)))
+   (loc.XER
+    (with
+     ()
+     (concat
+      ((_ extract 63 30)
+       loc.XER)
+      (concat
+       ((_ extract 64 64)
+        (bvadd
+         ((_ zero_extend 1)
+          (bvnot op.rA))
+         ((_ zero_extend 64)
+          ((_ extract 29 29)
+           loc.XER))))
+       ((_ extract 28 0)
+        loc.XER)))))
    (op.rT
     (with
      ()
-     (bvadd
-      (bvnot op.rA)
-      ((_ zero_extend 63)
-       ((_ extract 29 29)
-        loc.XER)))))
+     ((_ extract 63 0)
+      (bvadd
+       ((_ zero_extend 1)
+        (bvnot op.rA))
+       ((_ zero_extend 64)
+        ((_ extract 29 29)
+         loc.XER))))))
    (loc.IP
     (with
      ()

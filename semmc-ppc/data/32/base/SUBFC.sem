@@ -16,9 +16,7 @@
       ((_ extract 32 32)
        (bvadd
         (bvadd
-         (bvnot
-          ((_ zero_extend 1)
-           op.rA))
+         ((_ zero_extend 1) (bvnot op.rA))
          ((_ zero_extend 1)
           op.rB))
         #b000000000000000000000000000000001))
@@ -30,9 +28,7 @@
      ((_ extract 31 0)
       (bvadd
        (bvadd
-        (bvnot
-         ((_ zero_extend 1)
-          op.rA))
+        ((_ zero_extend 1) (bvnot op.rA))
         ((_ zero_extend 1)
          op.rB))
        #b000000000000000000000000000000001))))

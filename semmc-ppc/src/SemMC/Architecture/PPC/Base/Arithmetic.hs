@@ -181,7 +181,7 @@ baseArithmetic = do
     comment "Subtract From Carrying (XO-form, RC=0)"
     input xer
     let len = bitSizeValue ?bitSize
-    let eres0 = bvadd (bvnot (zext' (len + 1) (Loc rA))) (zext' (len + 1) (Loc rB))
+    let eres0 = bvadd (zext' (len + 1) (bvnot (Loc rA))) (zext' (len + 1) (Loc rB))
     let eres1 = bvadd eres0 (LitBV (len + 1) 0x1)
     let res = lowBits' len eres1
     defLoc rT res
@@ -204,7 +204,7 @@ baseArithmetic = do
     input xer
     let len = bitSizeValue ?bitSize
     let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (xerBit CA (Loc xer)))
-    let eres1 = bvsub eres0 (LitBV (len + 1) 0x1)
+    let eres1 = bvadd eres0 (zext' (len + 1) (bvnot (naturalLitBV 0x0)))
     let res = lowBits' len eres1
     defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
@@ -214,7 +214,7 @@ baseArithmetic = do
     comment "Subtract From Extended (XO-form, RC=0)"
     input xer
     let len = bitSizeValue ?bitSize
-    let eres0 = bvadd (bvnot (zext' (len + 1) (Loc rA))) (zext' (len + 1) (Loc rB))
+    let eres0 = bvadd (zext' (len + 1) (bvnot (Loc rA))) (zext' (len + 1) (Loc rB))
     let eres1 = bvadd eres0 (zext' (len + 1) (xerBit CA (Loc xer)))
     let res = lowBits' len eres1
     defLoc rT res
@@ -224,15 +224,21 @@ baseArithmetic = do
   definePPCOpcode P.ADDZE xoform2c $ \rT rA -> do
     comment "Add to Zero Extended (XO-form, RC=0)"
     input xer
-    let res = bvadd (Loc rA) (zext (xerBit CA (Loc xer)))
+    let len = bitSizeValue ?bitSize
+    let eres = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (xerBit CA (Loc xer)))
+    let res = lowBits' len eres
     defLoc rT res
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     definePPCOpcodeRC P.ADDZEo res $ do
       comment "Add to Zero Extended (XO-form, RC=1)"
   definePPCOpcode P.SUBFZE xoform2c $ \rT rA -> do
     comment "Subtract From Zero Extended (XO-form, RC=0)"
     input xer
-    let res = bvadd (bvnot (Loc rA)) (zext (xerBit CA (Loc xer)))
+    let len = bitSizeValue ?bitSize
+    let eres = bvadd (zext' (len + 1) (bvnot (Loc rA))) (zext' (len + 1) (xerBit CA (Loc xer)))
+    let res = lowBits' len eres
     defLoc rT res
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     defineRCVariant "SUBFZEo" res $ do
       comment "Subtract From Zero Extended (XO-form, RC=1)"
 
