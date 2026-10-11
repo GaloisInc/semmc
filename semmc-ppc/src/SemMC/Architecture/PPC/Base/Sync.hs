@@ -84,8 +84,8 @@ baseSync = do
       storeIndexed 8 id
       updateCR0
 
--- | This helper does the update of CR0 required by the synchronized store
--- instructions.
+-- | This helper does the successful-store update of CR0 required by the
+-- synchronized store instructions.
 --
 -- It always assumes that the store was performed (i.e., that the reservation
 -- didn't fail).  This isn't really right in a multi-threaded environment.
@@ -95,4 +95,4 @@ updateCR0 = do
   input xer
   let so = xerBit SO (Loc xer)
   let crnibble = concat (concat (LitBV 2 0x0) (LitBV 1 0x1)) so
-  defLoc cr (bvor (Loc cr) (zext' 32 crnibble))
+  defLoc cr (updateCRField (LitBV 3 0x0) crnibble)

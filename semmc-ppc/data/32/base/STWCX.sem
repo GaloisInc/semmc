@@ -9,13 +9,14 @@
   ((loc.CR
    (with
     ()
-    (bvor
+    (call
+     df.updateCRField
      loc.CR
-     ((_ zero_extend 28)
-      (concat
-       (concat #b00 #b1)
-       ((_ extract 31 31)
-        loc.XER))))))
+     #b000
+     (concat
+      (concat #b00 #b1)
+      ((_ extract 31 31)
+       loc.XER)))))
    (loc.Mem
     (with
      ()
