@@ -1,0 +1,95 @@
+;; Divide Word with Overflow Enabled (XO-form, OE=1, RC=0)
+((operands
+  ((rT Gprc)
+    (rB Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER op.rA op.rB loc.IP))
+  (defs
+    ((loc.XER
+      (with
+        ()
+        (concat
+          ((_ extract 63 32)
+            (concat
+              ((_ extract 63 31)
+                loc.XER)
+              (concat
+                (ite
+                  (orp
+                    (bveq
+                      ((_ extract 31 0)
+                        op.rB)
+                      #x00000000)
+                    (andp
+                      (bveq
+                        ((_ extract 31 0)
+                          op.rA)
+                        #x80000000)
+                      (bveq
+                        ((_ extract 31 0)
+                          op.rB)
+                        #xffffffff)))
+                  #b1
+                  #b0)
+                ((_ extract 29 0)
+                  loc.XER))))
+          (concat
+            (bvor
+              ((_ extract 31 31)
+                loc.XER)
+              (ite
+                (orp
+                  (bveq
+                    ((_ extract 31 0)
+                      op.rB)
+                    #x00000000)
+                  (andp
+                    (bveq
+                      ((_ extract 31 0)
+                        op.rA)
+                      #x80000000)
+                    (bveq
+                      ((_ extract 31 0)
+                        op.rB)
+                      #xffffffff)))
+                #b1
+                #b0))
+            ((_ extract 30 0)
+              (concat
+                ((_ extract 63 31)
+                  loc.XER)
+                (concat
+                  (ite
+                    (orp
+                      (bveq
+                        ((_ extract 31 0)
+                          op.rB)
+                        #x00000000)
+                      (andp
+                        (bveq
+                          ((_ extract 31 0)
+                            op.rA)
+                          #x80000000)
+                        (bveq
+                          ((_ extract 31 0)
+                            op.rB)
+                          #xffffffff)))
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    loc.XER))))))))
+      (op.rT
+        (with
+          ()
+          (bvsdiv
+            ((_ sign_extend 32)
+              ((_ extract 31 0)
+                op.rA))
+            ((_ sign_extend 32)
+              ((_ extract 31 0)
+                op.rB)))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x0000000000000004))))))

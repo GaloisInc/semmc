@@ -1,0 +1,38 @@
+;; Divide Word Unsigned with Overflow Enabled (XO-form, OE=1, RC=0)
+((operands
+  ((rT Gprc)
+    (rB Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER op.rA op.rB loc.IP))
+  (defs
+    ((loc.XER
+      (with
+        ()
+        (concat
+          (bvor
+            ((_ extract 31 31)
+              loc.XER)
+            (ite
+              (bveq op.rB #x00000000)
+              #b1
+              #b0))
+          ((_ extract 30 0)
+            (concat
+              ((_ extract 31 31)
+                loc.XER)
+              (concat
+                (ite
+                  (bveq op.rB #x00000000)
+                  #b1
+                  #b0)
+                ((_ extract 29 0)
+                  loc.XER)))))))
+      (op.rT
+        (with
+          ()
+          (bvudiv op.rA op.rB)))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))

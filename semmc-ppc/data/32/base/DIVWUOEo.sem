@@ -1,0 +1,70 @@
+;; Divide Word Unsigned with Overflow Enabled and Record (XO-form, OE=1, RC=1)
+((operands
+  ((rT Gprc)
+    (rB Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER loc.CR op.rA op.rB loc.IP))
+  (defs
+    ((loc.CR
+      (with
+        ()
+        (call
+          df.cmpImm
+          (bvslt
+            (bvudiv op.rA op.rB)
+            #x00000000)
+          (bvsgt
+            (bvudiv op.rA op.rB)
+            #x00000000)
+          #b000
+          (concat
+            (bvor
+              ((_ extract 31 31)
+                loc.XER)
+              (ite
+                (bveq op.rB #x00000000)
+                #b1
+                #b0))
+            ((_ extract 30 0)
+              (concat
+                ((_ extract 31 31)
+                  loc.XER)
+                (concat
+                  (ite
+                    (bveq op.rB #x00000000)
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    loc.XER)))))
+          loc.CR)))
+      (loc.XER
+        (with
+          ()
+          (concat
+            (bvor
+              ((_ extract 31 31)
+                loc.XER)
+              (ite
+                (bveq op.rB #x00000000)
+                #b1
+                #b0))
+            ((_ extract 30 0)
+              (concat
+                ((_ extract 31 31)
+                  loc.XER)
+                (concat
+                  (ite
+                    (bveq op.rB #x00000000)
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    loc.XER)))))))
+      (op.rT
+        (with
+          ()
+          (bvudiv op.rA op.rB)))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))

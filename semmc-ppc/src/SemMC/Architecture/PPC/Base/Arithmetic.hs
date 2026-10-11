@@ -46,6 +46,16 @@ updateXEROVSOForAdd xer0 in1 in2 =
       so = xerBit SO xer0 `bvor` ov
   in updateXER SO (updateXER OV xer0 ov) so
 
+-- | Set @XER[OV]@ for a division overflow and make @XER[SO]@ sticky.
+updateXEROVSO :: (?bitSize :: BitSize)
+              => Expr 'TBV
+              -> Expr 'TBool
+              -> Expr 'TBV
+updateXEROVSO xer0 overflow =
+  let ov = bvPredToBit overflow
+      so = xerBit SO xer0 `bvor` ov
+  in updateXER SO (updateXER OV xer0 ov) so
+
 baseArithmetic :: (?bitSize :: BitSize) => SemM 'Top ()
 baseArithmetic = do
   definePPCOpcode P.ADD4 xoform3c $ \rT rB rA -> do
@@ -114,16 +124,46 @@ baseArithmetic = do
       comment "Multiply High Word Unsigned (XO-form, RC=1)"
   definePPCOpcode P.DIVW xoform3c $ \rT rB rA -> do
     comment "Divide Word (XO-form, RC=0)"
-    let res = bvsdiv (sext (lowBits 32 (Loc rA))) (sext (lowBits 32 (Loc rB)))
+    let dividend = lowBits 32 (Loc rA)
+    let divisor = lowBits 32 (Loc rB)
+    let res = bvsdiv (sext dividend) (sext divisor)
     defLoc rT res
     definePPCOpcodeRC P.DIVWo res $ do
       comment "Divide Word (XO-form, RC=1)"
+  definePPCOpcode P.DIVWOE xoform3c $ \rT rB rA -> do
+    comment "Divide Word with Overflow Enabled (XO-form, OE=1, RC=0)"
+    let dividend = lowBits 32 (Loc rA)
+    let divisor = lowBits 32 (Loc rB)
+    let res = bvsdiv (sext dividend) (sext divisor)
+    let overflow =
+          bveq divisor (LitBV 32 0) `orp`
+          (bveq dividend (LitBV 32 0x80000000) `andp`
+           bveq divisor (LitBV 32 0xffffffff))
+    let modifiedXer = updateXEROVSO (Loc xer) overflow
+    defLoc rT res
+    defineOERCVariant P.DIVWOEo res modifiedXer $ do
+      comment "Divide Word with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    input xer
+    defLoc xer modifiedXer
   definePPCOpcode P.DIVWU xoform3c $ \rT rB rA -> do
     comment "Divide Word Unsigned (XO-form, RC=0)"
-    let res = bvudiv (sext (lowBits 32 (Loc rA))) (sext (lowBits 32 (Loc rB)))
+    let dividend = lowBits 32 (Loc rA)
+    let divisor = lowBits 32 (Loc rB)
+    let res = bvudiv (sext dividend) (sext divisor)
     defLoc rT res
     definePPCOpcodeRC P.DIVWUo res $ do
       comment "Divide Word Unsigned (XO-form, RC=1)"
+  definePPCOpcode P.DIVWUOE xoform3c $ \rT rB rA -> do
+    comment "Divide Word Unsigned with Overflow Enabled (XO-form, OE=1, RC=0)"
+    let dividend = lowBits 32 (Loc rA)
+    let divisor = lowBits 32 (Loc rB)
+    let res = bvudiv (sext dividend) (sext divisor)
+    let modifiedXer = updateXEROVSO (Loc xer) (bveq divisor (LitBV 32 0))
+    defLoc rT res
+    defineOERCVariant P.DIVWUOEo res modifiedXer $ do
+      comment "Divide Word Unsigned with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    input xer
+    defLoc xer modifiedXer
   defineOpcodeWithIP "ADDI" $ do
     comment "Add Immediate (D-form)"
     comment "We hand wrote this formula because it is one of the few that"
