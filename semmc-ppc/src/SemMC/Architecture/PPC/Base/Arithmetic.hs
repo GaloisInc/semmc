@@ -46,6 +46,21 @@ updateXEROVSOForAdd xer0 in1 in2 =
       so = xerBit SO xer0 `bvor` ov
   in updateXER SO (updateXER OV xer0 ov) so
 
+-- | Update @XER[SO]@ and @XER[OV]@ for an addition with carry-in.
+updateXEROVSOForAddWithCarry :: (?bitSize :: BitSize)
+                            => Expr 'TBV
+                            -> Expr 'TBV
+                            -> Expr 'TBV
+                            -> Expr 'TBV
+                            -> Expr 'TBV
+updateXEROVSOForAddWithCarry xer0 in1 in2 carry =
+  let len = bitSizeValue ?bitSize
+      wide0 = bvadd (sext' (len + 2) in1) (sext' (len + 2) in2)
+      wide = bvadd wide0 (zext' (len + 2) carry)
+      result = lowBits' len wide
+      overflow = notp (bveq wide (sext' (len + 2) result))
+  in updateXEROVSO xer0 overflow
+
 -- | Set @XER[OV]@ for a division overflow and make @XER[SO]@ sticky.
 updateXEROVSO :: (?bitSize :: BitSize)
               => Expr 'TBV
@@ -245,6 +260,18 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     definePPCOpcodeRC P.ADDCo res $ do
       comment "Add Carrying (XO-form, RC=1)"
+  definePPCOpcode P.ADDCOE xoform3c $ \rT rB rA -> do
+    comment "Add Carrying with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
+    let res = lowBits' len eres
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres)
+    let modifiedXer = updateXEROVSOForAdd xerWithCarry (Loc rA) (Loc rB)
+    defLoc rT res
+    defineOERCVariant P.ADDCOEo res modifiedXer $ do
+      comment "Add Carrying with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.ADDIC dformr0c $ \rT si rA -> do
     comment "Add Immediate Carrying (D-form)"
     input xer
@@ -286,6 +313,21 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     definePPCOpcodeRC P.ADDEo res $ do
       comment "Add Extended (XO-form, RC=1)"
+  definePPCOpcode P.ADDEOE xoform3c $ \rT rB rA -> do
+    comment "Add Extended with Overflow Enabled (XO-form, OE=1, RC=0)"
+    input xer
+    let len = bitSizeValue ?bitSize
+    let carryIn = xerBit CA (Loc xer)
+    let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
+    let eres1 = bvadd eres0 (zext' (len + 1) carryIn)
+    let res = lowBits' len eres1
+    let xerWithCarry = updateXER CA (Loc xer) (highBits' 1 eres1)
+    let modifiedXer =
+          updateXEROVSOForAddWithCarry xerWithCarry (Loc rA) (Loc rB) carryIn
+    defLoc rT res
+    defineOERCVariant P.ADDEOEo res modifiedXer $ do
+      comment "Add Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)"
+    defLoc xer modifiedXer
   definePPCOpcode P.ADDME xoform2c $ \rT rA -> do
     comment "Add to Minus One Extended (XO-form, RC=0)"
     input xer

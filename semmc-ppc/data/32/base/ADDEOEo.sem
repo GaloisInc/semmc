@@ -1,0 +1,271 @@
+;; Add Extended with Overflow Enabled and Record (XO-form, OE=1, RC=1)
+((operands
+  ((rT Gprc)
+    (rB Gprc)
+    (rA Gprc)))
+  (in
+    (loc.XER loc.CR loc.XER op.rA op.rB loc.IP))
+  (defs
+    ((loc.CR
+      (with
+        ()
+        (call
+          df.cmpImm
+          (bvslt
+            ((_ extract 31 0)
+              (bvadd
+                (bvadd
+                  ((_ zero_extend 1)
+                    op.rA)
+                  ((_ zero_extend 1)
+                    op.rB))
+                ((_ zero_extend 32)
+                  ((_ extract 29 29)
+                    loc.XER))))
+            #x00000000)
+          (bvsgt
+            ((_ extract 31 0)
+              (bvadd
+                (bvadd
+                  ((_ zero_extend 1)
+                    op.rA)
+                  ((_ zero_extend 1)
+                    op.rB))
+                ((_ zero_extend 32)
+                  ((_ extract 29 29)
+                    loc.XER))))
+            #x00000000)
+          #b000
+          (concat
+            (bvor
+              ((_ extract 31 31)
+                (concat
+                  ((_ extract 31 30)
+                    loc.XER)
+                  (concat
+                    ((_ extract 32 32)
+                      (bvadd
+                        (bvadd
+                          ((_ zero_extend 1)
+                            op.rA)
+                          ((_ zero_extend 1)
+                            op.rB))
+                        ((_ zero_extend 32)
+                          ((_ extract 29 29)
+                            loc.XER))))
+                    ((_ extract 28 0)
+                      loc.XER))))
+              (ite
+                (notp
+                  (bveq
+                    (bvadd
+                      (bvadd
+                        ((_ sign_extend 2)
+                          op.rA)
+                        ((_ sign_extend 2)
+                          op.rB))
+                      ((_ zero_extend 33)
+                        ((_ extract 29 29)
+                          loc.XER)))
+                    ((_ sign_extend 2)
+                      ((_ extract 31 0)
+                        (bvadd
+                          (bvadd
+                            ((_ sign_extend 2)
+                              op.rA)
+                            ((_ sign_extend 2)
+                              op.rB))
+                          ((_ zero_extend 33)
+                            ((_ extract 29 29)
+                              loc.XER)))))))
+                #b1
+                #b0))
+            ((_ extract 30 0)
+              (concat
+                ((_ extract 31 31)
+                  (concat
+                    ((_ extract 31 30)
+                      loc.XER)
+                    (concat
+                      ((_ extract 32 32)
+                        (bvadd
+                          (bvadd
+                            ((_ zero_extend 1)
+                              op.rA)
+                            ((_ zero_extend 1)
+                              op.rB))
+                          ((_ zero_extend 32)
+                            ((_ extract 29 29)
+                              loc.XER))))
+                      ((_ extract 28 0)
+                        loc.XER))))
+                (concat
+                  (ite
+                    (notp
+                      (bveq
+                        (bvadd
+                          (bvadd
+                            ((_ sign_extend 2)
+                              op.rA)
+                            ((_ sign_extend 2)
+                              op.rB))
+                          ((_ zero_extend 33)
+                            ((_ extract 29 29)
+                              loc.XER)))
+                        ((_ sign_extend 2)
+                          ((_ extract 31 0)
+                            (bvadd
+                              (bvadd
+                                ((_ sign_extend 2)
+                                  op.rA)
+                                ((_ sign_extend 2)
+                                  op.rB))
+                              ((_ zero_extend 33)
+                                ((_ extract 29 29)
+                                  loc.XER)))))))
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    (concat
+                      ((_ extract 31 30)
+                        loc.XER)
+                      (concat
+                        ((_ extract 32 32)
+                          (bvadd
+                            (bvadd
+                              ((_ zero_extend 1)
+                                op.rA)
+                              ((_ zero_extend 1)
+                                op.rB))
+                            ((_ zero_extend 32)
+                              ((_ extract 29 29)
+                                loc.XER))))
+                        ((_ extract 28 0)
+                          loc.XER))))))))
+          loc.CR)))
+      (loc.XER
+        (with
+          ()
+          (concat
+            (bvor
+              ((_ extract 31 31)
+                (concat
+                  ((_ extract 31 30)
+                    loc.XER)
+                  (concat
+                    ((_ extract 32 32)
+                      (bvadd
+                        (bvadd
+                          ((_ zero_extend 1)
+                            op.rA)
+                          ((_ zero_extend 1)
+                            op.rB))
+                        ((_ zero_extend 32)
+                          ((_ extract 29 29)
+                            loc.XER))))
+                    ((_ extract 28 0)
+                      loc.XER))))
+              (ite
+                (notp
+                  (bveq
+                    (bvadd
+                      (bvadd
+                        ((_ sign_extend 2)
+                          op.rA)
+                        ((_ sign_extend 2)
+                          op.rB))
+                      ((_ zero_extend 33)
+                        ((_ extract 29 29)
+                          loc.XER)))
+                    ((_ sign_extend 2)
+                      ((_ extract 31 0)
+                        (bvadd
+                          (bvadd
+                            ((_ sign_extend 2)
+                              op.rA)
+                            ((_ sign_extend 2)
+                              op.rB))
+                          ((_ zero_extend 33)
+                            ((_ extract 29 29)
+                              loc.XER)))))))
+                #b1
+                #b0))
+            ((_ extract 30 0)
+              (concat
+                ((_ extract 31 31)
+                  (concat
+                    ((_ extract 31 30)
+                      loc.XER)
+                    (concat
+                      ((_ extract 32 32)
+                        (bvadd
+                          (bvadd
+                            ((_ zero_extend 1)
+                              op.rA)
+                            ((_ zero_extend 1)
+                              op.rB))
+                          ((_ zero_extend 32)
+                            ((_ extract 29 29)
+                              loc.XER))))
+                      ((_ extract 28 0)
+                        loc.XER))))
+                (concat
+                  (ite
+                    (notp
+                      (bveq
+                        (bvadd
+                          (bvadd
+                            ((_ sign_extend 2)
+                              op.rA)
+                            ((_ sign_extend 2)
+                              op.rB))
+                          ((_ zero_extend 33)
+                            ((_ extract 29 29)
+                              loc.XER)))
+                        ((_ sign_extend 2)
+                          ((_ extract 31 0)
+                            (bvadd
+                              (bvadd
+                                ((_ sign_extend 2)
+                                  op.rA)
+                                ((_ sign_extend 2)
+                                  op.rB))
+                              ((_ zero_extend 33)
+                                ((_ extract 29 29)
+                                  loc.XER)))))))
+                    #b1
+                    #b0)
+                  ((_ extract 29 0)
+                    (concat
+                      ((_ extract 31 30)
+                        loc.XER)
+                      (concat
+                        ((_ extract 32 32)
+                          (bvadd
+                            (bvadd
+                              ((_ zero_extend 1)
+                                op.rA)
+                              ((_ zero_extend 1)
+                                op.rB))
+                            ((_ zero_extend 32)
+                              ((_ extract 29 29)
+                                loc.XER))))
+                        ((_ extract 28 0)
+                          loc.XER))))))))))
+      (op.rT
+        (with
+          ()
+          ((_ extract 31 0)
+            (bvadd
+              (bvadd
+                ((_ zero_extend 1)
+                  op.rA)
+                ((_ zero_extend 1)
+                  op.rB))
+              ((_ zero_extend 32)
+                ((_ extract 29 29)
+                  loc.XER))))))
+      (loc.IP
+        (with
+          ()
+          (bvadd loc.IP #x00000004))))))
